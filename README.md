@@ -58,9 +58,16 @@ after *any* finished turn, so it means "sitting at the prompt", not "asked you
 something" — on a typical fleet it covers most sessions. `blocked` is derived from
 unresolved Feed cards instead, so it stays rare and worth reacting to.
 
-**Cost:** `claude agents` takes ~250ms, so `board` runs in ~230ms rather than the
+**Cost:** `claude agents` takes ~250ms, so `board` runs in ~220ms rather than the
 ~60ms it managed when it derived state from cmux alone. That buys 10 sessions it
 used to miss, including background agents blocked for weeks.
+
+## Build
+
+    go build -o board ./cmd/board
+
+No dependencies, no daemon, no port. `board watch` in a dedicated tab is the whole
+runtime.
 
 ## Config — `~/.board.json`
 

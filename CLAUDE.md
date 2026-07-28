@@ -1,133 +1,81 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-`board` is a single-package Go CLI (module `board`, no third-party dependencies) that
-reports on every live Claude Code session running under cmux. `README.md` is the user
-contract; `DESIGN.md` is the decision record — read the relevant section before
-changing behaviour it covers.
+`board` is a Go CLI (module `board`, stdlib only) reporting on every live Claude Code
+session under cmux. `README.md` is the user contract. **`DESIGN.md` is settled** —
+read the section covering what you are changing before changing it, and append there
+when a change settles a question or falsifies a recorded conclusion.
 
 ## Commands
 
 ```sh
-go build -o board .          # the binary is gitignored; build in place
-go vet ./...
-go test ./...                # run all tests
-go test -run TestFrame ./...  # run a single test (regex on test name)
-go test -run 'TestAsks/never_answered' ./...  # single subtest
-
-./board                      # one-shot table
-./board watch 5s             # ambient dashboard (alternate screen, ctrl-c exits)
-COLUMNS=118 LINES=44 ./board watch | cat   # non-TTY: one frame to stdout, then exit
+go build -o board ./cmd/board    # binary is gitignored; build in place
+go vet ./... && go test ./...
+go test ./internal/view -run TestGolden        # frame is pinned byte-for-byte
+COLUMNS=118 LINES=44 ./board watch | cat       # non-TTY: one frame, then exit
 ```
 
-That last form is the main manual verification path — `watch` detects a non-TTY via
-`TIOCGWINSZ` and prints a single frame, so layout and colour can be diffed without a
+That last form is the manual verification path — layout and colour diffed without a
 terminal to drive.
+
+## Structure
+
+    cmd/board/       dispatch and printing only
+    internal/
+      host/          file paths, child processes (cmux env always stripped)
+      config/        ~/.board.json — the only file written
+      claude/        roster + state: `claude agents --json`, jobs, transcript mtime
+      cmux/          tab titles, hook clock, focus — enrichment, never the roster
+      board/         Fleet/Row; Build = pure join, Collect = impure gather
+      view/          PURE: Frame, header, layout arithmetic, Table, palette, scale
+      watch/         IMPURE: alternate screen, termios, signals, ticker
+      hooks/         notify, install-hooks
+
+One job per package, one concern per file; a file past ~250 lines is a signal to split
+(`view/frame.go` at 194 is the current ceiling). In `view`, rendering lives in
+`frame.go`/`header.go` and the fit and column arithmetic in `layout.go` — that seam is
+where every fit bug has been. A new command or band needs a `DESIGN.md` entry first.
+Add derived quantities to `Fleet`, not to a renderer.
+
+**A band earns its lines by exception** (`DESIGN.md` §9.13). A row reporting the system
+working as intended hides one that isn't; that is what removed `ASKED` and with it the
+whole audit-log read.
+
+**Keep the two boundaries:** all join logic stays in pure `board.Build`; `view` never
+reads the world and `watch` never formats.
 
 ## TDD is mandatory
 
-Every behaviour change starts with a failing test. No exceptions, including for
-"obvious" one-liners.
+Every behaviour change starts with a failing test — including "obvious" one-liners.
+Write it, run it, confirm it fails for the expected reason, then write the minimum
+code to pass.
 
-1. Write the test first; run it; confirm it fails for the reason you expect.
-2. Write the minimum code to pass.
-3. Refactor with the test green.
+This is not ceremony: three successive blocked-detection rules all looked correct in
+the code and all were wrong against real log data (`DESIGN.md` §9.1). **Derived state
+must be pinned by a test over a fixture, not by reading the function.** Never write a
+test that depends on the live fleet — capture data into a fixture. `DESIGN.md` §11
+lists the pure seams and their fixture shapes.
 
-This matters more here than usual because of `DESIGN.md` §12: three successive
-blocked-detection rules all looked correct in the code and all were wrong against
-real log data. Derived state must be pinned by a test over a fixture, not by
-reading the function.
-
-Test the pure seams — they exist for this reason and must stay pure:
-
-| Function | File | Fixture shape |
-|---|---|---|
-| `frame(fleet, now, interval, thresh, rows, cols)` | `watch.go` | a `fleet` literal; assert on the returned string |
-| `blockedSessions(events, want)` | `main.go` | `[]event` sequences |
-| `asks(events, since, wsOf)` | `ledger.go` | `[]event` with `line` set to real JSONL bytes |
-| `event.settles` / `isActionable` | `ledger.go` | one event |
-| `idleScale`, `bar`, `humanize`, `short`, `pad`, `stripSpinner` | — | values |
-
-`readSessions`, `readTail`, and `cmuxTitles` touch `$HOME` and the `cmux` binary —
-keep logic out of them and test the parsers they feed instead. Never write a test
-that depends on the live fleet; capture JSONL lines into a fixture.
-
-## Architecture
-
-Four inputs, all read-only:
-
-- `~/.cmuxterm/claude-hook-sessions.json` — lifecycle, cwd, pid, `updatedAt`. Liveness
-  is `syscall.Kill(pid, 0)`; one session per `surfaceId`, newest `updatedAt` wins.
-- `~/.cmuxterm/workstream.jsonl` — the audit log. Only the last 8MB (`tailBytes`,
-  ~2 days) is read, scanned with `jsonField` string search rather than full JSON
-  decode; payloads are decoded only for the few rows that need it.
-- `cmux top --all --json` — surface and workspace titles, joined to sessions **on pid**
-  (surface nodes carry no UUID). Always go through the `cmux()` helper: it blanks
-  `CMUX_SURFACE_ID`/`CMUX_WORKSPACE_ID`/`CMUX_TAB_ID`/`CMUX_PANEL_ID`, because cmux
-  treats an inherited value as the implicit target and a stale one fails global queries.
-- `~/.board.json` — the only file written: config plus `surfaceId → label`.
-
-`collect()` in `main.go` produces one `fleet` snapshot — rows, counts, and the ledger —
-from a single pass over the log tail. Both renderers consume it (`show()` for the plain
-table, `frame()` for the dashboard) so the two can never disagree about state. Add a
-derived quantity to `fleet`, not to a renderer.
-
-`row.rank` is the sort key and the band selector: `0` blocked, `1` quiet/done, `2`
-running. Within a rank, oldest first.
-
-### Blocked detection (`DESIGN.md` §12)
-
-cmux logs an actionable card and its own `toolUse` in the same second, so "newest event
-is a card" never fires. The shipped rule walks each session's events backwards and takes
-the first event that *settles* the question: `toolResult` is **inconclusive and skipped**
-(cmux's Feed bridge emits one when its ~6s semaphore expires while Claude keeps waiting
-at its own picker); a `stop`, `userPrompt`, or non-actionable `toolUse` proves the agent
-moved on. This lives in `blockedSessions` and `event.settles` — do not "simplify" it back.
-
-`done` rather than `waiting` is deliberate: cmux's `needsInput` lifecycle fires ~60s
-after *any* finished turn, so it means "sitting at the prompt", not "asked you something".
-
-### Ledger (`ledger.go`, `DESIGN.md` §13)
-
-`asks()` extracts `question` and `exitPlan` episodes only — auto-approved permission
-requests resolve without a human, so they are volume, not accountability. An episode with
-no settling event is `open` and renders as `never`. `coverage()` reports the oldest event
-actually in the tail so the header states the real window instead of the requested 7 days.
-
-### Rendering (`watch.go`)
-
-`frame()` is a pure function of the snapshot; `watch()` is the only impure part
-(alternate screen, ticker, SIGWINCH). Redraw is cursor-home + per-line `\033[K` written
-as one buffer — a full-screen clear each tick flashes, so never blank the previous frame
-before the new one is ready.
-
-Colour values are validated against both the lightest and darkest plausible terminal
-backgrounds (`#282c34`, `#040404`) per `DESIGN.md` §11 — **do not substitute by eye or
-add a colour without re-validating.** Two results are load-bearing: bare `#d03b3b` text
-fails at 2.91, which is why blocked is a filled badge with white text (theme-independent);
-and the idle ramp *brightens* with age because the sequential anchor flips on a dark
-surface.
-
-Bar length and ramp step both encode idle on one shared absolute log scale (0→7d) so bars
-stay comparable across refreshes. Bars appear on blocked and quiet rows — time you owe a
-session — and never on working rows, where elapsed time is progress.
+Golden frames re-bless deliberately, with a reason: `BLESS=1 go test ./internal/view`.
 
 ## Invariants
 
-- **board never ends a session.** No close, kill, or hibernate on a timer, threshold, or
-  batch path (`DESIGN.md` §8). It is a reporting surface; that is what makes it safe to
-  leave installed.
-- **`notify` must never fail the agent.** It is a Claude Code hook; every error path is a
-  silent success, including a broken `notify_cmd`.
-- **`install-hooks` refuses to rewrite unparseable `~/.claude/settings.json`** and writes
-  a timestamped `.board-bak-*` before its first change. It is idempotent via the
-  `<binary> notify` command marker.
-- Zero config to first value, and no persistent process, port, or daemon — the watch tab
-  *is* the process (`DESIGN.md` §5, §11).
-- No dependencies. Reach for `stdlib` + `syscall` (`TIOCGWINSZ`, `Kill`) rather than a
-  TUI or colour library.
+- **board never ends a session.** No close, kill, or hibernate on a timer, threshold,
+  or batch path. It is a reporting surface; that is what makes it safe to install.
+- **`notify` must never fail the agent** — every error path is a silent success.
+- **`install-hooks` refuses unparseable `~/.claude/settings.json`** and backs up
+  first; idempotent via the `<binary> notify` marker.
+- **No dependencies.** stdlib + `syscall` (`TIOCGWINSZ`, termios) over any TUI or
+  colour library.
+- **No listener, port, or daemon.** The watch tab *is* the process.
+- **The frame fits the terminal in both directions.** No line may exceed the width and
+  no frame may exceed the height: a wrapped line silently adds a screen row, which
+  breaks the height measurement and scrolls the header away. Both are pinned by tests
+  over a matrix of sizes (`DESIGN.md` §9.10, §9.12), and `clampLine` is the backstop.
+- **Colour is validated, never eyeballed.** Do not substitute or add a value without
+  re-validating against `#282c34` and `#040404` (`DESIGN.md` §6).
+- **No sorting, no filtering, no dismiss.** The bands are the sort.
 
-When a change settles a design question or falsifies a recorded conclusion, append to
-`DESIGN.md` the way §12 and §13 do — state the wrong belief, the evidence, and the
-shipped rule.
+## Comments
+
+Short and to the point. Explain *why* — decisions, non-obvious logic, traps — never
+what the code plainly does.
