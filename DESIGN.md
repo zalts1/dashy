@@ -475,3 +475,64 @@ Nothing else in the stack surfaces those. One showed up in the first render.
 
 Cost: one shared pass over the log tail now feeds both blocked-detection and the
 ledger, so a tick stays ~60ms.
+
+---
+
+## 14. Built: jump to tab, and the interaction that earns its keep
+
+Two ways to get from the board to a session:
+
+    board jump <substring>     from any tab, matches label or workspace
+    ↑/↓ then Enter             from inside board watch
+
+`cmux rpc surface.focus {"surface_id": "..."}` does the work, using the surface id
+board already stores per session. (The parameter is `surface_id`; `surface` returns
+`invalid_params`.)
+
+### Why this is not redundant with Claude Code's Agent View
+
+`claude agents` (shipped May 2026, present in 2.1.220) covers a lot of this ground
+and covers it well: 32 sessions where board sees 22, a native `status` of
+idle/busy/waiting plus `waitingFor`, and select → peek → reply inline → attach.
+Its data is better than board's log-derived state.
+
+But **attach is not the same action as focus.** Agent View attaches to a session's
+transcript inside Agent View. It does not bring the cmux tab forward — with its
+splits, its scrollback, the layout that was set up for that piece of work. Only
+board knows the surface id, so only board can do the second thing. That is the gap
+worth filling; rebuilding peek-and-reply on top of it would be the same mistake as
+rebuilding cmux's Feed.
+
+### The refresh-versus-cursor problem, solved by prior art
+
+Rows re-sort as idle time grows and sessions move between bands, so a refresh
+landing mid-navigation slides the list under the cursor: you press Enter and jump
+to the wrong session. Two separate defects, and the established fixes are known:
+
+- **Identity, not position.** Selection is keyed on surface id. This is exactly why
+  htop has a dedicated `F` "Follow" key — index-based selection drifts when the
+  sort moves a row. htop makes it opt-in and drops it on the first arrow key; there
+  is no reason to ship the broken variant, so here it is always on.
+- **An explicit, visible pause.** While a selection is live the data stops
+  refreshing and the header reads `paused while selecting · esc to resume`. `less
+  +F` establishes the pattern: streaming and interacting are two modes and the
+  boundary should be stated, not hidden. A 10s no-keypress timeout clears the
+  selection so the tab can never get stuck out of ambient mode.
+
+Deliberately absent: sorting and filtering. k9s and htop both have them, but they
+list hundreds to thousands of rows; at ~20 the bands already are the sort, and
+hiding rows is the same objection that killed dismiss in §8.
+
+### Tested
+
+`frame_test.go` covers the parts that are easy to get quietly wrong: navigation
+follows on-screen order (blocked, working, quiet) rather than the data's sort order
+(blocked, quiet, working); stepping clamps at both ends; a selection whose session
+vanished between ticks does not strand the cursor; the caret and the `paused`
+banner appear only when they should; and a selection sitting in the collapsed QUIET
+tail is still drawn rather than becoming invisible.
+
+Terminal restore runs through a `sync.Once` from a `defer`, so it also fires on
+panic — a process that exits without restoring termios leaves the user's shell with
+no echo. `ISIG` is left enabled so ctrl-c still raises a signal and takes the normal
+restore path.

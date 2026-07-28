@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"
@@ -94,9 +95,22 @@ func termSize() (rows, cols int) {
 	return int(ws.row), int(ws.col)
 }
 
-// frame renders one complete screen. Pure function of the fleet so it can be
-// tested and diffed without a terminal.
-func frame(f fleet, now time.Time, interval time.Duration, thresh time.Duration, rows, cols int) string {
+// bands splits the fleet into the three on-screen groups, preserving the sort.
+func bands(f fleet) (blocked, working, quiet []row) {
+	for _, r := range f.rows {
+		switch r.rank {
+		case 0:
+			blocked = append(blocked, r)
+		case 2:
+			working = append(working, r)
+		default:
+			quiet = append(quiet, r)
+		}
+	}
+	return
+}
+
+func frame(f fleet, now time.Time, interval time.Duration, thresh time.Duration, rows, cols int, sel string, paused bool) string {
 	var b bytes.Buffer
 	// Size the label column to the longest label actually present, so the bars sit
 	// next to the text instead of across a gap of padding.
@@ -116,21 +130,14 @@ func frame(f fleet, now time.Time, interval time.Duration, thresh time.Duration,
 		labelW = 18
 	}
 
-	var blocked, working, quiet []row
-	for _, r := range f.rows {
-		switch r.rank {
-		case 0:
-			blocked = append(blocked, r)
-		case 2:
-			working = append(working, r)
-		default:
-			quiet = append(quiet, r)
-		}
-	}
+	blocked, working, quiet := bands(f)
 
-	b.WriteString("\n  " + fg(inkPrimary, "BOARD") + "   " +
-		dim(fmt.Sprintf("%d sessions · %s · every %s",
-			len(f.rows), now.Format("15:04:05"), short(interval))) + "\n\n")
+	clock := fmt.Sprintf("%d sessions · %s · every %s",
+		len(f.rows), now.Format("15:04:05"), short(interval))
+	if paused {
+		clock = fmt.Sprintf("%d sessions · paused while selecting · esc to resume", len(f.rows))
+	}
+	b.WriteString("\n  " + fg(inkPrimary, "BOARD") + "   " + dim(clock) + "\n\n")
 
 	// KPI strip — the sub-second read. Blocked is the only thing allowed to shout.
 	blockedCell := dim(fmt.Sprintf("%d blocked", len(blocked)))
@@ -174,7 +181,11 @@ func frame(f fleet, now time.Time, interval time.Duration, thresh time.Duration,
 		if showBar {
 			barCell = bar(r.idle)
 		}
-		return "   " + state + body(pad(label, labelW)) + " " + barCell + " " + warn + " " +
+		lead, text := "   ", body(pad(label, labelW))
+		if sel != "" && r.surface == sel {
+			lead, text = " "+fg(inkPrimary, "▸")+" ", fg(inkPrimary, pad(label, labelW))
+		}
+		return lead + state + text + " " + barCell + " " + warn + " " +
 			body(fmt.Sprintf("%7s", humanize(r.idle))) + "  " + dim(r.workspace) + "\n"
 	}
 
@@ -202,6 +213,13 @@ func frame(f fleet, now time.Time, interval time.Duration, thresh time.Duration,
 		shown := quiet
 		if len(shown) > room {
 			shown = shown[:room]
+			// A selection must stay visible even if it sits in the collapsed tail.
+			for _, r := range quiet[room:] {
+				if sel != "" && r.surface == sel {
+					shown = append(shown, r)
+					break
+				}
+			}
 		}
 		for _, r := range shown {
 			b.WriteString(line(mark(dim("○"), 1), r.label, true, r))
@@ -297,23 +315,36 @@ func watch(interval time.Duration) {
 	if !isTTY(out) {
 		st := loadState()
 		rows, cols := envInt("LINES", 44), envInt("COLUMNS", 118)
-		fmt.Fprint(out, frame(collect(), time.Now(), interval, st.threshold(), rows, cols))
+		fmt.Fprint(out, frame(collect(), time.Now(), interval, st.threshold(), rows, cols, "", false))
 		return
 	}
 	// Alternate screen so exiting restores the shell untouched.
 	fmt.Fprint(out, "\033[?1049h\033[?25l")
-	restore := func() { fmt.Fprint(out, "\033[?25h\033[?1049l") }
+	restoreTerm, _ := rawMode(os.Stdin)
+	var once sync.Once
+	restore := func() {
+		once.Do(func() {
+			if restoreTerm != nil {
+				restoreTerm()
+			}
+			fmt.Fprint(out, "\033[?25h\033[?1049l")
+		})
+	}
+	// Runs on panic as well as on the normal paths — a process that dies without
+	// restoring termios leaves the user's shell with no echo.
+	defer restore()
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM, syscall.SIGWINCH)
-	tick := time.NewTicker(interval)
-	defer tick.Stop()
+	keys := readKeys(os.Stdin)
+
+	var f fleet
+	var sel string
+	var lastKey, lastFetch time.Time
 
 	draw := func() {
-		st := loadState()
-		f := collect()
 		rows, cols := termSize()
-		s := frame(f, time.Now(), interval, st.threshold(), rows, cols)
+		s := frame(f, lastFetch, interval, loadState().threshold(), rows, cols, sel, sel != "")
 		// Home, overwrite line by line, then clear below. A full-screen clear each
 		// tick would flash — the previous frame stays until its pixels are replaced.
 		var b bytes.Buffer
@@ -324,8 +355,13 @@ func watch(interval time.Duration) {
 		b.WriteString("\033[J")
 		out.Write(b.Bytes())
 	}
+	refresh := func() { f, lastFetch = collect(), time.Now(); draw() }
 
-	draw()
+	refresh()
+	// One-second cadence drives both the data interval and the selection timeout;
+	// no work happens unless something is actually due.
+	ui := time.NewTicker(time.Second)
+	defer ui.Stop()
 	for {
 		select {
 		case s := <-sig:
@@ -333,10 +369,43 @@ func watch(interval time.Duration) {
 				draw()
 				continue
 			}
-			restore()
 			return
-		case <-tick.C:
+		case k := <-keys:
+			lastKey = time.Now()
+			switch k {
+			case keyQuit:
+				return
+			case keyEscape:
+				sel = ""
+			case keyUp:
+				sel = step(displayOrder(f), sel, -1)
+			case keyDown:
+				sel = step(displayOrder(f), sel, +1)
+			case keyEnter:
+				if sel != "" {
+					target := sel
+					sel = ""
+					restore()
+					if err := focusSurface(target); err != nil {
+						fmt.Fprintln(os.Stderr, "board:", err)
+					}
+					return
+				}
+			}
 			draw()
+		case <-ui.C:
+			// Refresh is paused while a selection is live so rows cannot re-sort
+			// under the cursor; the timeout guarantees it always returns to ambient.
+			if sel != "" {
+				if time.Since(lastKey) > selectTimeout {
+					sel = ""
+					refresh()
+				}
+				continue
+			}
+			if time.Since(lastFetch) >= interval {
+				refresh()
+			}
 		}
 	}
 }

@@ -234,6 +234,7 @@ func haveCmux() bool {
 
 type row struct {
 	state, label, workspace string
+	surface                 string
 	idle                    time.Duration
 	stale                   bool
 	rank                    int
@@ -286,7 +287,8 @@ func collect() fleet {
 		if idle < 0 {
 			idle = 0
 		}
-		r := row{state: "done", label: label, workspace: ws, idle: idle, rank: 1}
+		r := row{state: "done", label: label, workspace: ws, idle: idle, rank: 1,
+			surface: s.SurfaceID}
 		switch {
 		case blocked[s.SessionID]:
 			r.state, r.rank = "blocked →", 0
@@ -547,10 +549,12 @@ func main() {
 			}
 		}
 		watch(iv)
+	case "jump":
+		err = jump(strings.Join(args[1:], " "))
 	case "install-hooks":
 		err = installHooks()
 	default:
-		fmt.Fprintln(os.Stderr, "usage: board | board watch [interval] | board label \"<text>\" | board install-hooks")
+		fmt.Fprintln(os.Stderr, "usage: board | board watch [interval] | board jump <substring> | board label \"<text>\" | board install-hooks")
 		os.Exit(2)
 	}
 	if err != nil {
