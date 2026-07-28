@@ -38,19 +38,29 @@ after 10s of no keypress so the tab always returns to being ambient.
 
 | state | meaning | derived from |
 |---|---|---|
-| `blocked →` | genuinely needs an answer | newest cmux Feed event is `question`, `permissionRequest`, or `exitPlan` |
-| `running` | working | cmux `agentLifecycle: running` |
+| `blocked →` | genuinely needs an answer | `claude agents`: interactive `status: waiting`, or background `state: blocked` |
+| `running` | working | `claude agents`: `status: busy` |
 | `done` | finished its turn, unnoticed | everything else |
 
 `⚠` marks a quiet session past the idle threshold (default 45m).
+
+Rows come from `claude agents --json`, which knows every live session. cmux supplies
+tab titles, workspace names and the idle clock, joined on pid. Background agents
+(`claude --bg`) appear with `background` in the workspace column — they have no tab,
+so they cannot be jumped to, and their label is the open question Claude Code
+records for them.
+
+Interactive sessions with no cmux surface are subagents or sessions started outside
+cmux; they are not rows, because this board is a view of tabs.
 
 **Why `done` and not `waiting`:** cmux's `needsInput` lifecycle fires ~60 seconds
 after *any* finished turn, so it means "sitting at the prompt", not "asked you
 something" — on a typical fleet it covers most sessions. `blocked` is derived from
 unresolved Feed cards instead, so it stays rare and worth reacting to.
 
-**Known gap:** the event scan reads the last 8MB of `~/.cmuxterm/workstream.jsonl`
-(~2 days). A session blocked longer ago shows as `done ⚠` rather than `blocked`.
+**Cost:** `claude agents` takes ~250ms, so `board` runs in ~230ms rather than the
+~60ms it managed when it derived state from cmux alone. That buys 10 sessions it
+used to miss, including background agents blocked for weeks.
 
 ## Config — `~/.board.json`
 

@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -90,46 +89,13 @@ type session struct {
 	UpdatedAt      float64 `json:"updatedAt"`
 }
 
-// readSessions returns one live session per surface, newest wins.
-func readSessions() []session {
-	b, err := os.ReadFile(home(".cmuxterm", "claude-hook-sessions.json"))
-	if err != nil {
-		return nil
-	}
-	var file struct {
-		Sessions map[string]session `json:"sessions"`
-	}
-	if json.Unmarshal(b, &file) != nil {
-		return nil
-	}
-	live := map[string]session{}
-	for _, s := range file.Sessions {
-		if s.Pid == 0 || syscall.Kill(s.Pid, 0) != nil {
-			continue
-		}
-		key := s.SurfaceID
-		if key == "" {
-			key = s.SessionID
-		}
-		if prev, ok := live[key]; ok && prev.UpdatedAt >= s.UpdatedAt {
-			continue
-		}
-		live[key] = s
-	}
-	out := make([]session, 0, len(live))
-	for _, s := range live {
-		out = append(out, s)
-	}
-	return out
-}
-
-type titles struct{ surface, workspace string }
+type titles struct{ id, surface, workspace string }
 
 // cmuxTitles maps agent pid -> its surface and workspace titles. cmux surface
 // nodes carry no UUID, so pid is the join key; cmux_process_pids is 1:1.
 func cmuxTitles() map[int]titles {
 	out := map[int]titles{}
-	b, err := cmux("top", "--all", "--json")
+	b, err := cmux("--id-format", "both", "top", "--all", "--json")
 	if err != nil {
 		return out
 	}
@@ -150,10 +116,11 @@ func walkTree(n any, ws string, out map[int]titles) {
 			ws = title
 		}
 		if kind == "surface" {
+			id, _ := v["id"].(string)
 			pids, _ := v["cmux_process_pids"].([]any)
 			for _, p := range pids {
 				if f, ok := p.(float64); ok {
-					out[int(f)] = titles{stripSpinner(title), ws}
+					out[int(f)] = titles{id, stripSpinner(title), ws}
 				}
 			}
 		}
@@ -177,27 +144,6 @@ func stripSpinner(s string) string {
 	return string(r)
 }
 
-// blockedSessions decides, per session, whether an actionable request is still
-// unanswered — by walking each session's events backwards and taking the first
-// event that settles the question. See event.settles for why toolResult does not.
-func blockedSessions(events []event, want map[string]bool) map[string]bool {
-	out := map[string]bool{}
-	for i := len(events) - 1; i >= 0; i-- {
-		e := events[i]
-		if e.ws == "" || !want[e.ws] {
-			continue
-		}
-		if _, seen := out[e.ws]; seen {
-			continue
-		}
-		if e.kind == "toolResult" {
-			continue // inconclusive
-		}
-		out[e.ws] = e.isActionable()
-	}
-	return out
-}
-
 // jsonField pulls one string value without decoding the whole record; the audit
 // log is written compact and unindented, so this is safe and much cheaper.
 func jsonField(line []byte, key string) string {
@@ -217,12 +163,14 @@ func jsonField(line []byte, key string) string {
 // cmux runs a read-only query. cmux treats CMUX_SURFACE_ID/CMUX_WORKSPACE_ID as
 // the implicit target for every command, so a stale inherited value makes even a
 // global query fail; strip them and ask for the whole fleet explicitly.
-func cmux(args ...string) ([]byte, error) {
-	c := exec.Command("cmux", args...)
+func run(bin string, args ...string) ([]byte, error) {
+	c := exec.Command(bin, args...)
 	c.Env = append(os.Environ(), "CMUX_QUIET=1",
 		"CMUX_SURFACE_ID=", "CMUX_WORKSPACE_ID=", "CMUX_TAB_ID=", "CMUX_PANEL_ID=")
 	return c.Output()
 }
+
+func cmux(args ...string) ([]byte, error) { return run("cmux", args...) }
 
 func haveCmux() bool {
 	if os.Getenv("CMUX_WORKSPACE_ID") != "" {
@@ -251,53 +199,57 @@ type fleet struct {
 }
 
 func collect() fleet {
-	sessions := readSessions()
 	st := loadState()
-	byPid := cmuxTitles()
-	want := make(map[string]bool, len(sessions))
-	for _, s := range sessions {
-		want[s.SessionID] = true
-	}
+
+	// The two slow calls are independent: claude agents ~250ms, cmux top ~50ms.
+	var agents []agent
+	var byPid map[int]titles
+	done := make(chan struct{})
+	go func() { agents = claudeAgents(); close(done) }()
+	byPid = cmuxTitles()
+	<-done
+
+	updated := cmuxUpdatedAt()
 	events := readTail()
-	blocked := blockedSessions(events, want)
-	wsOf := make(map[string]string, len(sessions))
-	for _, s := range sessions {
-		if t := byPid[s.Pid]; t.workspace != "" {
-			wsOf[s.SessionID] = t.workspace
-		}
-	}
 
 	now := time.Now()
 	var f fleet
-	rows := make([]row, 0, len(sessions))
-	for _, s := range sessions {
-		t := byPid[s.Pid]
-		label := st.Labels[s.SurfaceID]
-		if label == "" {
-			label = t.surface
-		}
-		if label == "" {
-			label = "(unlabeled)"
+	rows := make([]row, 0, len(agents))
+	for _, a := range agents {
+		t := byPid[a.Pid]
+		// Interactive sessions with no cmux surface are subagents or sessions run
+		// outside cmux; this board is a view of tabs, so they are not rows.
+		if t.id == "" && a.Kind != "background" {
+			continue
 		}
 		ws := t.workspace
 		if ws == "" {
-			ws = filepath.Base(s.Cwd)
+			ws = "background"
 		}
-		idle := now.Sub(time.Unix(int64(s.UpdatedAt), 0))
-		if idle < 0 {
+		label := st.Labels[t.id]
+		if label == "" {
+			label = a.label(t.surface)
+		}
+		// cmux's hook clock is the most accurate when present; the transcript mtime
+		// covers the sessions it never registered.
+		last := updated[a.SessionID]
+		if last.IsZero() {
+			last = a.lastActivity()
+		}
+		idle := now.Sub(last)
+		if idle < 0 || last.IsZero() {
 			idle = 0
 		}
+
 		r := row{state: "done", label: label, workspace: ws, idle: idle, rank: 1,
-			surface: s.SurfaceID}
+			surface: t.id}
 		switch {
-		case blocked[s.SessionID]:
+		case a.blocked():
 			r.state, r.rank = "blocked →", 0
 			f.blocked++
-		case s.AgentLifecycle == "running":
+		case a.running():
 			r.state, r.rank = "running", 2
 		}
-		// A running agent's clock is legitimately old between hook events, so
-		// only quiet sessions earn the forgotten-work flag.
 		if r.rank != 2 && idle > st.threshold() {
 			r.stale = true
 			f.stale++
@@ -316,10 +268,10 @@ func collect() fleet {
 	f.rows = rows
 	since := now.AddDate(0, 0, -ledgerDays)
 	if c := coverage(events); c.After(since) {
-		since = c // the tail is shorter than the requested window
+		since = c
 	}
 	f.asksSince = since
-	f.asks = asks(events, since, wsOf)
+	f.asks = asks(events, since, nil)
 	sort.Slice(f.asks, func(i, j int) bool { return f.asks[i].at.After(f.asks[j].at) })
 	return f
 }

@@ -547,3 +547,49 @@ Terminal restore runs through a `sync.Once` from a `defer`, so it also fires on
 panic — a process that exits without restoring termios leaves the user's shell with
 no echo. `ISIG` is left enabled so ctrl-c still raises a signal and takes the normal
 restore path.
+
+---
+
+## 15. Fixed: the roster, and where state comes from
+
+board was blind to 10 of 31 live sessions, **two of them background agents blocked
+for 44 and 52 days.** Its own core promise is one line per session, so this was a
+correctness bug rather than a missing feature.
+
+Cause: state and roster both came from cmux's hook file and audit log. cmux's hook
+file simply does not register every session — the 8 interactive sessions it missed
+all own real cmux tabs with real titles ("Review three pull requests across
+repositories", "Conductor product brief review") and `cmux top` knew their pids the
+whole time. Background agents were never in scope for that file at all.
+
+### New layering
+
+| what | source | cost |
+|---|---|---|
+| roster + state | `claude agents --json` — `status` idle/busy/waiting, `state` blocked | ~250ms |
+| tab title, workspace, surface UUID | `cmux --id-format both top --all --json`, joined on pid | ~50ms |
+| idle clock | cmux hook `updatedAt`, else transcript mtime | free |
+| open question for background agents | `~/.claude/jobs/<id>/state.json` → `needs` | free |
+| the ledger | audit-log tail, unchanged | ~10ms |
+
+The two subprocess calls run concurrently, so a tick costs ~250ms rather than 300.
+
+### What this deleted
+
+`blockedSessions` and its log heuristics are gone. That code was wrong twice (§12)
+and is now one field. The pid-liveness check went too — `claude agents` only reports
+live sessions. `readSessions` is gone entirely.
+
+### Judgement calls
+
+- **Interactive sessions with no cmux surface are excluded.** They are subagents or
+  sessions run outside cmux. Including them would put rows on the board that have no
+  tab to go to. Documented rather than silent.
+- **Background agents are included even though they cannot be jumped to**, marked
+  `background` in the workspace column. Hiding blocked work to keep the table tidy
+  would inverk the point of the tool. Their label is Claude Code's own `needs`
+  string, which is far more useful than a slug: "watch CI to green, or leave it
+  here?"
+- **`board` now costs ~230ms against the brief's ~200ms budget.** Accepted: the
+  primary surface is the ambient tab where 230ms per 10s is irrelevant, and missing
+  blocked work is a worse failure than a 30ms overshoot on the one-shot.
