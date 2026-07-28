@@ -73,21 +73,3 @@ name. Sink failures are swallowed so a broken webhook never blocks an agent.
 Remove the two `board notify` entries from `~/.claude/settings.json` (a timestamped
 `.board-bak-*` copy is written before the first change), then delete `~/.board.json`
 and the binary. Labels live only in `~/.board.json`; nothing else is written.
-
-## Slack
-
-`contrib/slack-notify.sh` (installed as `~/.local/bin/board-slack-notify`) posts to
-a Slack incoming webhook. Store the URL in the Keychain rather than in
-`~/.board.json` — it is a credential:
-
-    security add-generic-password -s board-slack-webhook -a "$USER" \
-      -w 'https://hooks.slack.com/services/XXX/YYY/ZZZ'
-
-It only posts when the keyboard has been idle past `BOARD_AWAY_SECONDS` (default
-300), so it pings you about agents you are *not* watching. Without that gate a
-22-session fleet would post on every turn end and get muted within a week.
-
-Test it without sending anything:
-
-    echo '{"state":"needs input","label":"demo","workspace":"WS","message":"hi"}' \
-      | BOARD_SLACK_DRYRUN=1 ~/.local/bin/board-slack-notify
