@@ -23,10 +23,17 @@ const (
 	defaultPoll      = 10 * time.Second
 )
 
-// A pending Feed card is the only trustworthy "needs an answer" signal.
-// cmux's needsInput lifecycle fires ~60s after any finished turn, so it means
-// "sitting at the prompt", not "asked you something".
+// An unanswered actionable request is the only trustworthy "needs an answer"
+// signal. cmux's needsInput lifecycle fires ~60s after any finished turn, so it
+// means "sitting at the prompt", not "asked you something".
+//
+// The card event and its own toolUse land in the same second, and the toolResult
+// is the user's answer arriving. So the marker for "still waiting" is either the
+// card or its tool call being the newest event — a toolResult or stop after it
+// means it was answered.
 var actionable = map[string]bool{"question": true, "permissionRequest": true, "exitPlan": true}
+
+var actionableTool = map[string]bool{"AskUserQuestion": true, "ExitPlanMode": true}
 
 func home(p ...string) string {
 	h, _ := os.UserHomeDir()
@@ -199,9 +206,15 @@ func newestKinds(want map[string]bool) map[string]string {
 		if _, seen := out[id]; seen {
 			continue
 		}
-		if kind := jsonField(lines[i], "kind"); kind != "" {
-			out[id] = kind
+		kind := jsonField(lines[i], "kind")
+		if kind == "" {
+			continue
 		}
+		// A tool call for an actionable request counts as the request itself.
+		if kind == "toolUse" && actionableTool[jsonField(lines[i], "toolName")] {
+			kind = "question"
+		}
+		out[id] = kind
 		if len(out) == len(want) {
 			break
 		}
