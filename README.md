@@ -29,6 +29,12 @@ Inside `board watch`: `↑`/`↓` (or `k`/`j`) select a row, `Enter` focuses tha
 session's cmux tab **and leaves board running**, `Esc` clears, `q` or `Ctrl-C` exits. That is the whole
 keymap — no sorting, no filtering, no modes.
 
+When QUIET does not fit, the band ends with `+N quiet`. **That is a count, not a
+control** — nothing expands a band. To read a hidden row, press `↓` past the last
+visible one (it walks into the collapsed rows one at a time, rottenest first) or make
+the tab taller. Rows with no cmux tab can be selected and read too; `Enter` on one
+says there is nowhere to jump.
+
 **While a row is selected the refresh pauses** and the header says so. Rows re-sort
 as idle time grows, so a live refresh would slide the list out from under the
 cursor. The selection is tracked by session, not by screen line, and clears itself

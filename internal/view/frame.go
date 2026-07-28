@@ -30,7 +30,7 @@ type Screen struct {
 // UI is the transient interaction state, kept separate from the fleet snapshot
 // because it belongs to the viewer, not to the fleet.
 type UI struct {
-	Sel    string // selected surface id, "" when ambient
+	Sel    string // selected row key (the session id), "" when ambient
 	Paused bool
 	Notice string // shown in the header; the board tab may be hidden when it appears
 }
@@ -107,7 +107,7 @@ func compose(f board.Fleet, s Screen, u UI, quiet []board.Row, hiddenQuiet int) 
 			mid = " " + barCell + " " + warn + " "
 		}
 		lead, text := "   ", body(pad(label, labelW))
-		if u.Sel != "" && r.Surface == u.Sel {
+		if u.Sel != "" && r.Key == u.Sel {
 			lead, text = " "+fg(inkPrimary, "▸")+" ", fg(inkPrimary, pad(label, labelW))
 		}
 		return lead + state + text + mid +
@@ -139,9 +139,11 @@ func compose(f board.Fleet, s Screen, u UI, quiet []board.Row, hiddenQuiet int) 
 		for _, r := range quiet {
 			b.WriteString(line(mark(dim("○"), 1), r.Label, true, r))
 		}
-		// The count stays visible so the backlog can never hide by being collapsed.
+		// The count stays visible so the backlog can never hide by being collapsed — and
+		// it is a count, not a control: nothing expands the band, and the chevron this
+		// used to draw promised otherwise (§9.14).
 		if hiddenQuiet > 0 {
-			b.WriteString("   " + strings.Repeat(" ", gutter) + dim(fmt.Sprintf("⌄  %d more", hiddenQuiet)) + "\n")
+			b.WriteString("   " + strings.Repeat(" ", gutter) + dim(fmt.Sprintf("+%d quiet", hiddenQuiet)) + "\n")
 		}
 	}
 

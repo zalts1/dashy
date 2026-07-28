@@ -48,6 +48,7 @@ func Build(s Snapshot, now time.Time) Fleet {
 		}
 
 		r := Row{
+			Key:       a.SessionID,
 			State:     "done",
 			Label:     label(a, t, s.Labels, s.JobLabels),
 			Workspace: ws,

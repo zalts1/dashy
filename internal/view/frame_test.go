@@ -1,6 +1,8 @@
 package view
 
 import (
+	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -19,11 +21,11 @@ func screen(rows, cols int) Screen {
 // with no tab.
 func fixture() board.Fleet {
 	return board.Fleet{Workspaces: 4, Rows: []board.Row{
-		{State: "blocked →", Label: "merge app#1497", Workspace: "APP", Surface: "S-BLK", Idle: 3 * time.Hour, Rank: board.RankBlocked},
-		{State: "blocked →", Label: "no tab to jump to", Workspace: "background", Idle: time.Hour, Rank: board.RankBlocked},
-		{State: "done", Label: "rotting thing", Workspace: "REVIEWS", Surface: "S-OLD", Idle: 50 * time.Hour, Rank: board.RankQuiet, Stale: true},
-		{State: "done", Label: "fresh thing", Workspace: "TASKS", Surface: "S-NEW", Idle: 5 * time.Minute, Rank: board.RankQuiet},
-		{State: "running", Label: "busy thing", Workspace: "KILL", Surface: "S-RUN", Rank: board.RankWorking},
+		{Key: "K-BLK", State: "blocked →", Label: "merge app#1497", Workspace: "APP", Surface: "S-BLK", Idle: 3 * time.Hour, Rank: board.RankBlocked},
+		{Key: "K-BG", State: "blocked →", Label: "no tab to jump to", Workspace: "background", Idle: time.Hour, Rank: board.RankBlocked},
+		{Key: "K-OLD", State: "done", Label: "rotting thing", Workspace: "REVIEWS", Surface: "S-OLD", Idle: 50 * time.Hour, Rank: board.RankQuiet, Stale: true},
+		{Key: "K-NEW", State: "done", Label: "fresh thing", Workspace: "TASKS", Surface: "S-NEW", Idle: 5 * time.Minute, Rank: board.RankQuiet},
+		{Key: "K-RUN", State: "running", Label: "busy thing", Workspace: "KILL", Surface: "S-RUN", Rank: board.RankWorking},
 	}}
 }
 
@@ -35,7 +37,7 @@ func TestSelectionIsMarkedAndPauseIsVisible(t *testing.T) {
 	if strings.Contains(plain, "paused") {
 		t.Error("paused shown when live")
 	}
-	sel := Frame(fixture(), screen(44, 130), UI{Sel: "S-OLD", Paused: true})
+	sel := Frame(fixture(), screen(44, 130), UI{Sel: "K-OLD", Paused: true})
 	if !strings.Contains(sel, "▸") {
 		t.Error("no caret for selection")
 	}
@@ -55,22 +57,60 @@ func TestNoticeRendersInHeader(t *testing.T) {
 	}
 }
 
-func TestQuietTailCollapses(t *testing.T) {
+// collapsing is the fixture for the collapse rules: enough quiet rows to overflow a
+// short tab, including a fresh background row that has no tab to jump to.
+func collapsing() board.Fleet {
 	f := fixture()
 	for i := 0; i < 40; i++ {
-		f.Rows = append(f.Rows, board.Row{Label: "filler", Workspace: "W",
-			Surface: "S-F", Idle: time.Duration(40-i) * time.Hour, Rank: board.RankQuiet})
+		f.Rows = append(f.Rows, board.Row{Key: fmt.Sprintf("K-F%d", i), Label: "filler",
+			Workspace: "W", Surface: "S-F", Idle: time.Duration(40-i) * time.Hour, Rank: board.RankQuiet})
 	}
+	f.Rows = append(f.Rows, board.Row{Key: "K-BGQ", Label: "background agent, no tab",
+		Workspace: "background", Idle: time.Minute, Rank: board.RankQuiet})
+	return f
+}
+
+func TestQuietTailCollapses(t *testing.T) {
+	f := collapsing()
 	out := Frame(f, screen(20, 130), UI{})
 	// The count must stay visible: a band that collapses silently reads as a band
 	// with nothing in it.
-	if !strings.Contains(out, "more") {
+	if !collapseCount.MatchString(out) {
 		t.Error("collapsed tail did not report how many rows it hid")
 	}
 	// A selection in the hidden tail must still be drawn, or the cursor is invisible.
-	sel := Frame(f, screen(20, 130), UI{Sel: "S-NEW", Paused: true})
+	sel := Frame(f, screen(20, 130), UI{Sel: "K-NEW", Paused: true})
 	if !strings.Contains(sel, "fresh thing") {
 		t.Error("selected row was collapsed out of view")
+	}
+}
+
+var collapseCount = regexp.MustCompile(`\+\d+ quiet`)
+
+// The collapse line reports a count; it is not a control. A disclosure chevron said
+// otherwise for a while, and there is no key that expands the band — the honest ways
+// to see a hidden row are to select it or to make the tab taller (DESIGN.md §9.14).
+func TestCollapseLineOffersNothingItCannotDo(t *testing.T) {
+	out := Frame(collapsing(), screen(20, 130), UI{})
+	if strings.Contains(out, "⌄") {
+		t.Error("collapse line draws a disclosure chevron, promising an expand key that does not exist")
+	}
+	if !collapseCount.MatchString(out) {
+		t.Errorf("collapse line does not read as a count of hidden rows")
+	}
+}
+
+// The hidden tail is reachable one row at a time, so a row that cannot be selected
+// can be counted and never drawn. Background agents have no surface, which used to
+// keep them out of the navigation order entirely.
+func TestATabLessRowInTheTailCanBeBroughtIntoView(t *testing.T) {
+	f := collapsing()
+	if out := Frame(f, screen(20, 130), UI{}); strings.Contains(out, "background agent, no tab") {
+		t.Fatal("fixture is not exercising the collapse; the tab-less row is already visible")
+	}
+	sel := Frame(f, screen(20, 130), UI{Sel: "K-BGQ", Paused: true})
+	if !strings.Contains(sel, "background agent, no tab") {
+		t.Error("a tab-less row in the hidden tail cannot be brought on screen at all")
 	}
 }
 

@@ -62,6 +62,33 @@ func TestRosterMembership(t *testing.T) {
 	if r.Jumpable() {
 		t.Error("background agent reported as jumpable; it has no tab")
 	}
+	// Jumpable and selectable are different things: the key is the session, which every
+	// row has, so a tab-less row can still be selected and lifted out of the collapsed
+	// quiet tail (DESIGN.md §9.14).
+	if r.Key != "sess-bg" {
+		t.Errorf("background agent key = %q, want the session id", r.Key)
+	}
+	if got := one(t, snap(interactive())).Key; got != "sess-1" {
+		t.Errorf("key = %q, want the session id", got)
+	}
+}
+
+// Enter needs the surface behind a selection, and the selection carries a session key.
+func TestByKey(t *testing.T) {
+	f := Fleet{Rows: []Row{
+		{Key: "K-1", Label: "one", Surface: "S-1"},
+		{Key: "K-2", Label: "two"},
+	}}
+	if r, ok := f.ByKey("K-2"); !ok || r.Label != "two" || r.Jumpable() {
+		t.Errorf("ByKey(K-2) = %+v ok=%v", r, ok)
+	}
+	if _, ok := f.ByKey("K-GONE"); ok {
+		t.Error("ByKey found a session that is not in the fleet")
+	}
+	// A cleared selection must never resolve to the first row and jump somewhere.
+	if _, ok := f.ByKey(""); ok {
+		t.Error("an empty key resolved to a row")
+	}
 }
 
 func TestStateAndRank(t *testing.T) {

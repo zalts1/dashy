@@ -4,22 +4,24 @@ import "board/internal/board"
 
 // Navigation lives with the renderer because it must follow the screen, not the
 // data. Two rules taken from prior art rather than invented: selection is keyed on
-// the session's surface id, never a row index (htop's Follow key exists because
-// index-based selection drifts when the list re-sorts under you), and the caller
-// pauses the refresh while a selection is live (less's +F makes the
-// streaming/interacting boundary explicit instead of clever).
+// the session, never a row index (htop's Follow key exists because index-based
+// selection drifts when the list re-sorts under you), and the caller pauses the
+// refresh while a selection is live (less's +F makes the streaming/interacting
+// boundary explicit instead of clever).
 
-// DisplayOrder lists surface ids in the order Frame draws them, so ↑/↓ move the way
-// the screen looks rather than the way the data is sorted. Rows with no tab are
-// skipped — there is nothing to jump to.
+// DisplayOrder lists row keys in the order Frame draws them, so ↑/↓ move the way the
+// screen looks rather than the way the data is sorted.
+//
+// Every row is a stop, including the tab-less background agents. Selection does two
+// jobs — it picks the jump target and it lifts a row out of the collapsed quiet tail —
+// so skipping them made a row that the frame counts and can never draw (§9.14). Enter
+// on one reports that there is no tab.
 func DisplayOrder(f board.Fleet) []string {
 	blocked, working, quiet := f.Bands()
 	var out []string
 	for _, group := range [][]board.Row{blocked, working, quiet} {
 		for _, r := range group {
-			if r.Jumpable() {
-				out = append(out, r.Surface)
-			}
+			out = append(out, r.Key)
 		}
 	}
 	return out

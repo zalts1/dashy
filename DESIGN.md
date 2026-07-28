@@ -319,9 +319,12 @@ half-second, which is why the reading "lead with `3 NEED YOU`" was rejected.
   clear each tick flashes — **never blank the previous frame before the new one is
   ready.**
 - **Height-aware by measurement, not estimate.** The frame is composed, measured, and
-  trimmed until it fits: quiet tail first, then ASKED rows, then a clip of trailing
-  lines. The count of what was cut stays visible so the backlog cannot hide. A frame
-  taller than the tab scrolls the header off the top — see §9.10.
+  trimmed until it fits: quiet tail first, then a clip of trailing lines. The count of
+  what was cut stays visible so the backlog cannot hide. A frame taller than the tab
+  scrolls the header off the top — see §9.10.
+- **`+N quiet` is a count, not a control.** Nothing expands a band; the chevron that
+  used to sit there implied otherwise (§9.14). A hidden row is read by selecting it or
+  by growing the tab.
 - The label column is sized to the longest label present, so bars sit beside the text
   rather than across a gap of padding.
 - Piped or redirected, `watch` prints a **single frame** and exits. This is the main
@@ -347,10 +350,14 @@ peek-and-reply would be the same mistake as rebuilding Feed.
 grows and sessions change band, so a refresh landing mid-navigation slides the list
 under the cursor and Enter jumps to the wrong session.
 
-- **Identity, not position.** Selection is keyed on surface id. This is exactly why
-  htop has a dedicated `F` "Follow" key; index-based selection drifts when the sort
-  moves a row. htop makes it opt-in and drops it on the first arrow key — there is no
-  reason to ship the broken variant, so here it is always on.
+- **Identity, not position.** Selection is keyed on `Row.Key`, the session id. This is
+  exactly why htop has a dedicated `F` "Follow" key; index-based selection drifts when
+  the sort moves a row. htop makes it opt-in and drops it on the first arrow key —
+  there is no reason to ship the broken variant, so here it is always on.
+- **Every row is a stop, including the ones with no tab.** Selection does two jobs: it
+  picks the jump target, and it lifts a row out of the collapsed quiet tail. Keying it
+  on the surface id did both at once and so hid the rows that had no surface (§9.14).
+  Enter on one reports `no tab to jump to`.
 - **An explicit, visible pause.** While a selection is live the data stops refreshing
   and the header's freshness block reads `paused · esc to resume` in amber, in the
   slot the clock occupies when the frame is live. `less +F`
@@ -612,6 +619,56 @@ Two rules this settles:
   of ASKED were argued about; none of them could have worked, because every row it
   could contain was either history or a duplicate of `NEEDS YOU` (§5). Measuring the
   payoff's frequency over real data ended in one query what redesigning could not.
+
+### 9.14 `⌄ 3 more` promised a key that did not exist (2026-07-28)
+
+Asked of the live board: *"there's the `3 more`, but no way to see the 3 more — is
+that on purpose?"* The collapse is on purpose (§8: QUIET only grows, the count carries
+the signal). The chevron was not: it is a disclosure control, and nothing expands the
+band. **An affordance is a claim about what the tool can do; drawing one it cannot
+honour is the same class of defect as reporting a wrong number.** The line now reads
+`+N quiet`.
+
+**Two ways in already existed, both undocumented.** `↓` past the last visible row
+walks into the collapsed tail — `DisplayOrder` is built from `Bands()`, not from what
+was drawn, and `pickQuiet` pins the selected row into view wherever it sits. And a
+taller tab expands the band on its own. The README now says the first one.
+
+**The real defect was underneath.** `DisplayOrder` skipped rows with no surface, so a
+tab-less background agent sitting in the collapsed tail was counted twice on screen —
+in `QUIET · N` and in the hidden count — and could never be drawn by any key. Found by
+fixture probe, not by looking: the live fleet's two background agents were both
+`blocked`, and `NEEDS YOU` never collapses, so nothing was visibly wrong.
+
+The fix separates two things the surface id was doing at once:
+
+- **`Row.Key` (the session id) is what selection is keyed on.** Every row has one.
+- **`Row.Surface` is only a jump target.** `Jumpable()` is now about Enter alone;
+  Enter on a tab-less row sets the notice `no tab to jump to`.
+
+Selection was never only a jump cursor — it is also the one thing that lifts a row out
+of the collapsed tail — so keying it on the jump target excluded exactly the rows that
+could not be seen another way.
+
+**Expand and scroll were both rejected.**
+
+- **Expand collapses into scroll.** A band that does not fit cannot be expanded in
+  place without overflowing the frame (§9.10), so expand needs a viewport, and then it
+  *is* scroll.
+- **A scroll offset re-introduces position.** §7 keys selection on identity precisely
+  because rows re-sort under the cursor every tick; an offset is an index by another
+  name and would drift the same way.
+- **The payoff is inverted.** QUIET is sorted by idle descending and the collapse
+  always cuts from the fresh end, so **every hidden row is less rotten than every
+  visible one.** Paging through them is paging through the sessions least likely to
+  need you.
+- **Growing the tab already does it**, with no state that a resize could invalidate.
+
+**One claim withdrawn.** It looked like the pinned row was drawn out of order — a 5h
+bar under 1d bars reads as a broken scale. It is not: the tail is the fresh end, so
+appending the pinned row is its correct position. The bars jump because rows are
+skipped, not because the order is wrong. Noted here because it survived a reading of
+the code and died against a fixture, which is §11's whole argument.
 
 ---
 

@@ -31,7 +31,7 @@ terminal to drive.
       hooks/         notify, install-hooks
 
 One job per package, one concern per file; a file past ~250 lines is a signal to split
-(`view/frame.go` at 194 is the current ceiling). In `view`, rendering lives in
+(`view/frame.go` at 197 is the current ceiling). In `view`, rendering lives in
 `frame.go`/`header.go` and the fit and column arithmetic in `layout.go` — that seam is
 where every fit bug has been. A new command or band needs a `DESIGN.md` entry first.
 Add derived quantities to `Fleet`, not to a renderer.

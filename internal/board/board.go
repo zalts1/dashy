@@ -18,6 +18,10 @@ const (
 const noWorkspace = "background"
 
 type Row struct {
+	// Key identifies the row for selection. It is the session id, which every row has
+	// — Surface is empty for background agents, and selection has to reach them: it is
+	// what lifts a row out of the collapsed quiet tail as well as what Enter acts on.
+	Key       string
 	State     string
 	Label     string
 	Workspace string
@@ -27,7 +31,8 @@ type Row struct {
 	Rank      int
 }
 
-// Jumpable reports whether this row has a tab to focus.
+// Jumpable reports whether this row has a tab to focus. Selectable and jumpable are
+// different: a background agent can be selected and read, but there is nowhere to go.
 func (r Row) Jumpable() bool { return r.Surface != "" }
 
 type Fleet struct {
@@ -36,6 +41,20 @@ type Fleet struct {
 	Stale      int
 	Workspaces int // distinct real workspaces; background agents have none
 	Oldest     time.Duration
+}
+
+// ByKey resolves a selection to its row. An empty key is the ambient state and must
+// never resolve, or clearing the selection would leave Enter pointing at a session.
+func (f Fleet) ByKey(key string) (Row, bool) {
+	if key == "" {
+		return Row{}, false
+	}
+	for _, r := range f.Rows {
+		if r.Key == key {
+			return r, true
+		}
+	}
+	return Row{}, false
 }
 
 // Bands splits the fleet into the three on-screen groups, preserving the sort.

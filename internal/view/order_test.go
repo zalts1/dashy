@@ -7,17 +7,22 @@ import (
 
 // Navigation must follow on-screen order (blocked, working, quiet), not the data's
 // sort order (blocked, quiet, working).
+//
+// Every row is a stop, including the background agents with no tab. Selection is not
+// only a jump target: it is also what lifts a row out of the collapsed quiet tail, so
+// skipping the tab-less rows made them countable and undrawable (DESIGN.md §9.14).
+// Enter on one reports that there is nothing to focus.
 func TestDisplayOrderMatchesScreen(t *testing.T) {
 	got := DisplayOrder(fixture())
-	want := []string{"S-BLK", "S-RUN", "S-OLD", "S-NEW"}
+	want := []string{"K-BLK", "K-BG", "K-RUN", "K-OLD", "K-NEW"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("display order: got %v want %v", got, want)
 	}
-	// The background agent in the fixture has no surface and must not be a stop on
-	// the way down the list — there is no tab to focus.
+	// Keyed on the session, never on a row index or on the surface: a background agent
+	// has no surface, and an index drifts when the fleet re-sorts.
 	for _, id := range got {
 		if id == "" {
-			t.Error("a row with no tab entered the navigation order")
+			t.Error("a row with no key entered the navigation order; it could never be selected")
 		}
 	}
 }
@@ -30,13 +35,13 @@ func TestStepClamps(t *testing.T) {
 		delta int
 		want  string
 	}{
-		{"first press down selects the top row", "", +1, "S-BLK"},
-		{"first press up selects the bottom row", "", -1, "S-NEW"},
-		{"down crosses bands", "S-BLK", +1, "S-RUN"},
-		{"up at the top clamps rather than wrapping onto a blocked row", "S-BLK", -1, "S-BLK"},
-		{"down at the bottom clamps", "S-NEW", +1, "S-NEW"},
+		{"first press down selects the top row", "", +1, "K-BLK"},
+		{"first press up selects the bottom row", "", -1, "K-NEW"},
+		{"down crosses bands", "K-BG", +1, "K-RUN"},
+		{"up at the top clamps rather than wrapping onto a blocked row", "K-BLK", -1, "K-BLK"},
+		{"down at the bottom clamps", "K-NEW", +1, "K-NEW"},
 		// A session that disappeared between ticks must not strand the cursor.
-		{"a vanished selection falls back to the top", "S-GONE", +1, "S-BLK"},
+		{"a vanished selection falls back to the top", "K-GONE", +1, "K-BLK"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -45,7 +50,7 @@ func TestStepClamps(t *testing.T) {
 			}
 		})
 	}
-	if got := Step(nil, "S-BLK", +1); got != "" {
+	if got := Step(nil, "K-BLK", +1); got != "" {
 		t.Errorf("Step on an empty fleet = %q, want empty", got)
 	}
 }

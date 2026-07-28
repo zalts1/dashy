@@ -49,9 +49,12 @@ func pickQuiet(quiet []board.Row, n int, sel string) (shown []board.Row, hidden 
 	n = max(n, 0)
 	shown = make([]board.Row, n, n+1)
 	copy(shown, quiet[:n])
-	// A selection must stay visible even if it sits in the collapsed tail.
+	// A selection must stay visible even if it sits in the collapsed tail: short of a
+	// taller tab it is the only way to read a hidden row. Appending is in order, not a
+	// shortcut — quiet is sorted by idle descending and the collapse cuts from the fresh
+	// end, so anything hidden belongs below everything shown (§9.14).
 	for _, r := range quiet[n:] {
-		if sel != "" && r.Surface == sel {
+		if sel != "" && r.Key == sel {
 			shown = append(shown, r)
 			break
 		}

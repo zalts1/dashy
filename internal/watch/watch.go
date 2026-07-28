@@ -108,12 +108,15 @@ func Run(interval time.Duration) {
 			case keyDown:
 				sel = view.Step(view.DisplayOrder(f), sel, +1)
 			case keyEnter:
-				if sel != "" {
+				if r, ok := f.ByKey(sel); ok {
 					// Focus the target and keep running. cmux switches the visible tab;
 					// board stays alive in its own, so it is still here on return.
-					target := sel
 					sel, notice = "", ""
-					if err := cmux.Focus(target); err != nil {
+					if !r.Jumpable() {
+						// Selectable but not jumpable: a background agent is a row so its
+						// blocked state is visible, and it has no tab to bring forward.
+						notice = "no tab to jump to"
+					} else if err := cmux.Focus(r.Surface); err != nil {
 						// Reported in the frame, not on stderr: once the jump lands, this
 						// tab is not the visible one.
 						notice = err.Error()

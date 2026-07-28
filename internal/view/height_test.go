@@ -1,6 +1,7 @@
 package view
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -13,8 +14,9 @@ func fleetOf(blocked, working, quiet int) board.Fleet {
 	f := board.Fleet{Blocked: blocked, Workspaces: 1}
 	add := func(n, rank int, label string) {
 		for i := 0; i < n; i++ {
-			f.Rows = append(f.Rows, board.Row{Label: label, Workspace: "WS",
-				Surface: label + string(rune('a'+i%26)), Idle: time.Duration(i) * time.Hour, Rank: rank})
+			f.Rows = append(f.Rows, board.Row{Key: fmt.Sprintf("K-%s%d", label, i), Label: label,
+				Workspace: "WS", Surface: label + string(rune('a'+i%26)),
+				Idle: time.Duration(i) * time.Hour, Rank: rank})
 		}
 	}
 	add(blocked, board.RankBlocked, "blocked")
@@ -63,7 +65,7 @@ func TestOverflowIsReportedNotSilent(t *testing.T) {
 	f := fleetOf(3, 2, 40)
 	out := Frame(f, Screen{Now: frameNow, Interval: 10 * time.Second,
 		Threshold: 4 * time.Hour, Rows: 30, Cols: 118}, UI{})
-	if !strings.Contains(out, "more") {
+	if !collapseCount.MatchString(out) {
 		t.Error("rows were dropped without saying how many")
 	}
 }

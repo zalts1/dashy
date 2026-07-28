@@ -1,6 +1,7 @@
 package view
 
 import (
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -29,7 +30,7 @@ func TestGoldenFrames(t *testing.T) {
 			Screen{now, 30 * time.Second, 4 * time.Hour, 24, 90}, UI{}},
 		{"frame-sel.txt", goldenFleet(),
 			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118},
-			UI{Sel: "S-OLD", Paused: true, Notice: "cmux focus refused"}},
+			UI{Sel: "K-OLD", Paused: true, Notice: "cmux focus refused"}},
 		{"frame-empty.txt", board.Fleet{},
 			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118}, UI{}},
 	}
@@ -59,11 +60,11 @@ func TestGoldenFrames(t *testing.T) {
 func goldenFleet() board.Fleet {
 	f := board.Fleet{
 		Rows: []board.Row{
-			{State: "blocked →", Label: "merge app#1497", Workspace: "APP", Surface: "S-BLK", Idle: 3 * time.Hour, Rank: board.RankBlocked},
-			{State: "blocked →", Label: "watch CI to green, or leave it here?", Workspace: "background", Surface: "", Idle: 52 * 24 * time.Hour, Rank: board.RankBlocked, Stale: true},
-			{State: "running", Label: "busy thing", Workspace: "KILL", Surface: "S-RUN", Idle: 0, Rank: board.RankWorking},
-			{State: "done", Label: "rotting thing", Workspace: "REVIEWS", Surface: "S-OLD", Idle: 50 * time.Hour, Rank: board.RankQuiet, Stale: true},
-			{State: "done", Label: "fresh thing", Workspace: "TASKS", Surface: "S-NEW", Idle: 5 * time.Minute, Rank: board.RankQuiet},
+			{Key: "K-BLK", State: "blocked →", Label: "merge app#1497", Workspace: "APP", Surface: "S-BLK", Idle: 3 * time.Hour, Rank: board.RankBlocked},
+			{Key: "K-BG", State: "blocked →", Label: "watch CI to green, or leave it here?", Workspace: "background", Surface: "", Idle: 52 * 24 * time.Hour, Rank: board.RankBlocked, Stale: true},
+			{Key: "K-RUN", State: "running", Label: "busy thing", Workspace: "KILL", Surface: "S-RUN", Idle: 0, Rank: board.RankWorking},
+			{Key: "K-OLD", State: "done", Label: "rotting thing", Workspace: "REVIEWS", Surface: "S-OLD", Idle: 50 * time.Hour, Rank: board.RankQuiet, Stale: true},
+			{Key: "K-NEW", State: "done", Label: "fresh thing", Workspace: "TASKS", Surface: "S-NEW", Idle: 5 * time.Minute, Rank: board.RankQuiet},
 		},
 		Blocked:    2,
 		Stale:      2,
@@ -71,8 +72,9 @@ func goldenFleet() board.Fleet {
 		Oldest:     52 * 24 * time.Hour,
 	}
 	for i := 0; i < 30; i++ {
-		f.Rows = append(f.Rows, board.Row{State: "done", Label: "filler", Workspace: "W",
-			Surface: "S-F", Idle: time.Duration(30-i) * time.Hour, Rank: board.RankQuiet})
+		f.Rows = append(f.Rows, board.Row{Key: fmt.Sprintf("K-F%d", i), State: "done",
+			Label: "filler", Workspace: "W", Surface: "S-F",
+			Idle: time.Duration(30-i) * time.Hour, Rank: board.RankQuiet})
 	}
 	return f
 }
