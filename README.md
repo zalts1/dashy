@@ -5,10 +5,10 @@ One screen showing every live Claude Code session running under cmux.
 ```
 $ board
 STATE        LABEL                                        WORKSPACE           IDLE
-blocked → ⚠  merge app#1497 before branching              DLP PHISHING       3h00m
-blocked →    migrate auth handlers to v2                  AUTH SVC              9m
-done ⚠       Review template-runner PR #541               RAW EVIDENCE       2h48m
-running      build board: cmux fleet status CLI           KILLSWITCH            0m
+blocked → ⚠  merge app#1497 before branching              APP                3h00m
+blocked →    migrate auth handlers to v2                  AUTH                  9m
+done ⚠       Review pipeline PR #541                      REVIEWS            2h48m
+running      build board: cmux fleet status CLI           INFRA                 0m
 
 22 sessions · 2 blocked · 1 running · 20 quiet >45m
 ```
@@ -96,11 +96,11 @@ this JSON on stdin. Empty (the default) means notifications are off.
   "event": "Notification",
   "state": "needs input",
   "label": "migrate auth handlers to v2",
-  "workspace": "AUTH SVC",
+  "workspace": "AUTH",
   "surface_id": "D39C7A0C-…",
   "cwd": "/Users/you/work/repo",
   "message": "Claude needs your permission to use Bash",
-  "text": "needs input — migrate auth handlers to v2 [AUTH SVC]: Claude needs your permission to use Bash"
+  "text": "needs input — migrate auth handlers to v2 [AUTH]: Claude needs your permission to use Bash"
 }
 ```
 

@@ -555,7 +555,7 @@ Three findings, in the order they turned up:
 
 1. **The label column reserved a hard-coded `46` columns for everything to its right.**
    The real chrome is `rowChrome` = 38 **plus the tail**, and the tail is user data:
-   `integration-redesign` is 20 columns, and an ASKED row's is `HH:MM ` plus that. So
+   `platform-migration` is 18 columns, and an ASKED row's is `HH:MM ` plus that. So
    the reserve was short by the whole tail. Same failure as §9.10, same cause — a
    constant standing in for a measurement — and it was invisible for the same reason:
    `board watch` is normally read, not diffed.
@@ -585,7 +585,7 @@ is wrong again.
    labelled as something it was not.
 2. **Every ask took a row, so the one that mattered was buried.** Six rows, five of
    them answered in 1–5 minutes. "You replied in 2m" is a receipt, not
-   accountability; the single interesting cell — `5h01m integration-redesign` — sat
+   accountability; the single interesting cell — `5h01m`, one workspace — sat
    among five identical-looking siblings.
 3. **Ambient noise outranked live sessions.** The §9.10 trim order sacrifices the
    quiet tail *before* ASKED rows, so a short tab hid real sessions to keep showing

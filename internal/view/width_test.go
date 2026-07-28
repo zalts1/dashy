@@ -11,20 +11,20 @@ import (
 )
 
 // wideFleet is the width-hostile case: labels longer than any column, workspace names
-// longer than the labels. Real data looks like this — `integration-redesign` is a real
-// workspace name, and it is what pushed rows past the right edge.
+// longer than the labels. Real data looks like this: a workspace name of this length
+// is what pushed rows past the right edge.
 func wideFleet() board.Fleet {
 	f := board.Fleet{Workspaces: 3, Blocked: 1, Stale: 1, Oldest: 52 * 24 * time.Hour}
 	f.Rows = []board.Row{
 		{Label: "decide: ignore noise, guard hook in config, or investigate cmux settings?",
-			Workspace: "integration-redesign", Surface: "S-BLK", Idle: 52 * 24 * time.Hour,
+			Workspace: "platform-migration", Surface: "S-BLK", Idle: 52 * 24 * time.Hour,
 			Rank: board.RankBlocked, Stale: true},
 		{Label: "short", Workspace: "background", Surface: "S-RUN", Rank: board.RankWorking},
 		{Label: strings.Repeat("x", 140), Workspace: strings.Repeat("w", 60),
 			Surface: "S-OLD", Idle: 50 * time.Hour, Rank: board.RankQuiet, Stale: true},
 	}
 	for i := 0; i < 12; i++ {
-		f.Rows = append(f.Rows, board.Row{Label: "filler", Workspace: "integration-redesign",
+		f.Rows = append(f.Rows, board.Row{Label: "filler", Workspace: "platform-migration",
 			Surface: "S-F", Idle: time.Duration(i) * time.Hour, Rank: board.RankQuiet})
 	}
 	return f

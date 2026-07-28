@@ -173,8 +173,8 @@ func TestColumnWidths(t *testing.T) {
 	}
 	// And the tail is sized to the longest workspace, not to a guess: it used to have
 	// no width of its own at all, which is what wrapped the rows.
-	f = board.Fleet{Rows: []board.Row{{Label: "x", Workspace: "integration-redesign"}}}
-	if _, got, _ := columns(f, 130); got != len("integration-redesign") {
-		t.Errorf("tail column = %d, want %d", got, len("integration-redesign"))
+	f = board.Fleet{Rows: []board.Row{{Label: "x", Workspace: "platform-migration"}}}
+	if _, got, _ := columns(f, 130); got != len("platform-migration") {
+		t.Errorf("tail column = %d, want %d", got, len("platform-migration"))
 	}
 }
