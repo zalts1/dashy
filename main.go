@@ -27,10 +27,8 @@ const (
 // signal. cmux's needsInput lifecycle fires ~60s after any finished turn, so it
 // means "sitting at the prompt", not "asked you something".
 //
-// The card event and its own toolUse land in the same second, and the toolResult
-// is the user's answer arriving. So the marker for "still waiting" is either the
-// card or its tool call being the newest event — a toolResult or stop after it
-// means it was answered.
+// The card event and its own toolUse land in the same second. See
+// blockedSessions for why a toolResult after them does NOT mean answered.
 var actionable = map[string]bool{"question": true, "permissionRequest": true, "exitPlan": true}
 
 var actionableTool = map[string]bool{"AskUserQuestion": true, "ExitPlanMode": true}
@@ -178,10 +176,17 @@ func stripSpinner(s string) string {
 	return string(r)
 }
 
-// newestKinds finds the most recent event kind per session by scanning the
-// audit log backwards, stopping as soon as every session is accounted for.
-func newestKinds(want map[string]bool) map[string]string {
-	out := map[string]string{}
+// blockedSessions decides, per session, whether an actionable request is still
+// unanswered — by scanning the audit log backwards and taking the first event that
+// settles the question.
+//
+// toolResult is skipped rather than treated as the answer: cmux's Feed bridge
+// emits one when its ~6s semaphore expires, after which Claude falls back to its
+// own in-terminal picker and waits indefinitely with no further events. So a
+// toolResult proves nothing, while a stop, a userPrompt, or any non-actionable
+// toolUse proves the agent moved on.
+func blockedSessions(want map[string]bool) map[string]bool {
+	out := map[string]bool{}
 	f, err := os.Open(home(".cmuxterm", "workstream.jsonl"))
 	if err != nil {
 		return out
@@ -207,14 +212,12 @@ func newestKinds(want map[string]bool) map[string]string {
 			continue
 		}
 		kind := jsonField(lines[i], "kind")
-		if kind == "" {
-			continue
+		if kind == "" || kind == "toolResult" {
+			continue // inconclusive — the Feed bridge emits these on timeout
 		}
 		// A tool call for an actionable request counts as the request itself.
-		if kind == "toolUse" && actionableTool[jsonField(lines[i], "toolName")] {
-			kind = "question"
-		}
-		out[id] = kind
+		out[id] = actionable[kind] ||
+			(kind == "toolUse" && actionableTool[jsonField(lines[i], "toolName")])
 		if len(out) == len(want) {
 			break
 		}
@@ -279,7 +282,7 @@ func collect() fleet {
 	for _, s := range sessions {
 		want[s.SessionID] = true
 	}
-	kinds := newestKinds(want)
+	blocked := blockedSessions(want)
 
 	now := time.Now()
 	var f fleet
@@ -303,7 +306,7 @@ func collect() fleet {
 		}
 		r := row{state: "done", label: label, workspace: ws, idle: idle, rank: 1}
 		switch {
-		case actionable[kinds[s.SessionID]]:
+		case blocked[s.SessionID]:
 			r.state, r.rank = "blocked →", 0
 			f.blocked++
 		case s.AgentLifecycle == "running":

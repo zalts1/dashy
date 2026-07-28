@@ -396,3 +396,45 @@ Two findings worth keeping:
   ctrl-c exits, SIGWINCH redraws.
 - Piped or redirected, it prints a single frame instead of looping, which is how
   the layout above was verified.
+
+---
+
+## 12. Correction: blocked detection, and what it means
+
+§11 and an earlier commit recorded that blocked "will stay mostly empty — median
+0s, p90 7s, only 6.7% last 10s or longer" and concluded that rot, not live
+blocking, was where the value was. **That conclusion was wrong, from a broken
+measurement.**
+
+Three successive rules, each falsified by evidence:
+
+1. *Newest event is an actionable card.* Never fires — cmux logs the card and its
+   own `toolUse` in the same second, so the `toolUse` always displaces the card.
+2. *Treat the actionable `toolUse` as the request, and its `toolResult` as the
+   answer.* Also wrong. cmux's Feed bridge emits a `toolResult` when its ~6s
+   semaphore expires; Claude then falls back to its own in-terminal picker and
+   waits indefinitely, emitting nothing. So the 6s figure was the bridge timing
+   out, not a human answering.
+3. **Shipped:** scan backwards, skip `toolResult` as inconclusive, and let the
+   first `stop` / `userPrompt` / non-actionable `toolUse` prove the agent moved on.
+
+Re-measured against the same log with rule 3:
+
+| | rule 2 (wrong) | rule 3 (shipped) |
+|---|---|---|
+| median | 0s | 0s |
+| p75 | 0s | 99s |
+| p90 | 7s | 511s |
+| max | 606s | 85567s (~24h) |
+| lasts ≥60s | 0.9% | 30.5% |
+| lasts ≥5min | 0.5% | 15.2% |
+
+The median stays 0s because `--permission-mode auto` resolves permission requests
+without a human — those are correctly invisible. But **321 episodes ran over a
+minute and 160 over five, one for nearly a day.** Blocked is a real, frequent,
+long-lived state, and `NEEDS YOU` is the most valuable band rather than dead
+weight. The v2 priority order in §9 stands corrected accordingly.
+
+Method note: all three rules looked reasonable in the code. What killed the first
+two was watching a real session sit unanswered on screen while the log claimed it
+had resolved. Derived state needs checking against the thing itself.
