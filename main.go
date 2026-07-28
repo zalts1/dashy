@@ -20,6 +20,7 @@ const (
 	// 8MB covers ~2 days; older sessions fall back to their lifecycle state.
 	tailBytes        = 8 << 20
 	defaultThreshold = 45 * time.Minute
+	defaultPoll      = 10 * time.Second
 )
 
 // A pending Feed card is the only trustworthy "needs an answer" signal.
@@ -35,6 +36,7 @@ func home(p ...string) string {
 type state struct {
 	Config struct {
 		IdleThresholdMinutes int    `json:"idle_threshold_minutes"`
+		PollSeconds          int    `json:"poll_seconds"`
 		NotifyCmd            string `json:"notify_cmd"`
 	} `json:"config"`
 	Labels map[string]string `json:"labels"`
@@ -64,6 +66,13 @@ func (s *state) threshold() time.Duration {
 		return time.Duration(s.Config.IdleThresholdMinutes) * time.Minute
 	}
 	return defaultThreshold
+}
+
+func (s *state) poll() time.Duration {
+	if s.Config.PollSeconds > 0 {
+		return time.Duration(s.Config.PollSeconds) * time.Second
+	}
+	return defaultPoll
 }
 
 type session struct {
@@ -241,16 +250,16 @@ type row struct {
 	rank                    int
 }
 
-func show() {
-	if !haveCmux() {
-		fmt.Println("board: cmux not detected (no CMUX_WORKSPACE_ID, no cmux on PATH).")
-		return
-	}
+// fleet is one snapshot, shared by the CLI table and the dashboard so both can
+// never disagree about state.
+type fleet struct {
+	rows           []row
+	blocked, stale int
+	oldest         time.Duration
+}
+
+func collect() fleet {
 	sessions := readSessions()
-	if len(sessions) == 0 {
-		fmt.Println("board: no live agent sessions.")
-		return
-	}
 	st := loadState()
 	byPid := cmuxTitles()
 	want := make(map[string]bool, len(sessions))
@@ -260,8 +269,8 @@ func show() {
 	kinds := newestKinds(want)
 
 	now := time.Now()
+	var f fleet
 	rows := make([]row, 0, len(sessions))
-	var blocked, running, stale int
 	for _, s := range sessions {
 		t := byPid[s.Pid]
 		label := st.Labels[s.SurfaceID]
@@ -283,16 +292,18 @@ func show() {
 		switch {
 		case actionable[kinds[s.SessionID]]:
 			r.state, r.rank = "blocked →", 0
-			blocked++
+			f.blocked++
 		case s.AgentLifecycle == "running":
 			r.state, r.rank = "running", 2
-			running++
 		}
 		// A running agent's clock is legitimately old between hook events, so
 		// only quiet sessions earn the forgotten-work flag.
 		if r.rank != 2 && idle > st.threshold() {
 			r.stale = true
-			stale++
+			f.stale++
+		}
+		if idle > f.oldest {
+			f.oldest = idle
 		}
 		rows = append(rows, r)
 	}
@@ -302,9 +313,26 @@ func show() {
 		}
 		return rows[i].idle > rows[j].idle
 	})
+	f.rows = rows
+	return f
+}
 
+func show() {
+	if !haveCmux() {
+		fmt.Println("board: cmux not detected (no CMUX_WORKSPACE_ID, no cmux on PATH).")
+		return
+	}
+	f := collect()
+	if len(f.rows) == 0 {
+		fmt.Println("board: no live agent sessions.")
+		return
+	}
+	var running int
 	fmt.Printf("%s %s %s %6s\n", pad("STATE", 12), pad("LABEL", 44), pad("WORKSPACE", 17), "IDLE")
-	for _, r := range rows {
+	for _, r := range f.rows {
+		if r.rank == 2 {
+			running++
+		}
 		s := r.state
 		if r.stale {
 			s += " ⚠"
@@ -312,7 +340,7 @@ func show() {
 		fmt.Printf("%s %s %s %6s\n", pad(s, 12), pad(r.label, 44), pad(r.workspace, 17), humanize(r.idle))
 	}
 	fmt.Printf("\n%d sessions · %d blocked · %d running · %d quiet >%s\n",
-		len(rows), blocked, running, stale, humanize(st.threshold()))
+		len(f.rows), f.blocked, running, f.stale, humanize(loadState().threshold()))
 }
 
 func pad(s string, w int) string {
@@ -503,10 +531,21 @@ func main() {
 		err = label(strings.Join(args[1:], " "))
 	case "notify":
 		notify()
+	case "watch":
+		iv := loadState().poll()
+		if len(args) > 1 {
+			if d, e := time.ParseDuration(args[1]); e == nil && d >= time.Second {
+				iv = d
+			} else {
+				err = fmt.Errorf("bad interval %q (try 10s, 30s, 1m)", args[1])
+				break
+			}
+		}
+		watch(iv)
 	case "install-hooks":
 		err = installHooks()
 	default:
-		fmt.Fprintln(os.Stderr, "usage: board | board label \"<text>\" | board install-hooks")
+		fmt.Fprintln(os.Stderr, "usage: board | board watch [interval] | board label \"<text>\" | board install-hooks")
 		os.Exit(2)
 	}
 	if err != nil {

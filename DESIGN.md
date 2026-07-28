@@ -324,3 +324,75 @@ Two things worth remembering if this is revisited:
 Deciding this properly needs the trial-week data in §9: if `blocked` never fires
 and finished sessions are what you keep missing, the ledger in §4 is the better
 answer than a push channel.
+
+---
+
+## 11. Built: the ambient dashboard (`board watch`)
+
+Shipped. A TUI that redraws in place on an interval, meant to sit in its own cmux
+tab. Chosen over an HTML page because it needs **no listener, no daemon, and no
+file-watching** — the tab is the process — which keeps the original work-laptop
+constraint intact with nothing to flag.
+
+### Form
+
+Per the data-viz method: >7 classes that all carry meaning is **a table, not a
+chart**, and the right form for "one thing matters, the rest are context" is
+**emphasis** — one accent, everything else recessive. So: a table, three bands
+(`NEEDS YOU` / `WORKING` / `QUIET`), with exactly one element allowed to shout.
+
+Two layers, so a longer look yields more without touching anything:
+
+- **Glance layer** — the BLOCKED badge, the KPI strip, and the point where the
+  amber ⚠ column stops. That waterline *is* the threshold, read positionally.
+- **Detail layer** — labels, bar lengths, exact durations, workspace names, all in
+  recessive ink so they don't compete for the first half-second.
+
+### Colour — validated, not chosen
+
+Every value cleared `scripts/validate_palette.js` against both the lightest and
+darkest plausible terminal backgrounds (`#282c34`, `#040404`):
+
+| Role | Value | Result |
+|---|---|---|
+| blocked badge | white on `#d03b3b` | 4.80 text contrast — sits on our own fill, so it is **theme-independent** |
+| running | `#0ca30c` | ≥3:1 mark on every candidate background |
+| stale ⚠ | `#fab219` | 7.63–11.18 |
+| body / dim ink | `#c3c2b7` / `#898781` | 7.81 / 3.90+ |
+| idle ramp (5 steps) | `#256abf`→`#cde2fb` | all four ordinal checks PASS in both extremes |
+
+Two findings worth keeping:
+
+- **Bare `#d03b3b` text FAILS at 2.91** on Ghostty's default background — the most
+  important element had the worst contrast. Rendering it as a filled badge with
+  white text moves the text onto our own fill and sidesteps the user's theme
+  entirely. Status colour never carries meaning alone anyway: badge + the word
+  `BLOCKED` + band header is the required icon+label pairing.
+- **The ramp had to brighten with age, not darken.** On a dark surface the
+  sequential anchor flips; the documented dark floor `#184f95` fails the 2:1
+  ordinal gate at 1.73. Steps also had to skip every other rung — adjacent
+  ramp steps measured ΔL 0.049, under the 0.06 minimum.
+
+### Encoding rules
+
+- Bar length **and** ramp step both encode idle on one shared **absolute log
+  scale** (0→7d). Absolute so bars stay comparable between refreshes; log because
+  linear would flatten everything under a day into one cell.
+- The bar appears on blocked and quiet rows — both are "time you have owed this
+  session attention" — and **not** on working rows, where elapsed time is progress,
+  not rot.
+- A value scale without a key is decoration, so the ramp legend is always drawn.
+
+### Behaviour
+
+- Redraws with cursor-home + per-line erase, written as one buffer. A full-screen
+  clear each tick would flash; the anti-pattern is explicit that a refetch must not
+  blank the previous render.
+- Height-aware: chrome is fixed, the quiet tail absorbs the remainder and collapses
+  to `⌄ N more`. Everything fits uncollapsed on a normal-height tab.
+- Interval from `poll_seconds` (default 10s) or `board watch 30s`. One cycle costs
+  ~60ms, a 0.6% duty cycle at the default.
+- No raw-mode keyboard handling, so there are no modes and nothing to learn —
+  ctrl-c exits, SIGWINCH redraws.
+- Piped or redirected, it prints a single frame instead of looping, which is how
+  the layout above was verified.

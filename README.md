@@ -15,9 +15,14 @@ running      build board: cmux fleet status CLI           KILLSWITCH            
 
 ## Commands
 
-    board                     print the screen
+    board                     print the screen once
+    board watch [interval]    ambient dashboard, redraws in place (default 10s)
     board label "<text>"      label the current session (no text clears it)
     board install-hooks       merge Stop + Notification hooks into ~/.claude/settings.json
+
+`board watch` is meant to live in its own cmux tab. It needs no daemon and opens no
+port — the tab is the process. Ctrl-C exits; there are no other keys. Piped or
+redirected it prints one frame and exits, so `board watch > frame.txt` works.
 
 ## States
 
@@ -43,6 +48,7 @@ unresolved Feed cards instead, so it stays rare and worth reacting to.
 {
   "config": {
     "idle_threshold_minutes": 45,
+    "poll_seconds": 10,
     "notify_cmd": "curl -sS -d @- https://ntfy.sh/my-topic"
   },
   "labels": { "<cmux surface id>": "<label>" }
