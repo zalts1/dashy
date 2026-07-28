@@ -593,3 +593,29 @@ live sessions. `readSessions` is gone entirely.
 - **`board` now costs ~230ms against the brief's ~200ms budget.** Accepted: the
   primary surface is the ambient tab where 230ms per 10s is irrelevant, and missing
   blocked work is a worse failure than a 30ms overshoot on the one-shot.
+
+---
+
+## 16. Open: the original constraints need reshaping
+
+The brief that started this set hard caps — ~300 lines, ~200ms, single JSON file,
+no listeners, no TUI, no graphical surface. Several have already been overtaken by
+decisions made deliberately and with reasons recorded:
+
+| constraint | status |
+|---|---|
+| ~300 lines | now ~1460 across 5 files, after the dashboard, ledger and jump |
+| under 200ms | `board` is ~230ms since the roster moved to `claude agents` (§15) |
+| no TUI | the ambient dashboard *is* a TUI, and was requested directly |
+| three-week trial before v2 | skipped by decision |
+| notification fan-out in v1 | built, then parked (§10) |
+
+Still holding, and worth keeping: no network listeners, no telemetry, all state in
+one JSON file under `$HOME`, nothing closes a session automatically (§8), no
+spawning or orchestration, no kanban, not a general task manager.
+
+**Open item:** go through these together and decide which are load-bearing and
+which were placeholders. The useful question per constraint is what failure it was
+protecting against, and whether that failure is still the risk. "No listeners" is
+protecting a work laptop and should stay. "~300 lines" was protecting against scope
+creep, and scope grew on purpose — so the cap needs restating rather than deleting.
