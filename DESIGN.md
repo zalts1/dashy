@@ -248,14 +248,42 @@ So the honest actions on a rotting row are:
   its own because the pid is gone
 
 `close` is self-cleaning: the list shrinks because reality changed, not because we
-hid something. It also turns the ROTTING band into a useful weekly cleanup pass
-rather than a wall of shame. cmux's Agent Hibernation (opt-in, off by default)
-already reclaims the RAM of idle agents, but it deliberately keeps them restorable —
-so it does not shorten this list.
+hid something. cmux's Agent Hibernation (opt-in, off by default) already reclaims
+the RAM of idle agents, but it deliberately keeps them restorable — so it does not
+shorten this list.
+
+### Hard rule: nothing closes a tab on its own
+
+**board never closes, kills, hibernates, or otherwise ends a session
+automatically.** Not on a timer, not past a threshold, not as an opt-in
+"cleanup mode", not as a batch action. There is no code path that ends a session
+without a per-row action taken by the user at that moment.
+
+Further, per the decision below, the manual `close` action is **not shown by
+default**:
+
+```json
+{ "config": { "enable_close_action": false } }
+```
+
+Default rotting-row behaviour is **jump only**. Someone who never sets that flag
+can never lose a session through this tool, and the tool stays purely a reporting
+surface — which is what v1 is and what makes it safe to leave installed.
+
+Consequence, stated plainly: with no close and no dismiss, **ROTTING only grows.**
+That is accepted. The band collapses after five rows and the count carries the
+signal; the tool reports the backlog and the human decides what to do about it.
+Growing honestly beats shrinking by hiding.
+
+For context, not as an argument: closing a cmux agent tab is less lossy than it
+feels — cmux stores a `resume_binding` with a `checkpoint_id` per surface and can
+restore the session with `claude --resume <id>`. Noted only so the option is
+understood; the default stays off regardless.
 
 If a week of use shows you want to keep a session but silence it, the right
-primitive is **snooze** (hides for N hours, then returns), not dismiss. Deferred
-until there's evidence it's needed — it adds per-row state, which §5 rule 3 resists.
+primitive is **snooze** (hides for N hours, then returns), not dismiss or close.
+Deferred until there's evidence it's needed — it adds per-row state, which §5
+rule 3 resists.
 
 ---
 
