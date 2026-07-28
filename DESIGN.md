@@ -395,7 +395,15 @@ Stated plainly: with no close and no dismiss, **QUIET only grows.** That is acce
 The band collapses and the count carries the signal. Growing honestly beats shrinking
 by hiding.
 
-Three more, each with a test or a documented refusal:
+Four more, each with a test or a documented refusal:
+
+- **Fronting a tab goes through `surface.reorder`, and must stay a no-op on the tab
+  strip.** cmux has no verb that just selects a tab, so board reorders the surface onto
+  the slot it already occupies (§9.15). The anchor is the neighbouring *surface id*,
+  never an index, so a tab closing between board's read and its write cannot shift the
+  target: the call fails instead of moving somebody's tab. `findSlot` refuses to place a
+  surface it cannot locate in a pane, and the selection is confirmed against the tree
+  afterwards.
 
 - **`notify` must never fail the agent.** It runs inside the agent's own hook chain,
   so every error path is a silent success — including a broken `notify_cmd`.
@@ -670,6 +678,55 @@ appending the pinned row is its correct position. The bars jump because rows are
 skipped, not because the order is wrong. Noted here because it survived a reading of
 the code and died against a fixture, which is §11's whole argument.
 
+### 9.15 Jump landed on the right workspace and the wrong tab (2026-07-28)
+
+Reported of the live board: *"it jumps to the workspace but the last used tab in this
+workspace and not the exact tab."*
+
+**cmux keeps two states where board assumed one.** Which tab a pane is showing
+(`surface.selected`) and who owns the keyboard (`surface.focused`) are separate, and
+the event log emits both names. `surface.focus` only ever did the second: it raises the
+window and selects the workspace, then the pane re-asserts whichever tab it last
+showed. Proven by calling it on a background tab with its workspace **already
+selected** — the pane's `selected_surface_id` still did not move, so this was never a
+race with workspace selection. `focus-panel`, documented as an alias over surface
+focus, behaves identically.
+
+**The surface id was right the whole time.** The join is fine; the method was wrong.
+That is worth stating because §9.8 already recorded a bad *parameter* on this same
+call, and the next reader will assume the same cause.
+
+**It was silent because the reply lied.** `surface.focus` returns a success payload
+echoing the very surface it declined to select, so `strings.Contains(out, "error")`
+saw nothing. `selectTab` now confirms against the tree instead of the reply — the only
+check that would have caught this. Every band in §9.1 taught the same lesson about
+derived state; this is the same lesson about a write.
+
+**cmux has no verb for "front this tab."** `tab-action` covers rename, close, pin and
+`mark-unread`; there is no select. Three calls do it, all verified live:
+
+| call | selects | cost |
+|---|---|---|
+| `surface.reorder` onto its own slot, `focus:true` | yes | 1 call, no-op on the strip |
+| `surface.move` onto its own pane/index, `focus:true` | yes | same, but takes an index |
+| `notify` → `open-notification` → `dismiss` | yes | 4 calls, flashes a notification |
+
+**Placement is by neighbour identity, not by index.** `surface.move` wants an index,
+and every index after a closed tab shifts. board reads the tree up to a tick before it
+writes, so a stale index would silently *reorder somebody's tabs* — the one failure
+mode worth designing out, since §8's whole claim is that board is safe to install.
+`surface.reorder` takes `after_surface_id` / `before_surface_id` instead: if the anchor
+is gone the call fails loudly rather than moving a tab somewhere wrong. A tab that is
+first in its strip anchors on its successor instead.
+
+**Both lookups now come from one walk.** `parseNodes` returns every surface with the
+context its ancestors carry, and `parseTop` and `findSlot` derive from it. The tree
+shape has changed before (§9.3); a second hand-written walk is a second thing to get
+wrong.
+
+Reported upstream against cmux 0.64.11. If `surface.focus` starts selecting, delete
+`selectTab` and keep the confirmation.
+
 ---
 
 ## 10. Deferred, with the trigger that would revive each
@@ -759,6 +816,7 @@ The pure seams exist for this and must stay pure:
 | `Table(fleet, threshold)` | `view` | same |
 | `idleScale` / `bar` / `humanize` / `short` / `pad` | `view` | values |
 | `parseTop` / `parseHookClock` / `StripSpinner` | `cmux` | JSON literals |
+| `findSlot(top, surface)` | `cmux` | a `top`-shaped literal — placement is what would reorder somebody's tabs (§9.15) |
 | `parseAgents` | `claude` | JSON literal |
 | `hasCommand` | `hooks` | settings-shaped literals |
 
