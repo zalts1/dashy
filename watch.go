@@ -102,8 +102,8 @@ func frame(f fleet, now time.Time, interval time.Duration, thresh time.Duration,
 	if labelW < 18 {
 		labelW = 18
 	}
-	if labelW > 52 {
-		labelW = 52
+	if labelW > 80 {
+		labelW = 80
 	}
 
 	var blocked, working, quiet []row
@@ -142,9 +142,16 @@ func frame(f fleet, now time.Time, interval time.Duration, thresh time.Duration,
 		room = 3
 	}
 
-	// One gutter width for every band so labels share a single left edge — the
-	// eye scans one column instead of three.
-	const gutter = 11
+	// One gutter width for every band so labels share a single left edge. The state
+	// mark is right-aligned inside it so it hugs the label instead of leaving a gap.
+	const gutter = 10
+	mark := func(s string, width int) string {
+		return strings.Repeat(" ", gutter-width-1) + s + " "
+	}
+	// Spacer must match the row layout exactly: gap + bar + gap + warn + gap.
+	b.WriteString("\n   " + dim(strings.Repeat(" ", gutter)+pad("LABEL", labelW)+
+		strings.Repeat(" ", barCells+4)+fmt.Sprintf("%7s", "IDLE")+"  WORKSPACE") + "\n")
+
 	line := func(state, label string, showBar bool, r row) string {
 		warn := " "
 		if r.stale {
@@ -163,7 +170,7 @@ func frame(f fleet, now time.Time, interval time.Duration, thresh time.Duration,
 		for _, r := range blocked {
 			// Blocked rows carry the bar too: the same quantity on the same absolute
 			// scale, so "waiting 3h" is comparable to anything in QUIET.
-			b.WriteString(line(badge(inkPrimary, statusCritical, " BLOCKED ")+"  ", r.label, true, r))
+			b.WriteString(line(mark(badge(inkPrimary, statusCritical, " BLOCKED "), 9), r.label, true, r))
 		}
 	} else {
 		b.WriteString("\n  " + dim("NEEDS YOU") + "   " + dim("nothing blocked") + "\n")
@@ -173,7 +180,7 @@ func frame(f fleet, now time.Time, interval time.Duration, thresh time.Duration,
 		b.WriteString("\n  " + fg(statusGood, "WORKING") + " " + dim(fmt.Sprintf("· %d", len(working))) + "\n")
 		for _, r := range working {
 			// No bar: for a working agent elapsed time is progress, not rot.
-			b.WriteString(line(fg(statusGood, "◐")+strings.Repeat(" ", gutter-1), r.label, false, r))
+			b.WriteString(line(mark(fg(statusGood, "◐"), 1), r.label, false, r))
 		}
 	}
 
@@ -184,7 +191,7 @@ func frame(f fleet, now time.Time, interval time.Duration, thresh time.Duration,
 			shown = shown[:room]
 		}
 		for _, r := range shown {
-			b.WriteString(line(dim("○")+strings.Repeat(" ", gutter-1), r.label, true, r))
+			b.WriteString(line(mark(dim("○"), 1), r.label, true, r))
 		}
 		if n := len(quiet) - len(shown); n > 0 {
 			b.WriteString("   " + strings.Repeat(" ", gutter) + dim(fmt.Sprintf("⌄  %d more", n)) + "\n")
