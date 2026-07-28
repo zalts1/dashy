@@ -46,14 +46,14 @@ func TestStepWrapsAndClamps(t *testing.T) {
 }
 
 func TestSelectedRowIsMarkedAndPausedIsShown(t *testing.T) {
-	plain := frame(fixture(), time.Now(), 10*time.Second, 4*time.Hour, 44, 130, "", false)
+	plain := frame(fixture(), time.Now(), 10*time.Second, 4*time.Hour, 44, 130, ui{})
 	if strings.Contains(plain, "▸") {
 		t.Error("caret drawn with no selection")
 	}
 	if strings.Contains(plain, "paused") {
 		t.Error("paused shown when live")
 	}
-	sel := frame(fixture(), time.Now(), 10*time.Second, 4*time.Hour, 44, 130, "S-OLD", true)
+	sel := frame(fixture(), time.Now(), 10*time.Second, 4*time.Hour, 44, 130, ui{sel: "S-OLD", paused: true})
 	if !strings.Contains(sel, "▸") {
 		t.Error("no caret for selection")
 	}
@@ -69,8 +69,18 @@ func TestSelectionInCollapsedTailStaysVisible(t *testing.T) {
 		f.rows = append(f.rows, row{label: "filler", workspace: "W",
 			surface: "S-F", idle: time.Duration(40-i) * time.Hour, rank: 1})
 	}
-	out := frame(f, time.Now(), 10*time.Second, 4*time.Hour, 20, 130, "S-NEW", true)
+	out := frame(f, time.Now(), 10*time.Second, 4*time.Hour, 20, 130, ui{sel: "S-NEW", paused: true})
 	if !strings.Contains(out, "fresh thing") {
 		t.Error("selected row was collapsed out of view")
+	}
+}
+
+// A failed focus must be reported inside the frame: when the jump happens the
+// board tab is typically no longer the visible one, so stderr goes unseen.
+func TestNoticeRendersInHeader(t *testing.T) {
+	out := frame(fixture(), time.Now(), 10*time.Second, 4*time.Hour, 44, 130,
+		ui{notice: "cmux focus refused"})
+	if !strings.Contains(out, "cmux focus refused") {
+		t.Error("notice not rendered in header")
 	}
 }

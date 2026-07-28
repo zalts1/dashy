@@ -26,7 +26,7 @@ port — the tab is the process. Piped or redirected it prints one frame and exi
 so `board watch > frame.txt` works.
 
 Inside `board watch`: `↑`/`↓` (or `k`/`j`) select a row, `Enter` focuses that
-session's cmux tab, `Esc` clears, `q` or `Ctrl-C` exits. That is the whole
+session's cmux tab **and leaves board running**, `Esc` clears, `q` or `Ctrl-C` exits. That is the whole
 keymap — no sorting, no filtering, no modes.
 
 **While a row is selected the refresh pauses** and the header says so. Rows re-sort

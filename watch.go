@@ -110,7 +110,14 @@ func bands(f fleet) (blocked, working, quiet []row) {
 	return
 }
 
-func frame(f fleet, now time.Time, interval time.Duration, thresh time.Duration, rows, cols int, sel string, paused bool) string {
+// ui is the transient interaction state, separate from the fleet snapshot.
+type ui struct {
+	sel    string // selected surface id, "" when ambient
+	paused bool
+	notice string // shown in the header; the board tab may be hidden when it appears
+}
+
+func frame(f fleet, now time.Time, interval time.Duration, thresh time.Duration, rows, cols int, u ui) string {
 	var b bytes.Buffer
 	// Size the label column to the longest label actually present, so the bars sit
 	// next to the text instead of across a gap of padding.
@@ -134,10 +141,14 @@ func frame(f fleet, now time.Time, interval time.Duration, thresh time.Duration,
 
 	clock := fmt.Sprintf("%d sessions · %s · every %s",
 		len(f.rows), now.Format("15:04:05"), short(interval))
-	if paused {
+	if u.paused {
 		clock = fmt.Sprintf("%d sessions · paused while selecting · esc to resume", len(f.rows))
 	}
-	b.WriteString("\n  " + fg(inkPrimary, "BOARD") + "   " + dim(clock) + "\n\n")
+	head := "\n  " + fg(inkPrimary, "BOARD") + "   " + dim(clock)
+	if u.notice != "" {
+		head += "   " + fg(statusCritical, u.notice)
+	}
+	b.WriteString(head + "\n\n")
 
 	// KPI strip — the sub-second read. Blocked is the only thing allowed to shout.
 	blockedCell := dim(fmt.Sprintf("%d blocked", len(blocked)))
@@ -182,7 +193,7 @@ func frame(f fleet, now time.Time, interval time.Duration, thresh time.Duration,
 			barCell = bar(r.idle)
 		}
 		lead, text := "   ", body(pad(label, labelW))
-		if sel != "" && r.surface == sel {
+		if u.sel != "" && r.surface == u.sel {
 			lead, text = " "+fg(inkPrimary, "▸")+" ", fg(inkPrimary, pad(label, labelW))
 		}
 		return lead + state + text + " " + barCell + " " + warn + " " +
@@ -215,7 +226,7 @@ func frame(f fleet, now time.Time, interval time.Duration, thresh time.Duration,
 			shown = shown[:room]
 			// A selection must stay visible even if it sits in the collapsed tail.
 			for _, r := range quiet[room:] {
-				if sel != "" && r.surface == sel {
+				if u.sel != "" && r.surface == u.sel {
 					shown = append(shown, r)
 					break
 				}
@@ -315,7 +326,7 @@ func watch(interval time.Duration) {
 	if !isTTY(out) {
 		st := loadState()
 		rows, cols := envInt("LINES", 44), envInt("COLUMNS", 118)
-		fmt.Fprint(out, frame(collect(), time.Now(), interval, st.threshold(), rows, cols, "", false))
+		fmt.Fprint(out, frame(collect(), time.Now(), interval, st.threshold(), rows, cols, ui{}))
 		return
 	}
 	// Alternate screen so exiting restores the shell untouched.
@@ -339,12 +350,13 @@ func watch(interval time.Duration) {
 	keys := readKeys(os.Stdin)
 
 	var f fleet
-	var sel string
+	var sel, notice string
 	var lastKey, lastFetch time.Time
 
 	draw := func() {
 		rows, cols := termSize()
-		s := frame(f, lastFetch, interval, loadState().threshold(), rows, cols, sel, sel != "")
+		s := frame(f, lastFetch, interval, loadState().threshold(), rows, cols,
+			ui{sel: sel, paused: sel != "", notice: notice})
 		// Home, overwrite line by line, then clear below. A full-screen clear each
 		// tick would flash — the previous frame stays until its pixels are replaced.
 		var b bytes.Buffer
@@ -383,13 +395,15 @@ func watch(interval time.Duration) {
 				sel = step(displayOrder(f), sel, +1)
 			case keyEnter:
 				if sel != "" {
+					// Focus the target and keep running. cmux switches the visible tab;
+					// board stays alive in its own so it is still here on return.
 					target := sel
-					sel = ""
-					restore()
+					sel, notice = "", ""
 					if err := focusSurface(target); err != nil {
-						fmt.Fprintln(os.Stderr, "board:", err)
+						notice = err.Error()
 					}
-					return
+					refresh()
+					continue
 				}
 			}
 			draw()

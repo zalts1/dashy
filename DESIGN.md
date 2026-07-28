@@ -523,6 +523,17 @@ Deliberately absent: sorting and filtering. k9s and htop both have them, but the
 list hundreds to thousands of rows; at ~20 the bands already are the sort, and
 hiding rows is the same objection that killed dismiss in §8.
 
+### Jumping does not end the session
+
+The first version called `return` after focusing, which exited the process and
+left a dead BOARD tab to come back to. "The tab is no longer on screen" is not the
+same as "board should stop". Enter now focuses the target, clears the selection so
+the refresh resumes, and keeps looping in the hidden tab at ~60ms per 10s.
+
+That created a second problem: once the jump succeeds the board tab is usually not
+the visible one, so a focus failure written to stderr would never be seen. Errors
+now render in the frame header instead.
+
 ### Tested
 
 `frame_test.go` covers the parts that are easy to get quietly wrong: navigation
