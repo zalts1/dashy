@@ -144,7 +144,9 @@ terminal you live in, and loses.
 
 The two gaps it doesn't fill:
 
-1. **Off-machine.** Already solved by v1's `notify_cmd`.
+1. **Off-machine.** v1 has the mechanism (`notify_cmd`, a shell sink fed JSON on
+   stdin) but **no sink is configured and push is parked** — see §10. Whether
+   off-machine delivery is wanted at all is an open question, not a settled gap.
 2. **History and accountability.** cmux's Feed is a live queue — it shows what
    needs answering *now*. It does not answer "what asked me something today, and
    what did I ignore." Feed cards expire after 120s, and the agent then waits
@@ -292,3 +294,33 @@ rule 3 resists.
 The load-bearing assumption is that you actually label sessions. Cheapest way to
 find out: let v1 run a week and count the labels in `~/.board.json`.
 ```
+
+---
+
+## 10. Parked: push notifications
+
+The original brief asked for notification fan-out to a pluggable sink. It was
+built, wired to Slack, verified end to end, and then **pulled from v1** — Slack
+specifically, and possibly the whole push layer.
+
+Current state:
+
+- The hook mechanism stays: `Stop` and `Notification` in `~/.claude/settings.json`
+  call `board notify`, which returns immediately while `notify_cmd` is empty. No
+  network, no credential read, no sink process.
+- The Slack sink is reverted out of the tree, recoverable at commit `1f24c00`.
+- `notify_cmd` remains documented in the README as the extension point.
+
+Two things worth remembering if this is revisited:
+
+- **Gate on absence, not on events.** With 22 live sessions an ungated sink posts
+  on every turn end of every agent. macOS `HIDIdleTime` gives real keyboard idle
+  cheaply, so "only tell me when I'm actually away" is a few lines and is the
+  difference between a useful channel and a muted one.
+- **The failure mode is muting, not missing.** A push layer that fires too often
+  is worse than none, because muting it also mutes the rare message that mattered.
+  This is the same argument that made `needsInput` unusable as a `waiting` flag.
+
+Deciding this properly needs the trial-week data in §9: if `blocked` never fires
+and finished sessions are what you keep missing, the ledger in §4 is the better
+answer than a push channel.
