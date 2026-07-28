@@ -438,3 +438,40 @@ weight. The v2 priority order in §9 stands corrected accordingly.
 Method note: all three rules looked reasonable in the code. What killed the first
 two was watching a real session sit unanswered on screen while the log claimed it
 had resolved. Derived state needs checking against the thing itself.
+
+---
+
+## 13. Built: the ledger (`ASKED` band)
+
+Shipped inside `board watch` rather than as a separate command, and scoped to
+questions and plan exits only — auto-approved permission requests resolve without
+a human, so they are volume rather than accountability.
+
+Sizing came from the log, not a guess: **4.0 asks per active day**, 169 over 42
+active days. Seven days is ~27 rows, too many to sit permanently on an ambient
+screen, so the band lists the **last 24h** (typically 4–6 rows) and its header
+carries the aggregates for the whole window. Nothing is silently dropped.
+
+```
+  ASKED · 24h · 6   6d: 18 asks · 1 never answered · longest 50m
+           · Next task                              never  12:43 TASKS
+```
+
+Three defects found by rendering it against real data:
+
+- **The header claimed a 7-day window the data did not cover.** The 8MB tail spans
+  whatever it spans, so `coverage()` now reports the oldest event present and the
+  header states the real window.
+- **The same session was named two different ways** — `integration-redesign` in
+  ASKED (cwd basename) versus `TASKS` in the dashboard (workspace title). The
+  ledger now resolves the workspace title, falling back to cwd only for sessions
+  that no longer exist.
+- **Bars were meaningless here.** Waits are minutes against a scale topping out at
+  a week, so every row rendered one cell. Dropped; `never` in amber is the only
+  thing in the band that earns colour.
+
+The payoff is the `never` rows: asks whose session ended before anyone answered.
+Nothing else in the stack surfaces those. One showed up in the first render.
+
+Cost: one shared pass over the log tail now feeds both blocked-detection and the
+ledger, so a tick stays ~60ms.

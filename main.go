@@ -21,6 +21,7 @@ const (
 	tailBytes        = 8 << 20
 	defaultThreshold = 45 * time.Minute
 	defaultPoll      = 10 * time.Second
+	ledgerDays       = 7
 )
 
 // An unanswered actionable request is the only trustworthy "needs an answer"
@@ -177,50 +178,22 @@ func stripSpinner(s string) string {
 }
 
 // blockedSessions decides, per session, whether an actionable request is still
-// unanswered — by scanning the audit log backwards and taking the first event that
-// settles the question.
-//
-// toolResult is skipped rather than treated as the answer: cmux's Feed bridge
-// emits one when its ~6s semaphore expires, after which Claude falls back to its
-// own in-terminal picker and waits indefinitely with no further events. So a
-// toolResult proves nothing, while a stop, a userPrompt, or any non-actionable
-// toolUse proves the agent moved on.
-func blockedSessions(want map[string]bool) map[string]bool {
+// unanswered — by walking each session's events backwards and taking the first
+// event that settles the question. See event.settles for why toolResult does not.
+func blockedSessions(events []event, want map[string]bool) map[string]bool {
 	out := map[string]bool{}
-	f, err := os.Open(home(".cmuxterm", "workstream.jsonl"))
-	if err != nil {
-		return out
-	}
-	defer f.Close()
-	st, err := f.Stat()
-	if err != nil {
-		return out
-	}
-	off := st.Size() - tailBytes
-	if off < 0 {
-		off = 0
-	}
-	buf := make([]byte, st.Size()-off)
-	n, _ := f.ReadAt(buf, off)
-	lines := bytes.Split(buf[:n], []byte("\n"))
-	for i := len(lines) - 1; i >= 0; i-- {
-		id := strings.TrimPrefix(jsonField(lines[i], "workstreamId"), "claude-")
-		if id == "" || !want[id] {
+	for i := len(events) - 1; i >= 0; i-- {
+		e := events[i]
+		if e.ws == "" || !want[e.ws] {
 			continue
 		}
-		if _, seen := out[id]; seen {
+		if _, seen := out[e.ws]; seen {
 			continue
 		}
-		kind := jsonField(lines[i], "kind")
-		if kind == "" || kind == "toolResult" {
-			continue // inconclusive — the Feed bridge emits these on timeout
+		if e.kind == "toolResult" {
+			continue // inconclusive
 		}
-		// A tool call for an actionable request counts as the request itself.
-		out[id] = actionable[kind] ||
-			(kind == "toolUse" && actionableTool[jsonField(lines[i], "toolName")])
-		if len(out) == len(want) {
-			break
-		}
+		out[e.ws] = e.isActionable()
 	}
 	return out
 }
@@ -272,6 +245,8 @@ type fleet struct {
 	rows           []row
 	blocked, stale int
 	oldest         time.Duration
+	asks           []ask
+	asksSince      time.Time
 }
 
 func collect() fleet {
@@ -282,7 +257,14 @@ func collect() fleet {
 	for _, s := range sessions {
 		want[s.SessionID] = true
 	}
-	blocked := blockedSessions(want)
+	events := readTail()
+	blocked := blockedSessions(events, want)
+	wsOf := make(map[string]string, len(sessions))
+	for _, s := range sessions {
+		if t := byPid[s.Pid]; t.workspace != "" {
+			wsOf[s.SessionID] = t.workspace
+		}
+	}
 
 	now := time.Now()
 	var f fleet
@@ -330,6 +312,13 @@ func collect() fleet {
 		return rows[i].idle > rows[j].idle
 	})
 	f.rows = rows
+	since := now.AddDate(0, 0, -ledgerDays)
+	if c := coverage(events); c.After(since) {
+		since = c // the tail is shorter than the requested window
+	}
+	f.asksSince = since
+	f.asks = asks(events, since, wsOf)
+	sort.Slice(f.asks, func(i, j int) bool { return f.asks[i].at.After(f.asks[j].at) })
 	return f
 }
 

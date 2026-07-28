@@ -144,6 +144,9 @@ func frame(f fleet, now time.Time, interval time.Duration, thresh time.Duration,
 
 	// Height budget: chrome is fixed, the quiet tail absorbs whatever is left.
 	spent := 6 + 2 + len(working) + 2 + 3
+	if len(f.asks) > 0 {
+		spent += 8 // ASKED band: header, up to six rows, spacer
+	}
 	if len(blocked) > 0 {
 		spent += len(blocked)
 	}
@@ -208,7 +211,45 @@ func frame(f fleet, now time.Time, interval time.Duration, thresh time.Duration,
 		}
 	}
 
-	b.WriteString("\n  " + dim("idle ") + scaleLegend() + dim("   ctrl-c to exit") + "\n")
+	// ASKED — the ledger. Rows are the last 24h to keep the band short; the header
+	// carries the full window's aggregates so the tail is never silently dropped.
+	if len(f.asks) > 0 {
+		var day []ask
+		var never int
+		var longest time.Duration
+		for _, a := range f.asks {
+			if a.open {
+				never++
+			}
+			if a.waited > longest {
+				longest = a.waited
+			}
+			if now.Sub(a.at) < 24*time.Hour {
+				day = append(day, a)
+			}
+		}
+		summary := fmt.Sprintf("%s: %d asks · %d never answered · longest %s",
+			short(now.Sub(f.asksSince)), len(f.asks), never, short(longest))
+		b.WriteString("\n  " + fg(inkSecondary, "ASKED") + " " +
+			dim(fmt.Sprintf("· 24h · %d", len(day))) + "   " + dim(summary) + "\n")
+		if len(day) > 6 {
+			day = day[:6]
+		}
+		for _, a := range day {
+			// No bar here: waits are minutes against a scale that tops out at a week,
+			// so every one would render a single cell and mean nothing. "never" is the
+			// only thing in this band worth colour.
+			waited := body(fmt.Sprintf("%7s", humanize(a.waited)))
+			if a.open {
+				waited = fg(statusWarning, fmt.Sprintf("%7s", "never"))
+			}
+			b.WriteString("   " + mark(dim("·"), 1) + body(pad(a.what, labelW)) +
+				strings.Repeat(" ", barCells+3) + waited + "  " +
+				dim(a.at.Format("15:04")+" "+a.where) + "\n")
+		}
+	}
+
+	b.WriteString("\n  " + dim("elapsed ") + scaleLegend() + dim("   ctrl-c to exit") + "\n")
 	return b.String()
 }
 
