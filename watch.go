@@ -98,12 +98,22 @@ func termSize() (rows, cols int) {
 // tested and diffed without a terminal.
 func frame(f fleet, now time.Time, interval time.Duration, thresh time.Duration, rows, cols int) string {
 	var b bytes.Buffer
-	labelW := cols - 46
-	if labelW < 18 {
-		labelW = 18
+	// Size the label column to the longest label actually present, so the bars sit
+	// next to the text instead of across a gap of padding.
+	labelW := 0
+	for _, r := range f.rows {
+		if n := len([]rune(r.label)); n > labelW {
+			labelW = n
+		}
+	}
+	if max := cols - 46; labelW > max {
+		labelW = max
 	}
 	if labelW > 80 {
 		labelW = 80
+	}
+	if labelW < 18 {
+		labelW = 18
 	}
 
 	var blocked, working, quiet []row
