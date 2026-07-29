@@ -71,8 +71,9 @@ else: no status, no priority, no due date.
              ▫ review the export PR                                1d ago
              ▫ book the quarterly review                              now
 
-The list is drawn last, after the whole fleet, because it is not a state a session can
-be in. It has **no bar and no workspace**: a bar means idle time, which is a gap that
+With nothing on it the band still appears, as `TODO  nothing on your list` — an unused
+feature that renders nothing is one you never find. The list is drawn last, after the
+whole fleet, because it is not a state a session can be in. It has **no bar and no workspace**: a bar means idle time, which is a gap that
 resets when a session is touched, while a todo's age is a lifetime that only grows —
 hence `12d ago` rather than `12d00h`. The header states the cap so you can watch it
 climb.

@@ -179,7 +179,15 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
 	// it between the bands put it inside a ranking of process states (§9.19). It survives
 	// a short tab by having a floor of its own, not by sitting where the collapse cannot
 	// reach.
-	if total := len(todo.rows) + todo.hidden; total > 0 {
+	total := len(todo.rows) + todo.hidden
+	// The one band drawn with nothing in it. It costs two lines and reports no exception,
+	// which §9.13 argues against — but an unused feature that renders nothing is a feature
+	// nobody discovers, and the empty form is how you learn the list exists. NEEDS YOU
+	// carries the same line for a different reason (§12).
+	if total == 0 {
+		b.WriteString("\n  " + dim("TODO") + "        " + dim("nothing on your list") + "\n")
+	}
+	if total > 0 {
 		cap := ""
 		if f.TodoCap > 0 {
 			cap = fmt.Sprintf(" of %d", f.TodoCap)

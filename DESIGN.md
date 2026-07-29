@@ -599,7 +599,17 @@ since the tail of an arrow key is printable and types `[A` if decoded rune-wise 
 in, so it does not belong among the bands that rank process states — which is where it
 sat for one release, between WORKING and QUIET, reading as a fleet state (§9.19). Last
 also matches the rank order: `RankTodo` is 3, and the one-shot table already printed it
-there. With no todos there is no band at all: a band earns its lines (§9.13).
+there.
+
+**The empty band is drawn, and it is the one exception to §9.13.** `TODO  nothing on
+your list` costs two lines and reports no exception, which that rule argues against. It
+stays because the alternative was worse: with no todos there was no band, so nothing on
+screen said a list existed, and `t` was a key nobody could learn. A feature that renders
+nothing until used is a feature nobody discovers. NEEDS YOU already carries the same
+empty line for a different reason, and the empty form says a phrase rather than `0 of
+10` — a count is something to read, a phrase is something to learn from. On a short tab
+those two lines cost the quiet tail a row rather than the legend, which is the right way
+round: the legend is where `a` is taught.
 
 **It earns that position with a floor, not by hiding from the collapse.** The reason it
 was drawn high was arithmetic — the fit loop trims the quiet tail and then `clip`s from

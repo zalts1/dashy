@@ -142,11 +142,21 @@ func bandOf(frame, header string) string {
 	return plain(frame)
 }
 
-// A band earns its lines by exception (EVIDENCE.md §9.13): with nothing on the list
-// there is nothing to report, so there is no band and no placeholder.
-func TestNoTodosDrawsNoBand(t *testing.T) {
-	if out := Frame(fixture(), screen(44, 130), UI{}); strings.Contains(out, "TODO") {
-		t.Error("an empty todo list still drew a band")
+// The one place a band is drawn with nothing in it, and the reason is discoverability
+// rather than reporting: an empty list is how a new user learns the list exists at all.
+// NEEDS YOU already carries the same empty form (§12).
+func TestAnEmptyListStillNamesItself(t *testing.T) {
+	out := plain(Frame(fixture(), screen(44, 130), UI{}))
+	if !strings.Contains(out, "TODO") {
+		t.Fatal("an empty todo list drew nothing; the feature is then invisible until used")
+	}
+	if !strings.Contains(out, "nothing on your list") {
+		t.Errorf("the empty band does not say it is empty:\n%s", bandOf(out, "TODO"))
+	}
+	// No count and no cap on an empty list: "0 of 10" is a number to read where a phrase
+	// is what teaches.
+	if strings.Contains(out, "0 of 10") {
+		t.Error("the empty band counts nothing rather than saying it is empty")
 	}
 }
 
