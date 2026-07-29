@@ -5,6 +5,34 @@ import (
 	"time"
 )
 
+// A todo's age is a lifetime, not a gap: it only grows, and it is never comparable to
+// a session's idle time. "ago" is what says so, and the coarse form is honest —
+// minutes never matter on something you wrote yesterday (DESIGN.md §12, §9.19).
+func TestSince(t *testing.T) {
+	cases := map[time.Duration]string{
+		0:                   "now",
+		30 * time.Second:    "now",
+		59 * time.Second:    "now",
+		time.Minute:         "1m ago",
+		9 * time.Minute:     "9m ago",
+		59 * time.Minute:    "59m ago",
+		time.Hour:           "1h ago",
+		17 * time.Hour:      "17h ago",
+		26 * time.Hour:      "1d ago",
+		12 * 24 * time.Hour: "12d ago",
+		52 * 24 * time.Hour: "52d ago",
+	}
+	for d, want := range cases {
+		if got := since(d); got != want {
+			t.Errorf("since(%v) = %q, want %q", d, got, want)
+		}
+		// It shares the IDLE column's width, so it may never be wider than one.
+		if w := runes(since(d)); w > idleW {
+			t.Errorf("since(%v) = %q is %d wide, the column is %d", d, since(d), w, idleW)
+		}
+	}
+}
+
 func TestHumanize(t *testing.T) {
 	cases := map[time.Duration]string{
 		0:                             "0m",

@@ -29,8 +29,9 @@ grep -n '^#\+ ' DESIGN.md        # § → line, then Read with offset/limit
 | 7 | interaction: jump, keymap, identity-not-position, the explicit pause | `watch/`, `view/order.go`, `cmux/focus.go` |
 | 8 | safety invariants — nothing ends a session | any write action |
 | 9 | **evidence log — in `EVIDENCE.md`** | the finding that constrains the code you are touching |
-| 10 | deferred ideas, each with the trigger that would revive it | before building one of them |
+| 10 | deferred ideas, each with the trigger that would revive it | before building one of them, and §10.8 before touching the keymap |
 | 11 | the pure seams and their fixture shapes | writing any test |
+| 12 | todos: a row with no process, the cap of 10, where capture and removal each live | `config/`, `board/build.go`, the `TODO` band |
 
 ---
 
@@ -78,7 +79,7 @@ protecting against, because that is what determines whether it still applies.
 | not a task manager, no kanban | scope creep into Linear's job | **keep** |
 | ~300 lines | scope creep | **restated** — see below |
 | under 200ms | felt latency on a one-shot command | **restated** — see below |
-| three actions, total | modes and menus to learn | **restated** — two actions |
+| three actions, total | modes and menus to learn | **restated** — jump, label, todo |
 | no TUI | building something you must keep open | **retired** — see below |
 | three-week trial before v2 | shipping on speculation | **retired**, superseded |
 | notification fan-out in v1 | missing work while away | **parked**, mechanism inert (§10.1) |
@@ -103,11 +104,12 @@ ambient tab is the primary surface anyway, where 220ms per 10s is a 2% duty cycl
 **"No TUI" is retired in letter, kept in spirit.** The ambient dashboard *is* a TUI
 and was asked for directly. What the constraint was actually protecting — no modes,
 nothing to learn, and never *requiring* the app to be open — is still enforced: the
-keymap is five keys, ctrl-c exits, and the one-shot table stays first-class so board
-is useful without a dedicated tab.
+keymap is a handful of single keys that each do one thing, ctrl-c exits, and the
+one-shot table stays first-class so board is useful without a dedicated tab.
 
-**"Three actions" is now two: jump and label.** Dismiss was rejected (§8), intents
-were never built (§10.2). A third action needs an entry here.
+**"Three actions" is now three: jump, label, and todo.** Dismiss was rejected (§8).
+Todos add capture and removal (§12) — the third action, entered here as this rule
+requires. A fourth needs the same.
 
 ---
 
@@ -381,6 +383,12 @@ under the cursor and Enter jumps to the wrong session.
   establishes the pattern: streaming and interacting are two modes and the boundary
   should be stated, not hidden. A 10s no-keypress timeout returns to ambient, so the
   tab can never get stuck.
+- **The letter keys are mapped on the Hebrew layout too**, to the same physical keys
+  (`א ש ג ח ל`). A keymap of single letters is otherwise dead in any non-Latin input
+  source — for a bilingual user half the day — and telling someone to switch layouts to
+  press one key is not a keymap. Those runes cannot come from a Latin layout, so nothing
+  is ambiguous; `q` is the exception, because its Hebrew position emits `/`, which a
+  Latin user does have a key for. Quitting from a non-Latin layout is ctrl-c.
 - **Stepping clamps, it does not wrap.** Wrapping past the bottom of QUIET lands on a
   blocked session — the one row you must never act on by accident.
 
@@ -456,16 +464,21 @@ Two things to remember if revisited:
 a willingness to gate on keyboard idle. Absent that, the ledger (§5) is the better
 answer.
 
-### 10.2 Intents and derived todos — blocked on evidence
+### 10.2 Intents and derived todos — the intent half shipped as §12
 
-The model: derived todos are one per live session (zero capture cost, cannot go
-stale, dies with the session), and an **intent is a session that hasn't started
-yet** — text and age only, no status, no priority, no due date, one transition
-(intent → session). Age is displayed and never hidden, so an intent sitting for two
-weeks reads as a reproach rather than a backlog item.
+**Intents shipped**, on the terms recorded here: text and age only, no status, no
+priority, no due date. §9.9 turned out to be evidence about *labels*, not about this —
+a label is decoration on a row that renders either way, so not typing one costs
+nothing, while a forgotten customer request costs a customer (§9.17).
 
-*Trigger:* §9.9 falsified the assumption this rests on. It needs evidence that
-labelling actually happens, or a redesign around auto-names.
+**Derived todos are not built, and need nothing built.** A live session already *is*
+the row — labelled, ranked, aged. Reading the fleet as a list of things to do is what
+§1 already produces. The other reading of "derived" — parsing the agents' own
+`TodoWrite` lists — is dead on measurement: 3 of 100 transcripts touched in a week
+contained one (§9.17).
+
+*Still deferred:* linking a todo to the session that serves it, and undo. §12 names
+the trigger for each.
 
 ### 10.3 Snooze — the right primitive if silencing is ever needed
 
@@ -502,6 +515,25 @@ cheap form is **one KPI cell that appears only when non-zero**, not a band; and 
 still has to answer "what do I do about it", which for a dead session is nothing.
 Reviving the rows needs a new answer to §5's table, not a new filter.
 
+### 10.8 Layout-independent keys — considered, declined (2026-07-29)
+
+A keymap of single letters is dead in any non-Latin input source, and the Hebrew layout is
+handled by mapping the same physical keys (§7). Two ways to generalise, both declined:
+
+- **The kitty keyboard protocol** reports the base-layout key alongside the typed rune,
+  which is the only mechanism that actually recovers "which key was pressed" — a terminal
+  otherwise receives characters, not keycodes. It needs `CSI > 1 u` negotiation, a CSI-u
+  parser, and a fallback for the terminals that decline. Too much machinery for six keys.
+- **Tab for the list and Backspace/Delete for finishing** are layout-invariant, and
+  arguably better bindings than `t` and `d` on their own merits. Declined only because the
+  letters plus §7's Hebrew mapping already cover the layouts in use here.
+
+*Trigger:* a third input source, or a second person using this. The second bullet is the
+cheap half and does not need the first.
+
+*Not to do:* grow the layout table to Russian, Arabic, Greek and so on. It is unbounded,
+and every entry is a guess about a layout nobody here can verify.
+
 ---
 
 ## 11. How this is verified
@@ -513,7 +545,7 @@ The pure seams exist for this and must stay pure:
 
 | seam | package | fixture |
 |---|---|---|
-| `Build(Snapshot, now)` | `board` | a `Snapshot` literal — roster, rank, label, staleness, sort |
+| `Build(Snapshot, now)` | `board` | a `Snapshot` literal — roster, rank, label, staleness, sort, todos |
 | `Frame(fleet, screen, ui)` | `view` | a `Fleet` literal; golden files pin the whole screen |
 | `Table(fleet, threshold)` | `view` | same |
 | `idleScale` / `bar` / `humanize` / `short` / `pad` | `view` | values |
@@ -521,6 +553,7 @@ The pure seams exist for this and must stay pure:
 | `findSlot(top, surface)` | `cmux` | a `top`-shaped literal — placement is what would reorder somebody's tabs (§9.15) |
 | `parseAgents` | `claude` | JSON literal |
 | `hasCommand` | `hooks` | settings-shaped literals |
+| `AddTodo` / `DeleteTodo` / `FindTodo` | `config` | a `State` literal — the cap, the prefix match, the age |
 
 `Collect`, `Agents` and `TitlesByPid` touch `$HOME` and subprocesses —
 keep logic out of them and test the parsers they feed. **Never write a test that
@@ -530,3 +563,112 @@ Manual verification, for layout and colour:
 
     COLUMNS=118 LINES=44 board watch | cat    # one frame, no terminal needed
     LINES=24 COLUMNS=100 board watch          # exercise collapse and narrow widths
+
+---
+
+## 12. Todos — a row with no process
+
+A todo is a line of text with an age, occupying a row until you remove it. It exists
+for the work board could not otherwise see: **a thing you have not started, so there
+is no session, no pid, and no tab.** A customer request you will forget by Thursday is
+the case; the two-week-old row that results is the point, not a defect.
+
+This is §10.2's *intent*, shipped on the terms recorded there — text and age, no
+status, no priority, no due date. The other half of §10.2 stays unbuilt because it
+needs nothing: a live session already is the row you would have derived.
+
+**It overturns one line, deliberately.** `board/build.go` drops sessions with no cmux
+surface, because "a row you cannot jump to is a row that cannot be acted on." A todo
+has no surface and never will. The rule survives with its action named: **the action
+on a todo is to start it**, and until then, to remove it. A row with no action is a
+backlog row and belongs in Linear (§1).
+
+**The cap is 10, and it is the feature's immune system.** Uncapped, todos accumulate,
+the band collapses the way QUIET does, and board becomes a list you scroll past —
+which is exactly the dilution §1 exists to prevent. Adding an 11th fails and says so.
+That refusal is the mechanism: it forces the decision the tool exists to force.
+Nothing sorts, filters, or hides todos, for the reasons in §8.
+
+**Both capture and removal happen in the frame.** Capture was CLI-only for one release
+and that was wrong: two entry points for one thing is the friction, not the keystrokes
+(§9.18). The CLI kept every verb anyway, for scripts and for the terminal you are
+already in.
+
+- `a` opens the prompt, `Enter` adds, `Esc` cancels. Empty text is a cancel, not an
+  error — the mode is one keystroke away, so opening it by accident must cost nothing.
+- `t` selects the top of the list. Stepping there means walking past every quiet row —
+  fifteen presses on a real fleet — and a list you have to travel to is one you stop
+  acting on. Like `d`, it is named in the legend only where it does something (§9.14).
+- `d` on a selected todo row removes it. This is the one place removing a row is not
+  the lie dismiss was (§8): dismiss hid a session that stayed alive, whereas a todo has
+  nothing behind it, so removal is the honest end of it. Done and dropped are the same
+  action, and nothing is archived — history is not board's job (§9.13).
+- No undo. The header reports the text it removed, so a mis-key costs retyping one
+  line. *Trigger:* deleting one by accident and minding.
+
+**The mode is bounded on purpose, because §2 retired "no TUI" only on the condition
+that there be nothing to learn.** What keeps it honest: one key in and two keys out; no
+cursor movement, so there is nothing to learn beyond typing and backspace; the prompt
+takes the legend's line rather than adding one, so entering it cannot change the
+frame's height and collapse the tail under the typist; and **no timeout.** §7's 10s
+return exists so a stray arrow key cannot leave the tab paused forever, and typing is
+not stray — a timer that discarded half-typed text would be the one destructive thing
+in the loop. ctrl-c still raises SIGINT, so there is always a way out.
+
+The key decoder is deliberately mode-blind: every keystroke carries both the command it
+names and the text it would type, and the loop picks. A decoder that had to be told the
+mode would be a second place the mode can be wrong — and the trap it walks into is real,
+since the tail of an arrow key is printable and types `[A` if decoded rune-wise (§9.18).
+
+**The list is drawn last, after the whole fleet.** It is not a state a session can be
+in, so it does not belong among the bands that rank process states — which is where it
+sat for one release, between WORKING and QUIET, reading as a fleet state (§9.19). Last
+also matches the rank order: `RankTodo` is 3, and the one-shot table already printed it
+there.
+
+**The empty band is drawn, and it is the one exception to §9.13.** `TODO  nothing on
+your list` costs two lines and reports no exception, which that rule argues against. It
+stays because the alternative was worse: with no todos there was no band, so nothing on
+screen said a list existed, and `t` was a key nobody could learn. A feature that renders
+nothing until used is a feature nobody discovers. NEEDS YOU already carries the same
+empty line for a different reason, and the empty form says a phrase rather than `0 of
+10` — a count is something to read, a phrase is something to learn from. On a short tab
+those two lines cost the quiet tail a row rather than the legend, which is the right way
+round: the legend is where `a` is taught.
+
+**It earns that position with a floor, not by hiding from the collapse.** The reason it
+was drawn high was arithmetic — the fit loop trims the quiet tail and then `clip`s from
+the bottom, so the lowest band is what a short tab deletes. The fix is a second absorber
+rather than a safer address: quiet gives way to its floor, then the list to its own, then
+either to nothing at all. **A band collapsed to its count still reports** — `QUIET · 22`
+with no rows says the thing that matters — so shedding rows always beats letting `clip`
+take a whole band. Below about 20 rows the list does go; that tab is too short for it,
+and the fleet's live state is what the frame is for.
+
+**No bar, no workspace, and age stated as a lifetime.** A bar means rot on the idle
+scale, and the two quantities are not the same: a session's idle time is a **gap** that
+resets the moment the session is touched, while a todo's age is a **lifetime** that only
+grows. Drawn as the same glyph they invited a comparison that is not valid, and `0m` read
+as "active this minute" on a note written seconds ago (§9.19). So the row is sparse —
+mark, text, `12d ago` — which is also what makes it read as a different kind of thing
+without spending a second accent colour (§6 keeps exactly one shout, and it is BLOCKED).
+WORKING rows already have no bar, for the same class of reason.
+
+**None of it feeds the KPIs.** `Fleet.Oldest`, `Stale`, `Blocked` and `Workspaces` are
+statements about *sessions*: a todo in `Oldest` would own the KPI strip and misreport the
+fleet, and the staleness `⚠` marks an idle session past a threshold, which is not a thing
+a todo can be. The band header carries `· 3 of 10` instead, which is where the cap is
+worth stating — you watch the number climb, so the refusal at 11 is not a surprise.
+
+**Not in v1: linking.** A todo and the session that serves it stay separate rows, and
+keeping one from duplicating the other is the user's job for now. When it is built it
+will be an explicit keystroke, never text matching — a fuzzy link between free text
+and a session is the silent-mismatch family of bug §9.15 came from. It anchors on the
+surface id, as labels do (§4), so it survives the session ending in that tab. The open
+question, recorded before it is answered: when a linked session dies with the work
+undone, the todo has to come back, with its original age intact.
+
+*Kill criterion, agreed before the code was written:* two weeks of counting todos
+added, todos removed as done, and the median age at removal. A count that grows while
+the median sits at two weeks means this is a backlog wearing a dashboard's clothes, and
+it goes back to Linear (§9.17).

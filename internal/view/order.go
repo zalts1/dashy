@@ -10,16 +10,17 @@ import "board/internal/board"
 // boundary explicit instead of clever).
 
 // DisplayOrder lists row keys in the order Frame draws them, so ↑/↓ move the way the
-// screen looks rather than the way the data is sorted.
+// screen looks rather than the way the data is sorted. The todo list is last, as the
+// frame draws it (§9.19).
 //
 // Every row is a stop, including the tab-less background agents. Selection does two
 // jobs — it picks the jump target and it lifts a row out of the collapsed quiet tail —
 // so skipping them made a row that the frame counts and can never draw (§9.14). Enter
 // on one reports that there is no tab.
 func DisplayOrder(f board.Fleet) []string {
-	blocked, working, quiet := f.Bands()
+	blocked, working, todo, quiet := f.Bands()
 	var out []string
-	for _, group := range [][]board.Row{blocked, working, quiet} {
+	for _, group := range [][]board.Row{blocked, working, quiet, todo} {
 		for _, r := range group {
 			out = append(out, r.Key)
 		}
@@ -53,4 +54,16 @@ func Step(order []string, sel string, delta int) string {
 		}
 	}
 	return order[0] // the selected session vanished between ticks
+}
+
+// FirstTodo is the key of the oldest todo, or empty when there is no list. Stepping to
+// the list means walking past every quiet row — fifteen presses on a real fleet — so `t`
+// goes straight to the top of it. Empty rather than a fallback: an empty selection is the
+// ambient state, so the caller reports instead of moving the cursor somewhere arbitrary.
+func FirstTodo(f board.Fleet) string {
+	_, _, todo, _ := f.Bands()
+	if len(todo) == 0 {
+		return ""
+	}
+	return todo[0].Key
 }

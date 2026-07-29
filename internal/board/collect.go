@@ -44,6 +44,7 @@ func Collect() Fleet {
 		Clock:     clock,
 		JobLabels: jobs,
 		Labels:    st.Labels,
+		Todos:     st.Todos,
 		Threshold: st.Threshold(),
 	}, time.Now())
 }

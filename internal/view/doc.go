@@ -6,7 +6,8 @@
 // Rendering and arithmetic live in separate files, because the seam between them is
 // where every fit bug has been (EVIDENCE.md §9.10, §9.12):
 //
-//   - frame.go, header.go, table.go — rendering, the two output surfaces
+//   - frame.go, header.go, table.go — rendering: the dashboard, the one-shot table and
+//     the one-shot todo list
 //   - layout.go — the fit: how many lines the frame may occupy, how wide each
 //     elastic column is, and what gives way first. Asserted directly rather than
 //     inferred from rendered output.

@@ -31,6 +31,10 @@ const (
 	// The quiet tail never shrinks below this: a QUIET band of one row reads as a
 	// quiet fleet, which is the opposite of the truth.
 	minQuietRows = 3
+	// The todo list keeps fewer, because it gives way second and the count carries the
+	// rest — but never none: a list collapsed to a header is a reminder that stopped
+	// reminding (§12).
+	minTodoRows = 2
 )
 
 // height is how many terminal lines this frame occupies once written. The watch loop
@@ -39,27 +43,36 @@ const (
 // past the bottom. Everything above the fold goes with it, starting with the header.
 func height(frame string) int { return strings.Count(frame, "\n") + 2 }
 
-// pickQuiet keeps the first n quiet rows, plus the selected one wherever it sits, and
-// reports how many are hidden. It copies rather than reslicing: the caller reuses the
-// band across passes.
-func pickQuiet(quiet []board.Row, n int, sel string) (shown []board.Row, hidden int) {
-	if n >= len(quiet) {
-		return quiet, 0
+// band is a collapsible group: the rows to draw, and how many are not drawn. The count
+// is what keeps a collapse honest — nothing may disappear silently (§9.13, §9.14).
+type band struct {
+	rows   []board.Row
+	hidden int
+}
+
+// pick keeps the first n rows, plus the selected one wherever it sits, and reports how
+// many are hidden. It copies rather than reslicing: the caller reuses the group across
+// passes.
+//
+// Both collapsible groups are sorted worst-first — quiet by idle descending, todos by
+// age — so cutting from the end always drops the least reproachful, and anything hidden
+// belongs below everything shown.
+func pick(rows []board.Row, n int, sel string) band {
+	if n >= len(rows) {
+		return band{rows: rows}
 	}
 	n = max(n, 0)
-	shown = make([]board.Row, n, n+1)
-	copy(shown, quiet[:n])
-	// A selection must stay visible even if it sits in the collapsed tail: short of a
-	// taller tab it is the only way to read a hidden row. Appending is in order, not a
-	// shortcut — quiet is sorted by idle descending and the collapse cuts from the fresh
-	// end, so anything hidden belongs below everything shown (§9.14).
-	for _, r := range quiet[n:] {
+	shown := make([]board.Row, n, n+1)
+	copy(shown, rows[:n])
+	// A selection must stay visible even if it sits in a collapsed group: short of a
+	// taller tab it is the only way to read a hidden row (§9.14).
+	for _, r := range rows[n:] {
 		if sel != "" && r.Key == sel {
 			shown = append(shown, r)
 			break
 		}
 	}
-	return shown, len(quiet) - len(shown)
+	return band{rows: shown, hidden: len(rows) - len(shown)}
 }
 
 // clip drops trailing lines so the written frame cannot scroll the terminal.

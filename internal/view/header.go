@@ -78,10 +78,13 @@ func header(f board.Fleet, s Screen, u UI) string {
 // is the one fact no band below carries; sessions with no tab have no workspace, so a
 // fleet of only background agents has no span to state.
 func spanText(f board.Fleet, withSpan bool) string {
-	if len(f.Rows) == 0 {
+	// Sessions, not rows: a todo has no process, so counting it here would report a
+	// fleet larger than the one running (§12).
+	n := f.Sessions()
+	if n == 0 {
 		return "no sessions"
 	}
-	s := fmt.Sprintf("%d %s", len(f.Rows), plural(len(f.Rows), "session"))
+	s := fmt.Sprintf("%d %s", n, plural(n, "session"))
 	if withSpan && f.Workspaces > 0 {
 		s += fmt.Sprintf(" in %d %s", f.Workspaces, plural(f.Workspaces, "workspace"))
 	}
@@ -92,6 +95,14 @@ func spanText(f board.Fleet, withSpan bool) string {
 // refreshing, so the clock would be stating a time that is no longer true — the mode
 // takes its place rather than sitting beside it.
 func modeText(s Screen, u UI, withInterval bool) string {
+	// Typing outranks paused: it is the more specific state, and it is the only one with
+	// two ways out — nothing else on screen would say what enter and esc do.
+	if u.Typing {
+		if withInterval {
+			return "typing · enter adds · esc cancels"
+		}
+		return "typing · esc"
+	}
 	if u.Paused {
 		return "paused · esc to resume"
 	}

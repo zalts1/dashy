@@ -1,6 +1,9 @@
 // Package config is board's on-disk state: ~/.board.json, the only file board
-// writes. It holds tuning plus surface-id → label, and nothing that can be
-// derived from the fleet.
+// writes. It holds tuning, surface-id → label, and the todo list — nothing that can
+// be derived from the fleet.
+//
+// Todos are the only user content here, capped at MaxTodos by a refusal rather than a
+// trim (DESIGN.md §12). Everything else in the file is tuning or a name.
 package config
 
 import (
@@ -25,6 +28,9 @@ type State struct {
 		NotifyCmd            string `json:"notify_cmd"`
 	} `json:"config"`
 	Labels map[string]string `json:"labels"`
+	// Todos are the one thing here that cannot be derived from the fleet: work with no
+	// session behind it (§12). Capped at MaxTodos.
+	Todos []Todo `json:"todos"`
 }
 
 func Path() string { return host.Home(".board.json") }

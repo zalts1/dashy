@@ -88,6 +88,19 @@ func humanize(d time.Duration) string {
 	}
 }
 
+// since is a todo's age, and it is deliberately not humanize: a session's idle time is
+// a **gap** that resets the moment the session is touched, while a todo's age is a
+// **lifetime** that only grows. Rendering both the same way made "0m" read as "active
+// this minute" on a note written seconds ago (EVIDENCE.md §9.19). "ago" is what says
+// which quantity this is, and the one-unit form is honest — minutes never matter on
+// something you wrote yesterday.
+func since(d time.Duration) string {
+	if d < time.Minute {
+		return "now"
+	}
+	return short(d) + " ago"
+}
+
 // short is the one-unit form, for chrome where precision does not matter.
 func short(d time.Duration) string {
 	switch {

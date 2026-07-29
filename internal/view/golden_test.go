@@ -33,6 +33,15 @@ func TestGoldenFrames(t *testing.T) {
 			UI{Sel: "K-OLD", Paused: true, Notice: "cmux focus refused"}},
 		{"frame-empty.txt", board.Fleet{},
 			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118}, UI{}},
+		// The todo band, pinned with a selection on one of its rows: the caret and the
+		// pause are what make `d` safe to press (DESIGN.md §12).
+		{"frame-todo.txt", goldenTodoFleet(),
+			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118},
+			UI{Sel: "todo:t1", Paused: true}},
+		// The capture mode, pinned in the slot the legend occupies when ambient.
+		{"frame-typing.txt", goldenTodoFleet(),
+			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118},
+			UI{Typing: true, Paused: true, Input: "reply to the security questionnaire"}},
 	}
 	for _, c := range cases {
 		t.Run(c.file, func(t *testing.T) {
@@ -52,6 +61,25 @@ func TestGoldenFrames(t *testing.T) {
 			}
 		})
 	}
+}
+
+// goldenTodoFleet adds the todo list to the awkward fleet: a fortnight-old note, a
+// day-old one, a fresh one, and a label wider than the column.
+func goldenTodoFleet() board.Fleet {
+	f := goldenFleet()
+	f.TodoCap = 10
+	for i, td := range []struct {
+		text string
+		age  time.Duration
+	}{
+		{"reply to the ACME csv export request before Thursday", 12 * 24 * time.Hour},
+		{"review the export PR", 26 * time.Hour},
+		{"book the quarterly review", 9 * time.Minute},
+	} {
+		f.Rows = append(f.Rows, board.Row{Key: fmt.Sprintf("todo:t%d", i), State: "todo",
+			Label: td.text, Idle: td.age, Rank: board.RankTodo})
+	}
+	return f
 }
 
 // goldenFleet is deliberately awkward: a background agent with no surface, a label
