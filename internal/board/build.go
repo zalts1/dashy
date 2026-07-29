@@ -11,7 +11,7 @@ import (
 
 // Snapshot is everything read from the outside world for one tick. Build is a pure
 // function of it, so every join rule below is testable without a live fleet — the
-// rules that used to be wrong (DESIGN.md §9.1, §9.3 Evidence) all lived in this join.
+// rules that used to be wrong (EVIDENCE.md §9.1, §9.3) all lived in this join.
 type Snapshot struct {
 	Agents    []claude.Agent
 	Titles    map[int]cmux.Titles  // by pid — cmux surface nodes carry no session id

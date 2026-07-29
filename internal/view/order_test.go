@@ -10,7 +10,7 @@ import (
 //
 // Every row is a stop, including the background agents with no tab. Selection is not
 // only a jump target: it is also what lifts a row out of the collapsed quiet tail, so
-// skipping the tab-less rows made them countable and undrawable (DESIGN.md §9.14).
+// skipping the tab-less rows made them countable and undrawable (EVIDENCE.md §9.14).
 // Enter on one reports that there is nothing to focus.
 func TestDisplayOrderMatchesScreen(t *testing.T) {
 	got := DisplayOrder(fixture())

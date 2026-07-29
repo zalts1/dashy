@@ -3,7 +3,7 @@ package view
 // Layout is the frame's arithmetic: how many lines it may occupy, how wide each
 // elastic column is, and what gives way first when the terminal is too small for
 // everything. It is kept apart from the rendering so the sizes can be asserted
-// directly — every fit bug in DESIGN.md §9.10 and §9.12 was an arithmetic bug that
+// directly — every fit bug in EVIDENCE.md §9.10 and §9.12 was an arithmetic bug that
 // looked correct in the rendering code.
 
 import (
@@ -22,7 +22,7 @@ const (
 	// the state gutter, the bar, the warn mark, the IDLE column, and the gaps between
 	// them. Derived from the pieces rather than guessed — the fixed reserve of 46 it
 	// replaces was short by the whole tail, so any long workspace name wrapped the row
-	// (DESIGN.md §9.12).
+	// (EVIDENCE.md §9.12).
 	rowChrome = 3 + gutter + 1 + barCells + 1 + 1 + 1 + idleW + 2
 	// rowChromeBare is the same row without the bar column, for terminals too narrow to
 	// hold one whole. A cut bar is worse than no bar: same glyph run, smaller number.

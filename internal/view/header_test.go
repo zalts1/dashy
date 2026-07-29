@@ -66,7 +66,7 @@ func TestHeaderFreshnessIsRightAligned(t *testing.T) {
 }
 
 // A wrapped header is a frame one line taller than measured, which scrolls the whole
-// thing (DESIGN.md §9.10). It must fit any width, shedding chrome before meaning.
+// thing (EVIDENCE.md §9.10). It must fit any width, shedding chrome before meaning.
 func TestHeaderNeverWraps(t *testing.T) {
 	for _, cols := range []int{20, 34, 46, 58, 70, 90, 118, 300} {
 		for _, u := range []UI{{}, {Paused: true}, {Notice: "cmux focus refused"}} {
@@ -104,7 +104,7 @@ func TestHeaderPausedReplacesTheClock(t *testing.T) {
 
 // The board tab is usually hidden by the time a jump fails, so the notice has to be in
 // the frame — and legible. Bare #d03b3b measures 2.91 and is reserved for the badge
-// fill (DESIGN.md §9.4).
+// fill (EVIDENCE.md §9.4).
 func TestHeaderNoticeIsLegible(t *testing.T) {
 	got := header(spanFleet(31, 6), screen(44, 118), UI{Notice: "cmux focus refused", Paused: true})
 	if !strings.Contains(plain(got), "cmux focus refused") {
