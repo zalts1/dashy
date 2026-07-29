@@ -69,37 +69,42 @@ seams and their fixture shapes.
 
 ## Rules
 
-Each is load-bearing and each has an argument on the other end of its pointer. Do not
-trade one away without reading it.
+Two kinds, and the difference matters more than any single entry.
+
+### Hard — these are why it is safe to leave installed
 
 - **board never ends a session.** No close, kill, or hibernate on a timer, threshold,
-  or batch path. It is a reporting surface; that is what makes it safe to install (§8).
+  or batch path. It is a reporting surface (§8).
 - **`notify` must never fail the agent** — every error path is a silent success (§8).
 - **`install-hooks` refuses an unparseable `~/.claude/settings.json`**, backs up first,
   and is idempotent (§8).
 - **cmux env vars are always stripped from child processes** (§8).
-- **No dependencies.** stdlib + `syscall` over any TUI or colour library (§2).
-- **No listener, port, or daemon.** The watch tab *is* the process (§2).
 - **The frame fits the terminal in both directions.** A wrapped line silently adds a
-  screen row, which breaks the height measurement and scrolls the header away. The
-  arithmetic is what makes lines fit; `clampLine` is only the backstop (§6,
+  screen row, which breaks the height measurement and scrolls the header away (§6,
   `EVIDENCE.md` §9.10 and §9.12).
-- **Colour is validated, never eyeballed.** Do not substitute or add a value without
-  re-validating it against both documented terminal backgrounds (§6).
-- **No sorting, no filtering, no dismiss.** The bands are the sort (§1, §8).
-- **The todo cap is a refusal, never a trim.** The 11th add fails; nothing evicts the
-  oldest. Uncapped it is a backlog, and the refusal is what forces a decision (§12).
-- **Capture and removal both live in the frame**, and the capture mode stays bounded:
-  one key in, two out, no cursor, no timeout that could eat typed text (§12, §9.18).
-- **A band earns its lines by exception.** A row reporting the system working as
-  intended hides one that isn't; that is what removed `ASKED` and with it the whole
-  audit-log read (`EVIDENCE.md` §9.13).
-- **Keep the two boundaries.** All join logic stays in pure `board.Build`; `view` never
-  reads the world and `watch` never formats (§3).
-- **Add derived quantities to `Fleet`, not to a renderer** — both renderers consume the
-  same snapshot so they can never disagree (§3).
-- **One job per package, one concern per file.** A file past ~250 lines is a signal to
-  split. A new command or band needs a `DESIGN.md` entry first (§2).
+- **Colour is validated, never eyeballed** — re-validate against both documented
+  terminal backgrounds before substituting a value (§6).
+
+### Current defaults — change them when you have a better idea
+
+These are what the tool does today and the reasoning is one `§` away. Read it so you
+know what you are trading, then decide. Disagreeing is not relitigating; if you change
+one, record why in `EVIDENCE.md` §9.
+
+- No dependencies; stdlib + `syscall` (§2).
+- No listener, port, or daemon — the watch tab *is* the process (§2).
+- No sorting, no filtering, no dismiss — the bands are the sort (§1, §8).
+- The todo cap of 10 is a refusal, not a trim (§12).
+- Capture and removal both live in the frame, and the capture mode stays bounded (§12,
+  §9.18).
+- A band earns its lines by exception (`EVIDENCE.md` §9.13).
+- All join logic stays in pure `board.Build`; `view` never reads the world and `watch`
+  never formats (§3).
+- Derived quantities go on `Fleet`, not in a renderer, so the two renderers cannot
+  disagree (§3).
+- One job per package, one concern per file; past ~250 lines, consider splitting (§2).
+
+A new command or band is worth a `DESIGN.md` entry — after it works, not before.
 
 ## Comments
 

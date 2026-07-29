@@ -1,9 +1,13 @@
 # board — design record
 
-**Status: settled.** Every question this document used to leave open is decided
-below. It is now a record, not a proposal: read the section that covers what you are
-about to change, and if a change settles something new or falsifies something here,
-append to §9 (evidence, in `EVIDENCE.md`) or §10 (deferred, below) in the same style.
+**Status: what the tool does today, and why.** This is a record of decisions and the
+reasoning behind them — not a rulebook, and not a list of things you may not do. Read
+the section covering what you are about to change so you know what you would be
+trading; then decide. Most of what is here was argued, not measured, and an argument
+loses to a working change. Only `CLAUDE.md`'s **Hard** list is off-limits.
+
+When you do change something, append what you learned to §9 (`EVIDENCE.md`) and update
+the section here so it keeps describing the tool that exists.
 
 **Where the sections live.** §1–§8 and §10–§11 are here; **§9.x is in `EVIDENCE.md`**,
 the append-only log of what was believed and what falsified it. § numbers are bare
@@ -49,7 +53,8 @@ optimises for one thing: *where do I look first*.
 exactly two actions on the world (focus a tab, set a label). That is what makes it
 safe to leave installed, and it is the property to protect when adding features.
 
-Non-goals, all decided and not open for relitigation without new evidence:
+Four things it deliberately is not. Each is a judgement about where the bottleneck is,
+so each is only as good as that judgement:
 
 - **Not a task manager and not a kanban.** Nothing moves through stages — a session
   is blocked, working, or rotting. Structure belongs in Linear, which already exists.
@@ -443,7 +448,9 @@ Four more, each with a test or a documented refusal:
 
 ## 10. Deferred, with the trigger that would revive each
 
-Nothing here is "next". Each entry names the evidence that would move it.
+Ideas considered and not built yet. Each names the evidence that would most clearly
+justify it — a prompt for thinking, not a gate. Wanting one is reason enough to build
+it; the trigger just tells you what the earlier reasoning was waiting for.
 
 ### 10.1 Push notifications — parked, mechanism inert
 
