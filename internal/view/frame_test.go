@@ -89,7 +89,7 @@ var collapseCount = regexp.MustCompile(`\+\d+ quiet`)
 
 // The collapse line reports a count; it is not a control. A disclosure chevron said
 // otherwise for a while, and there is no key that expands the band — the honest ways
-// to see a hidden row are to select it or to make the tab taller (DESIGN.md §9.14).
+// to see a hidden row are to select it or to make the tab taller (EVIDENCE.md §9.14).
 func TestCollapseLineOffersNothingItCannotDo(t *testing.T) {
 	out := Frame(collapsing(), screen(20, 130), UI{})
 	if strings.Contains(out, "⌄") {

@@ -13,7 +13,7 @@ import (
 // scrollback. See DESIGN.md §7 Interaction.
 //
 // It takes two calls, because cmux keeps "which tab is showing" and "who has the
-// keyboard" as separate state (DESIGN.md §9.15).
+// keyboard" as separate state (EVIDENCE.md §9.15).
 func Focus(id string) error {
 	if id == "" {
 		return fmt.Errorf("session has no surface id")
@@ -46,7 +46,7 @@ type tabSlot struct {
 //
 // surface.focus does not do this. It selects the workspace and focuses the pane, and
 // the pane then re-asserts whichever tab it last showed — so a jump landed on the
-// right workspace and the wrong session (DESIGN.md §9.15). cmux has no select verb:
+// right workspace and the wrong session (EVIDENCE.md §9.15). cmux has no select verb:
 // `tab-action` covers rename, close and pin but nothing that fronts a tab. Reordering
 // a surface onto the slot it already occupies, with focus, is the narrowest call that
 // does, and is a no-op on the tab strip itself.

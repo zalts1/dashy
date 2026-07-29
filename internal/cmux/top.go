@@ -36,7 +36,7 @@ func TitlesByPid() map[int]Titles {
 
 // tree is the one read every cmux lookup shares. It asks about the whole world
 // because host.Output blanks the cmux env: an unscoped query would otherwise
-// resolve against whatever workspace happened to be selected (DESIGN.md §9.8).
+// resolve against whatever workspace happened to be selected (EVIDENCE.md §9.8).
 func tree() []byte {
 	b, err := output("--id-format", "both", "top", "--all", "--json")
 	if err != nil {

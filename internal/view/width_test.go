@@ -32,7 +32,7 @@ func wideFleet() board.Fleet {
 
 // A line wider than the terminal wraps, and a wrapped line makes the frame occupy more
 // screen rows than height() counted: the fit arithmetic silently under-reports, the
-// terminal scrolls, and the header is the first thing gone (DESIGN.md §9.10). So no
+// terminal scrolls, and the header is the first thing gone (EVIDENCE.md §9.10). So no
 // line may exceed the width — at any width, in any state.
 func TestNoLineExceedsTheTerminalWidth(t *testing.T) {
 	states := []UI{{}, {Sel: "S-OLD", Paused: true}, {Notice: "cmux focus refused"}}
@@ -149,7 +149,7 @@ func TestNarrowLayoutDropsTheBarRatherThanCutIt(t *testing.T) {
 }
 
 // The IDLE header and a row's duration are one column read two ways, so they share a
-// right edge. ASKED's wait used to sit one column left of the rows' (DESIGN.md §9.12),
+// right edge. ASKED's wait used to sit one column left of the rows' (EVIDENCE.md §9.12),
 // which is exactly the kind of drift a resize makes visible — the band is gone, but the
 // column arithmetic it exposed is still what this pins.
 func TestDurationColumnsShareARightEdge(t *testing.T) {

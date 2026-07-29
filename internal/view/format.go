@@ -36,7 +36,7 @@ func cut(s string, w int) string {
 // This is the backstop behind the layout arithmetic, not a substitute for it: a line
 // wider than the terminal wraps, and a wrapped line makes the frame occupy more screen
 // rows than height() counted, so the fit loop under-reports and the terminal scrolls
-// the header away (DESIGN.md §9.10, §9.12). The arithmetic has been wrong before; this
+// the header away (EVIDENCE.md §9.10, §9.12). The arithmetic has been wrong before; this
 // makes the consequence impossible rather than unlikely.
 func clampLine(s string, w int) string {
 	if w < 0 {

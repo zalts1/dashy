@@ -64,7 +64,7 @@ func TestRosterMembership(t *testing.T) {
 	}
 	// Jumpable and selectable are different things: the key is the session, which every
 	// row has, so a tab-less row can still be selected and lifted out of the collapsed
-	// quiet tail (DESIGN.md §9.14).
+	// quiet tail (EVIDENCE.md §9.14).
 	if r.Key != "sess-bg" {
 		t.Errorf("background agent key = %q, want the session id", r.Key)
 	}
@@ -103,7 +103,7 @@ func TestStateAndRank(t *testing.T) {
 		{"busy", claude.Agent{SessionID: "s", Pid: 100, Status: "busy"}, "running", RankWorking},
 		{"idle at the prompt", claude.Agent{SessionID: "s", Pid: 100, Status: "idle"}, "done", RankQuiet},
 		// needsInput-style states must never read as blocked; that mistake covered
-		// 16 of 21 sessions once. See DESIGN.md §9.1 Evidence.
+		// 16 of 21 sessions once. See EVIDENCE.md §9.1.
 		{"unknown status", claude.Agent{SessionID: "s", Pid: 100, Status: "needsInput"}, "done", RankQuiet},
 	}
 	for _, c := range cases {

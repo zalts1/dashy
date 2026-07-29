@@ -3,7 +3,7 @@
 // `claude agents --json` is authoritative: it knows every live session and reports
 // idle/busy/waiting for interactive ones and blocked for background ones. That
 // replaces the state board used to derive from cmux's audit log, which was wrong
-// twice (DESIGN.md §9.1 Evidence) and never saw background agents at all.
+// twice (EVIDENCE.md §9.1) and never saw background agents at all.
 //
 // It costs ~250ms, so callers run it concurrently with the cmux query.
 package claude
