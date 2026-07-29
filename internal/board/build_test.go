@@ -226,7 +226,7 @@ func TestBandsPreserveSort(t *testing.T) {
 		{Label: "b", Rank: RankBlocked}, {Label: "q1", Rank: RankQuiet},
 		{Label: "q2", Rank: RankQuiet}, {Label: "w", Rank: RankWorking},
 	}}
-	blocked, working, quiet := f.Bands()
+	blocked, working, _, quiet := f.Bands()
 	if len(blocked) != 1 || len(working) != 1 || len(quiet) != 2 {
 		t.Fatalf("bands = %d/%d/%d, want 1/1/2", len(blocked), len(working), len(quiet))
 	}

@@ -4,14 +4,24 @@
 // Add a derived quantity to Fleet, not to a renderer.
 package board
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Rank is the sort key and the band selector, in the order attention is owed.
+// RankTodo is last because a todo is the only row with no process to report on, and both
+// renderers draw it there: it is not a state a session can be in (DESIGN.md §12).
 const (
 	RankBlocked = 0
 	RankQuiet   = 1
 	RankWorking = 2
+	RankTodo    = 3
 )
+
+// todoKey namespaces a todo's id inside the one selection space it shares with session
+// ids. A collision would put the cursor on a row the user did not choose (§7).
+const todoKey = "todo:"
 
 // noWorkspace fills the workspace column for agents that have no cmux tab. It reads
 // the same as claude's Kind by coincidence, not by dependency.
@@ -35,12 +45,37 @@ type Row struct {
 // different: a background agent can be selected and read, but there is nowhere to go.
 func (r Row) Jumpable() bool { return r.Surface != "" }
 
+// TodoID reports the todo behind this row, if it is one. It gates the one destructive
+// key in the frame, so it must never answer true for a session (§12).
+func (r Row) TodoID() (string, bool) {
+	if r.Rank == RankTodo && strings.HasPrefix(r.Key, todoKey) {
+		return strings.TrimPrefix(r.Key, todoKey), true
+	}
+	return "", false
+}
+
 type Fleet struct {
 	Rows       []Row
 	Blocked    int
 	Stale      int
 	Workspaces int // distinct real workspaces; background agents have none
 	Oldest     time.Duration
+	// TodoCap is the ceiling both renderers state, so neither has to hardcode it and
+	// they cannot disagree about what the refusal at the top will be (§12).
+	TodoCap int
+}
+
+// Sessions counts the rows with a process behind them. Both renderers state a fleet
+// size, and a todo is a row but not a session — derived here so they cannot disagree
+// about it (§3, §12).
+func (f Fleet) Sessions() int {
+	n := 0
+	for _, r := range f.Rows {
+		if r.Rank != RankTodo {
+			n++
+		}
+	}
+	return n
 }
 
 // ByKey resolves a selection to its row. An empty key is the ambient state and must
@@ -57,14 +92,18 @@ func (f Fleet) ByKey(key string) (Row, bool) {
 	return Row{}, false
 }
 
-// Bands splits the fleet into the three on-screen groups, preserving the sort.
-func (f Fleet) Bands() (blocked, working, quiet []Row) {
+// Bands splits the fleet into the four on-screen groups, preserving the sort. They are
+// returned in the order the frame draws them, which is not the rank order: todos sit
+// above the quiet tail so the collapse cannot delete them (§12).
+func (f Fleet) Bands() (blocked, working, todo, quiet []Row) {
 	for _, r := range f.Rows {
 		switch r.Rank {
 		case RankBlocked:
 			blocked = append(blocked, r)
 		case RankWorking:
 			working = append(working, r)
+		case RankTodo:
+			todo = append(todo, r)
 		default:
 			quiet = append(quiet, r)
 		}

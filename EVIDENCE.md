@@ -33,6 +33,9 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.14 | `⌄ 3 more` promised a key that did not exist; every row must be a nav stop | `view/order.go`, `view/frame.go` |
 | 9.15 | Jump landed on the right workspace and the wrong tab | `cmux/focus.go` |
 | 9.16 | The design record cost 11k tokens to read one section of — split, indexed, deduplicated | `CLAUDE.md`, `DESIGN.md`, `view/doc.go` |
+| 9.17 | §9.9 was evidence about labels, not about todos; `TodoWrite` is 3/100 — todos ship capped at 10 | `DESIGN.md` §12, `config/`, `board/build.go` |
+| 9.18 | Two entry points for one thing was the friction — capture moved into the frame | `watch/keys.go`, `watch/todo.go`, `view/frame.go` |
+| 9.19 | The bar meant two different clocks, and the band sat inside a ranking it is not part of | `view/frame.go`, `view/format.go`, `view/layout.go` |
 
 ---
 
@@ -389,3 +392,114 @@ three things that can disagree:
 
 The tests did not change and could not have caught any of this, which is the point —
 this was a documentation-addressability change, not a behaviour change.
+
+### 9.17 §9.9 was evidence about labels, not about todos (2026-07-29)
+
+Todos were refused twice on this file's own authority before the refusal was checked,
+and two of the three arguments did not survive the check.
+
+**What held.** "Not a task manager" (§1) still rules out status, priority, due dates
+and stages. §9.13's rule still rules out a band of rows that report nothing wrong.
+
+**What did not.** §9.9 — one label in a week of real use — was read as evidence that
+capture does not happen. It is not: a label is decoration on a row that renders either
+way, so skipping it costs nothing and measures nothing. The case it was cited against
+is a customer request with no session behind it, where not capturing it means it is
+gone. Same keystrokes, opposite stakes. A refusal that transfers evidence between
+different stakes is a refusal that has stopped reading.
+
+**What the measurement actually killed** was the other reading of "derived". Parsing the
+agents' own todo lists would have been the zero-capture-cost source §10.2 wanted:
+
+    ~/.claude/todos/            does not exist
+    3 of 100 transcripts        touched in the last 7 days contain a TodoWrite call
+
+So the derived-from-`TodoWrite` design would have rendered blank. The derived list that
+does work needed no code at all: a live session already is a row with a name, a rank
+and an age, and reading the fleet as a list of things to do is what §1 produces.
+
+**What shipped** is §12 — the intent half of §10.2, capped at 10, captured from the CLI
+and removed from the frame. The cap is the part to defend: it is what keeps the band a
+reminder rather than a backlog, and it is enforced by refusing the 11th rather than by
+trimming the oldest, because the refusal is what forces a decision.
+
+*What would falsify this, measured over two weeks:* todos added, todos removed as done,
+median age at removal. A growing count with a two-week median means the band is a
+backlog, and §12 goes back to being §10.2.
+
+### 9.18 Two entry points for one thing was the friction (2026-07-29)
+
+§12 shipped capture as `board todo "<text>"` and removal as `d` in the frame, arguing
+that in-frame text entry is an insert mode and §2 kept "nothing to learn". The argument
+was about the wrong cost. First use, unprompted: *"adding a todo using the command line
+is a friction I don't want, I want all in one, not different entries for the same
+thing."*
+
+The mode was never the expensive part. **Splitting one action across two surfaces was** —
+you are looking at the list, and finishing one is a keystroke while adding one means
+leaving the tab you are looking at. That asymmetry is the friction, and no amount of
+mode-avoidance buys it back.
+
+So `a` opens a prompt in the frame. What kept §2 intact is the mode's shape, not its
+absence: one key in, two keys out, no cursor movement, and the prompt takes the legend's
+line rather than adding one, so entering it cannot change the frame's height (the fit
+loop would otherwise collapse the quiet tail under the typist — §9.10's mistake with a
+new cause). The CLI verbs all stayed; nothing was removed to make room.
+
+**Two decisions this settled, both against the obvious implementation:**
+
+- **No timeout while typing.** §7 returns to ambient after 10s so a stray arrow key
+  cannot strand the tab. Applying that to capture would mean a timer that deletes
+  half-typed text — the only destructive act in the loop, on a clock. Typing is not
+  stray, and ctrl-c is still there (ISIG is left on in `rawMode`).
+- **A mode-blind decoder.** Every keystroke carries both the command it names and the
+  text it would type; the loop decides which reading applies. The alternative — telling
+  the decoder the mode — puts the mode in two places.
+
+**The bug that justified testing a package that had none.** `watch` had no test files, on
+the grounds that it is the impure half. The decoder is not: it reads a file, so an
+`os.Pipe` is the whole fixture. The first test found that an arrow key typed `[A` into
+the prompt — ESC is not printable but `[` and `A` are, so a rune-wise filter passes the
+tail of every escape sequence through. Verified by mutation: with the guard disabled the
+test reports `"\x1b[A" typed "[A", want ""`.
+
+### 9.19 The bar meant two different clocks (2026-07-29)
+
+First look at the shipped band, reported as "feels off, and not like a separate thing":
+
+> The bar means two different things. For a session, length is idle time — rot. For a
+> todo, it's age since you jotted it. Same visual variable, two incompatible concepts, so
+> a todo at `0m` reads as "just finished working" when it means "just written down."
+
+Correct, and the sharper version is that the two are different *clocks*, not just
+different labels: **a session's idle time is a gap that resets** the moment the session is
+touched, **a todo's age is a lifetime that only grows.** Nothing about the encoding said
+which one a row was showing, and every other band's `0m` means "active this minute", so
+the note borrowed the vocabulary of a running process.
+
+§12 had asserted the opposite on purpose — "a fortnight of not starting reads next to a
+fortnight of silence" — which was an instinct for a comparison that is not valid, written
+down as a rule. This codebase already had the rule it should have followed, on WORKING
+rows: *no bar, for a working agent elapsed time is progress, not rot.* A bar means rot on
+the idle scale. A lifetime is not rot either.
+
+Three changes, and the second one was hiding behind the first:
+
+- **No bar, no workspace, `12d ago` instead of `12d00h`.** "ago" names the quantity, and
+  the coarse one-unit form is honest — minutes never matter on something written
+  yesterday. It fits the 7-column slot exactly, so the column arithmetic did not move.
+- **The band moved last, after the whole fleet.** It had been drawn between WORKING and
+  QUIET, which put a thing that is not a process state inside a ranking of process
+  states. That position was never a reading decision: it was chosen because the fit loop
+  trims the tail and clips from the bottom, so the lowest band is the first casualty. An
+  implementation detail had been setting the reading order.
+- **So the fit loop grew a second absorber**, which is what let position become a
+  reading decision: quiet to its floor, then the list to its own, then either to nothing.
+  A band collapsed to its count still reports, so shedding rows beats letting `clip` take
+  a whole band off the bottom. Below ~20 rows the list does go, which is accepted: that
+  tab is too short for it. *If that bites, the cheap fix is one KPI cell, not a taller
+  floor.*
+
+What the goldens proved on re-blessing: the four pre-existing frames differ by exactly one
+line each — the legend gaining `a new todo` — so nothing about session rendering moved
+while the todo band was rebuilt twice.

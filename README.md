@@ -19,6 +19,9 @@ running      build board: cmux fleet status CLI           INFRA                 
     board watch [interval]    ambient dashboard, redraws in place (default 10s)
     board jump <substring>    focus the cmux tab whose label or workspace matches
     board label "<text>"      label the current session (no text clears it)
+    board todo                list the todos, with ages and the cap
+    board todo "<text>"       add one (max 10)
+    board todo done <text|id> finish one, matched like jump
     board install-hooks       merge Stop + Notification hooks into ~/.claude/settings.json
 
 `board watch` is meant to live in its own cmux tab. It needs no daemon and opens no
@@ -26,8 +29,15 @@ port — the tab is the process. Piped or redirected it prints one frame and exi
 so `board watch > frame.txt` works.
 
 Inside `board watch`: `↑`/`↓` (or `k`/`j`) select a row, `Enter` focuses that
-session's cmux tab **and leaves board running**, `Esc` clears, `q` or `Ctrl-C` exits. That is the whole
-keymap — no sorting, no filtering, no modes.
+session's cmux tab **and leaves board running**, `a` adds a todo, `d` finishes the
+selected one, `Esc` clears, `q` or `Ctrl-C` exits. That is the whole keymap — no
+sorting, no filtering.
+
+`a` opens a prompt on the bottom line: type, `Enter` adds, `Esc` cancels, and empty text
+is a cancel. It is the one mode board has, and it stays deliberately dumb — no cursor
+keys, just typing and backspace. **Nothing times out while you type**; the selection's
+10s return does not apply, because a timer that discarded half-typed text would be worse
+than a paused tab. `Ctrl-C` still exits from inside the prompt.
 
 When QUIET does not fit, the band ends with `+N quiet`. **That is a count, not a
 control** — nothing expands a band. To read a hidden row, press `↓` past the last
@@ -49,6 +59,37 @@ after 10s of no keypress so the tab always returns to being ambient.
 | `done` | finished its turn, unnoticed | everything else |
 
 `⚠` marks a quiet session past the idle threshold (default 45m).
+
+## Todos
+
+A todo is work with **no session behind it** — the customer request you have not
+started, so there is no tab for board to find. It carries text and an age and nothing
+else: no status, no priority, no due date.
+
+    TODO · 3 of 10
+             ▫ reply to the ACME csv export request               12d ago
+             ▫ review the export PR                                1d ago
+             ▫ book the quarterly review                              now
+
+The list is drawn last, after the whole fleet, because it is not a state a session can
+be in. It has **no bar and no workspace**: a bar means idle time, which is a gap that
+resets when a session is touched, while a todo's age is a lifetime that only grows —
+hence `12d ago` rather than `12d00h`. The header states the cap so you can watch it
+climb.
+
+Press `a` inside `board watch` to add one without leaving the tab, or from any shell:
+
+    $ board todo "reply to the ACME csv export request"
+    todo: reply to the ACME csv export request  (1 of 10)
+
+**The list holds 10, and the 11th is refused rather than trimmed.** That is the point,
+not a limitation: a list that can grow without end is a backlog, and a backlog belongs
+in your issue tracker. The refusal is what makes you decide.
+
+Nothing links a todo to a session yet, so
+if you start the work, remove the todo — board will not notice the overlap for you.
+There is no undo: the header reports the text it removed, so a mis-key costs one line
+of retyping.
 
 Rows come from `claude agents --json`, which knows every live session. cmux supplies
 tab titles, workspace names and the idle clock, joined on pid. Background agents
@@ -84,7 +125,10 @@ runtime.
     "poll_seconds": 10,
     "notify_cmd": "curl -sS -d @- https://ntfy.sh/my-topic"
   },
-  "labels": { "<cmux surface id>": "<label>" }
+  "labels": { "<cmux surface id>": "<label>" },
+  "todos": [
+    { "id": "2483b5", "text": "reply to the ACME csv export request", "created": "2026-07-29T13:49:09+03:00" }
+  ]
 }
 ```
 
@@ -111,4 +155,5 @@ name. Sink failures are swallowed so a broken webhook never blocks an agent.
 
 Remove the two `board notify` entries from `~/.claude/settings.json` (a timestamped
 `.board-bak-*` copy is written before the first change), then delete `~/.board.json`
-and the binary. Labels live only in `~/.board.json`; nothing else is written.
+and the binary. Labels and todos live only in `~/.board.json`, so copy anything on the
+list out first; nothing else is written.

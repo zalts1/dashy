@@ -7,6 +7,7 @@ import (
 
 	"board/internal/claude"
 	"board/internal/cmux"
+	"board/internal/config"
 )
 
 // Snapshot is everything read from the outside world for one tick. Build is a pure
@@ -18,6 +19,7 @@ type Snapshot struct {
 	Clock     map[string]time.Time // session id -> last activity, already resolved
 	JobLabels map[string]string    // session id -> Claude's own label for background agents
 	Labels    map[string]string    // surface id -> user label
+	Todos     []config.Todo        // work with no session behind it (§12)
 	Threshold time.Duration
 }
 
@@ -72,6 +74,20 @@ func Build(s Snapshot, now time.Time) Fleet {
 			f.Oldest = idle
 		}
 		rows = append(rows, r)
+	}
+	// Todos are rows with no process, so they take no state mark, no workspace and no
+	// tab — and they feed none of the counters above, which are statements about
+	// sessions: a fortnight-old todo in Oldest would own the KPI strip, and the stale ⚠
+	// marks an idle session past a threshold, which a todo cannot be (§12).
+	f.TodoCap = config.MaxTodos
+	for _, td := range s.Todos {
+		rows = append(rows, Row{
+			Key:   todoKey + td.ID,
+			State: "todo",
+			Label: td.Text,
+			Idle:  td.Age(now),
+			Rank:  RankTodo,
+		})
 	}
 	// Band first, then oldest within a band: the thing you have ignored longest
 	// sits at the top of its group.

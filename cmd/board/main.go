@@ -15,7 +15,8 @@ import (
 	"board/internal/watch"
 )
 
-const usage = `usage: board | board watch [interval] | board jump <substring> | board label "<text>" | board install-hooks`
+const usage = `usage: board | board watch [interval] | board jump <substring> | board label "<text>"
+       board todo | board todo "<text>" | board todo done <text or id> | board install-hooks`
 
 func main() {
 	args := os.Args[1:]
@@ -36,6 +37,8 @@ func main() {
 		}
 	case "jump":
 		err = jump(strings.Join(args[1:], " "))
+	case "todo":
+		err = todo(args[1:])
 	case "install-hooks":
 		err = hooks.Install()
 	default:

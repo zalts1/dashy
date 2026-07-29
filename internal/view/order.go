@@ -10,16 +10,17 @@ import "board/internal/board"
 // boundary explicit instead of clever).
 
 // DisplayOrder lists row keys in the order Frame draws them, so ↑/↓ move the way the
-// screen looks rather than the way the data is sorted.
+// screen looks rather than the way the data is sorted. The todo list is last, as the
+// frame draws it (§9.19).
 //
 // Every row is a stop, including the tab-less background agents. Selection does two
 // jobs — it picks the jump target and it lifts a row out of the collapsed quiet tail —
 // so skipping them made a row that the frame counts and can never draw (§9.14). Enter
 // on one reports that there is no tab.
 func DisplayOrder(f board.Fleet) []string {
-	blocked, working, quiet := f.Bands()
+	blocked, working, todo, quiet := f.Bands()
 	var out []string
-	for _, group := range [][]board.Row{blocked, working, quiet} {
+	for _, group := range [][]board.Row{blocked, working, quiet, todo} {
 		for _, r := range group {
 			out = append(out, r.Key)
 		}

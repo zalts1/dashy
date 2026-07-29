@@ -87,6 +87,10 @@ trade one away without reading it.
 - **Colour is validated, never eyeballed.** Do not substitute or add a value without
   re-validating it against both documented terminal backgrounds (§6).
 - **No sorting, no filtering, no dismiss.** The bands are the sort (§1, §8).
+- **The todo cap is a refusal, never a trim.** The 11th add fails; nothing evicts the
+  oldest. Uncapped it is a backlog, and the refusal is what forces a decision (§12).
+- **Capture and removal both live in the frame**, and the capture mode stays bounded:
+  one key in, two out, no cursor, no timeout that could eat typed text (§12, §9.18).
 - **A band earns its lines by exception.** A row reporting the system working as
   intended hides one that isn't; that is what removed `ASKED` and with it the whole
   audit-log read (`EVIDENCE.md` §9.13).

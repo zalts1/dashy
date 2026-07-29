@@ -68,6 +68,9 @@ func Run(interval time.Duration) {
 
 	var f board.Fleet
 	var sel, notice string
+	// The one mode this UI has, and the only state that holds unsaved user text.
+	var typing bool
+	var input string
 	var lastKey, lastFetch time.Time
 
 	draw := func() {
@@ -78,7 +81,8 @@ func Run(interval time.Duration) {
 			Threshold: config.Load().Threshold(),
 			Rows:      rows,
 			Cols:      cols,
-		}, view.UI{Sel: sel, Paused: sel != "", Notice: notice})
+		}, view.UI{Sel: sel, Paused: sel != "" || typing, Notice: notice,
+			Typing: typing, Input: input})
 		render(out, s)
 	}
 	refresh := func() { f, lastFetch = board.Collect(), time.Now(); draw() }
@@ -96,17 +100,61 @@ func Run(interval time.Duration) {
 				continue
 			}
 			return
-		case k := <-keys:
+		case ev := <-keys:
 			lastKey = time.Now()
-			switch k {
+			// Capture mode owns every key while it is on, which is why the decoder hands
+			// over both readings: in here `q` is a letter, not the quit key. ctrl-c still
+			// raises SIGINT (ISIG is left on), so there is always a way out.
+			if typing {
+				switch ev.k {
+				case keyEnter:
+					typing = false
+					notice, input = commitTodo(input), ""
+					refresh()
+					continue
+				case keyEscape:
+					typing, input, notice = false, "", ""
+				case keyBackspace:
+					if r := []rune(input); len(r) > 0 {
+						input = string(r[:len(r)-1])
+					}
+				default:
+					input += ev.text
+				}
+				draw()
+				continue
+			}
+			switch ev.k {
 			case keyQuit:
 				return
+			case keyAdd:
+				// Refused before the mode opens rather than after the text is typed: at the
+				// cap the answer is the same either way, and this way it costs no keystrokes
+				// (DESIGN.md §12).
+				if _, _, todos, _ := f.Bands(); len(todos) >= config.MaxTodos {
+					notice = fmt.Sprintf("at the cap of %d todos — finish one first", config.MaxTodos)
+				} else {
+					typing, notice = true, ""
+				}
 			case keyEscape:
 				sel = ""
 			case keyUp:
 				sel = view.Step(view.DisplayOrder(f), sel, -1)
 			case keyDown:
 				sel = view.Step(view.DisplayOrder(f), sel, +1)
+			case keyDone:
+				// The only write this loop makes, and the only destructive key in the
+				// frame. It is gated on the row being a todo — nothing here can end a
+				// session (DESIGN.md §8) — and it reports the text it removed, which is
+				// the only record of it once it is gone (§12).
+				if r, ok := f.ByKey(sel); ok {
+					if id, isTodo := r.TodoID(); isTodo {
+						sel, notice = "", finishTodo(id)
+						refresh()
+						continue
+					}
+					notice = "d finishes a todo; this row is a session"
+				}
 			case keyEnter:
 				if r, ok := f.ByKey(sel); ok {
 					// Focus the target and keep running. cmux switches the visible tab;
@@ -127,6 +175,12 @@ func Run(interval time.Duration) {
 			}
 			draw()
 		case <-tick.C:
+			// Capture has no timeout, deliberately: §7's 10s return exists so a stray arrow
+			// key cannot leave the tab paused forever, and typing is not stray. A timer that
+			// discarded half-typed text would be the one destructive thing in this loop.
+			if typing {
+				continue
+			}
 			// Refresh pauses while a selection is live so rows cannot re-sort under the
 			// cursor; the timeout guarantees it always returns to ambient.
 			if sel != "" {

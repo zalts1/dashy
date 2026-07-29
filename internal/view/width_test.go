@@ -35,7 +35,11 @@ func wideFleet() board.Fleet {
 // terminal scrolls, and the header is the first thing gone (EVIDENCE.md §9.10). So no
 // line may exceed the width — at any width, in any state.
 func TestNoLineExceedsTheTerminalWidth(t *testing.T) {
-	states := []UI{{}, {Sel: "S-OLD", Paused: true}, {Notice: "cmux focus refused"}}
+	states := []UI{{}, {Sel: "S-OLD", Paused: true}, {Notice: "cmux focus refused"},
+		// A typed line is unbounded user input on the one line the layout does not size,
+		// so it belongs in this matrix as much as any workspace name does.
+		{Typing: true, Paused: true},
+		{Typing: true, Paused: true, Input: strings.Repeat("reply to the ACME export request ", 12)}}
 	for _, cols := range []int{40, 52, 58, 64, 72, 80, 90, 100, 118, 140, 200, 300} {
 		for _, rows := range []int{12, 20, 24, 44, 60} {
 			for _, u := range states {

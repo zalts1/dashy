@@ -33,6 +33,11 @@ type UI struct {
 	Sel    string // selected row key (the session id), "" when ambient
 	Paused bool
 	Notice string // shown in the header; the board tab may be hidden when it appears
+	// Typing is the one mode this UI has: capturing a todo. Input is what has been
+	// typed so far. It occupies the legend's line rather than a new one, so entering the
+	// mode cannot change the frame's height (§12).
+	Typing bool
+	Input  string
 }
 
 // Frame renders the screen so that it always fits the terminal.
@@ -42,31 +47,48 @@ type UI struct {
 // the first thing written — was the first thing lost. Rendering and measuring is
 // cheap, and it cannot drift out of step with the layout the way a constant did.
 func Frame(f board.Fleet, s Screen, u UI) string {
-	_, _, quiet := f.Bands()
-	keepQuiet := len(quiet)
+	_, _, todo, quiet := f.Bands()
+	keepQuiet, keepTodo := len(quiet), len(todo)
 	out := ""
-	// The quiet tail is the designed absorber, so it gives way first. Each pass cuts by
-	// the exact overflow, so this converges in two or three.
-	for range 6 {
-		shown, hidden := pickQuiet(quiet, keepQuiet, u.Sel)
-		out = compose(f, s, u, shown, hidden)
+	// Absorbers in order of expendability, each cutting by the exact overflow so a stage
+	// converges in one pass: the quiet tail to its floor, then the list to its own, then
+	// either of them to nothing. **A band collapsed to its count still reports** — "QUIET
+	// · 14" with no rows says what matters — so shedding rows always beats letting clip
+	// take a whole band off the bottom.
+	//
+	// The list earns its position this way rather than by hiding from the collapse. It
+	// used to be drawn above QUIET purely so the trim could not reach it, which put it
+	// inside a ranking of process states it is not part of (EVIDENCE.md §9.19).
+	stages := []struct {
+		keep  *int
+		floor int
+	}{
+		{&keepQuiet, minQuietRows}, {&keepTodo, minTodoRows}, {&keepQuiet, 0}, {&keepTodo, 0},
+	}
+	for range 10 {
+		out = compose(f, s, u, pick(quiet, keepQuiet, u.Sel), pick(todo, keepTodo, u.Sel))
 		over := height(out) - s.Rows
-		switch {
-		case over <= 0:
+		if over <= 0 {
 			return out
-		case keepQuiet > minQuietRows:
-			keepQuiet = max(minQuietRows, keepQuiet-over)
-		default:
-			// A tab too short even for the floor. Cut the bottom rather than let the
-			// terminal cut the top: losing the legend costs a key, losing the header
-			// costs the clock and the blocked count.
+		}
+		shrunk := false
+		for _, st := range stages {
+			if *st.keep > st.floor {
+				*st.keep, shrunk = max(st.floor, *st.keep-over), true
+				break
+			}
+		}
+		if !shrunk {
+			// A tab too short even for two count lines. Cut the bottom rather than let the
+			// terminal cut the top: losing the legend costs a key, losing the header costs
+			// the clock and the blocked count.
 			return clip(out, s.Rows)
 		}
 	}
 	return clip(out, s.Rows)
 }
 
-func compose(f board.Fleet, s Screen, u UI, quiet []board.Row, hiddenQuiet int) string {
+func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
 	var b bytes.Buffer
 	labelW, tailW, bars := columns(f, s.Cols)
 	// The columns between a label and its duration: the bar, the warn mark, and the
@@ -75,7 +97,7 @@ func compose(f board.Fleet, s Screen, u UI, quiet []board.Row, hiddenQuiet int) 
 	if bars {
 		midCols = barCells + 4
 	}
-	blocked, working, _ := f.Bands()
+	blocked, working, _, _ := f.Bands()
 
 	b.WriteString("\n" + header(f, s, u) + "\n\n")
 
@@ -91,7 +113,9 @@ func compose(f board.Fleet, s Screen, u UI, quiet []board.Row, hiddenQuiet int) 
 		strings.Repeat(" ", midCols)+fmt.Sprintf("%*s", idleW, "IDLE")+"  "+
 		cut(wsHeader, tailW)) + "\n")
 
-	line := func(state, label string, showBar bool, r board.Row) string {
+	// when and tail are passed rather than derived, because a todo row states a lifetime
+	// and belongs to no workspace, while a session row states a gap and does (§9.19).
+	line := func(state, label string, showBar bool, r board.Row, when, tail string) string {
 		warn := " "
 		if r.Stale {
 			warn = fg(statusWarning, "⚠")
@@ -111,8 +135,12 @@ func compose(f board.Fleet, s Screen, u UI, quiet []board.Row, hiddenQuiet int) 
 			lead, text = " "+fg(inkPrimary, "▸")+" ", fg(inkPrimary, pad(label, labelW))
 		}
 		return lead + state + text + mid +
-			body(fmt.Sprintf("%*s", idleW, humanize(r.Idle))) + "  " +
-			dim(cut(r.Workspace, tailW)) + "\n"
+			body(fmt.Sprintf("%*s", idleW, when)) + "  " +
+			dim(cut(tail, tailW)) + "\n"
+	}
+	// row is the session form of line: idle time as a gap, and the workspace it lives in.
+	row := func(state, label string, showBar bool, r board.Row) string {
+		return line(state, label, showBar, r, humanize(r.Idle), r.Workspace)
 	}
 
 	if len(blocked) > 0 {
@@ -120,7 +148,7 @@ func compose(f board.Fleet, s Screen, u UI, quiet []board.Row, hiddenQuiet int) 
 		for _, r := range blocked {
 			// Blocked rows carry the bar too: the same quantity on the same absolute
 			// scale, so "waiting 3h" is comparable to anything in QUIET.
-			b.WriteString(line(mark(badge(inkPrimary, statusCritical, " BLOCKED "), 9), r.Label, true, r))
+			b.WriteString(row(mark(badge(inkPrimary, statusCritical, " BLOCKED "), 9), r.Label, true, r))
 		}
 	} else {
 		b.WriteString("\n  " + dim("NEEDS YOU") + "   " + dim("nothing blocked") + "\n")
@@ -130,30 +158,48 @@ func compose(f board.Fleet, s Screen, u UI, quiet []board.Row, hiddenQuiet int) 
 		b.WriteString("\n  " + fg(statusGood, "WORKING") + " " + dim(fmt.Sprintf("· %d", len(working))) + "\n")
 		for _, r := range working {
 			// No bar: for a working agent elapsed time is progress, not rot.
-			b.WriteString(line(mark(fg(statusGood, "◐"), 1), r.Label, false, r))
+			b.WriteString(row(mark(fg(statusGood, "◐"), 1), r.Label, false, r))
 		}
 	}
 
-	if total := len(quiet) + hiddenQuiet; total > 0 {
+	if total := len(quiet.rows) + quiet.hidden; total > 0 {
 		b.WriteString("\n  " + fg(inkSecondary, "QUIET") + " " + dim(fmt.Sprintf("· %d", total)) + "\n")
-		for _, r := range quiet {
-			b.WriteString(line(mark(dim("○"), 1), r.Label, true, r))
+		for _, r := range quiet.rows {
+			b.WriteString(row(mark(dim("○"), 1), r.Label, true, r))
 		}
 		// The count stays visible so the backlog can never hide by being collapsed — and
 		// it is a count, not a control: nothing expands the band, and the chevron this
 		// used to draw promised otherwise (§9.14).
-		if hiddenQuiet > 0 {
-			b.WriteString("   " + strings.Repeat(" ", gutter) + dim(fmt.Sprintf("+%d quiet", hiddenQuiet)) + "\n")
+		if quiet.hidden > 0 {
+			b.WriteString("   " + strings.Repeat(" ", gutter) + dim(fmt.Sprintf("+%d quiet", quiet.hidden)) + "\n")
+		}
+	}
+
+	// Last, after the whole fleet: a todo is not a state a session can be in, and drawing
+	// it between the bands put it inside a ranking of process states (§9.19). It survives
+	// a short tab by having a floor of its own, not by sitting where the collapse cannot
+	// reach.
+	if total := len(todo.rows) + todo.hidden; total > 0 {
+		cap := ""
+		if f.TodoCap > 0 {
+			cap = fmt.Sprintf(" of %d", f.TodoCap)
+		}
+		b.WriteString("\n  " + fg(inkSecondary, "TODO") + " " +
+			dim(fmt.Sprintf("· %d%s", total, cap)) + "\n")
+		for _, r := range todo.rows {
+			// No bar, and no workspace: a bar means rot on the idle scale, and a todo's age
+			// is a lifetime that only grows rather than a gap that resets. The mark is an
+			// empty box — nothing is running, and nothing has been done.
+			b.WriteString(line(mark(fg(inkSecondary, "▫"), 1), r.Label, false, r, since(r.Idle), ""))
+		}
+		if todo.hidden > 0 {
+			b.WriteString("   " + strings.Repeat(" ", gutter) + dim(fmt.Sprintf("+%d todo", todo.hidden)) + "\n")
 		}
 	}
 
 	// A value scale without a key is decoration — and a key without its scale is noise,
 	// so the legend goes wherever the bars went.
-	legend := ""
-	if bars {
-		legend = dim("elapsed ") + scaleLegend()
-	}
-	b.WriteString("\n  " + legend + dim("   ctrl-c to exit") + "\n")
+	b.WriteString("\n  " + bottom(f, u, bars) + "\n")
 
 	// Belt to the arithmetic's braces: nothing may wrap, whatever the width.
 	lines := strings.Split(b.String(), "\n")
@@ -161,6 +207,33 @@ func compose(f board.Fleet, s Screen, u UI, quiet []board.Row, hiddenQuiet int) 
 		lines[i] = clampLine(l, s.Cols)
 	}
 	return strings.Join(lines, "\n")
+}
+
+// bottom is the frame's last line, and it is one line in every state: the scale legend
+// plus the keys while ambient, the capture prompt while typing. Same slot, so entering
+// the mode cannot change the height and collapse the quiet tail under the typist (§12).
+//
+// A value scale without a key is decoration — and a key without its scale is noise, so
+// the legend goes wherever the bars went.
+func bottom(f board.Fleet, u UI, bars bool) string {
+	if u.Typing {
+		// The caret is what proves the mode is on before the first keystroke lands.
+		return dim("new todo  ") + fg(inkPrimary, u.Input) + fg(inkPrimary, "▌")
+	}
+	legend := ""
+	if bars {
+		legend = dim("elapsed ") + scaleLegend()
+	}
+	// `a` always works, so it is always named. `d` fires on a selected todo and nowhere
+	// else, so it is named only there: §9.14 was a chevron promising a key that did not
+	// exist, and the same rule read forwards means an available key should say so.
+	hints := dim("   a new todo")
+	if r, ok := f.ByKey(u.Sel); ok {
+		if _, isTodo := r.TodoID(); isTodo {
+			hints += dim("   d done")
+		}
+	}
+	return legend + hints + dim("   ctrl-c to exit")
 }
 
 // kpiStrip is the sub-second read, and blocked is the only thing in it allowed to
