@@ -33,6 +33,10 @@ session's cmux tab **and leaves board running**, `a` adds a todo, `t` jumps to t
 of the list, `d` finishes the selected one, `Esc` clears, `q` or `Ctrl-C` exits. That is the whole keymap — no
 sorting, no filtering.
 
+The letter keys also work on the Hebrew layout, on the same physical keys — `א` for the
+list, `ש` to add, `ג` to finish, `ח`/`ל` to move. `q` is the exception: quit from a
+non-Latin layout with `Ctrl-C`.
+
 `a` opens a prompt on the bottom line: type, `Enter` adds, `Esc` cancels, and empty text
 is a cancel. It is the one mode board has, and it stays deliberately dumb — no cursor
 keys, just typing and backspace. **Nothing times out while you type**; the selection's

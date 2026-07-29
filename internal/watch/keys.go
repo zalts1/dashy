@@ -99,19 +99,25 @@ func decode(s string) []event {
 
 // command is the letter half of the keymap. Every one of these is also text, and which
 // reading applies is the loop's decision, not this function's.
+//
+// The Hebrew runes are the *same physical keys* on the Israeli layout. A keymap of single
+// letters is otherwise dead in any non-Latin input source, and telling someone to switch
+// layouts to press one key is not a keymap. They are unambiguous because none of them can
+// be produced by a Latin layout — unlike `q`, whose Hebrew position emits `/`, which a
+// Latin user does have a key for, so quitting there stays ctrl-c.
 func command(r rune) key {
 	switch r {
-	case 'k':
+	case 'k', 'ל':
 		return keyUp
-	case 'j':
+	case 'j', 'ח':
 		return keyDown
 	case 'q':
 		return keyQuit
-	case 'd':
+	case 'd', 'ג':
 		return keyDone
-	case 'a':
+	case 'a', 'ש':
 		return keyAdd
-	case 't':
+	case 't', 'א':
 		return keyList
 	}
 	return keyNone

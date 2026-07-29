@@ -383,6 +383,12 @@ under the cursor and Enter jumps to the wrong session.
   establishes the pattern: streaming and interacting are two modes and the boundary
   should be stated, not hidden. A 10s no-keypress timeout returns to ambient, so the
   tab can never get stuck.
+- **The letter keys are mapped on the Hebrew layout too**, to the same physical keys
+  (`א ש ג ח ל`). A keymap of single letters is otherwise dead in any non-Latin input
+  source — for a bilingual user half the day — and telling someone to switch layouts to
+  press one key is not a keymap. Those runes cannot come from a Latin layout, so nothing
+  is ambiguous; `q` is the exception, because its Hebrew position emits `/`, which a
+  Latin user does have a key for. Quitting from a non-Latin layout is ctrl-c.
 - **Stepping clamps, it does not wrap.** Wrapping past the bottom of QUIET lands on a
   blocked session — the one row you must never act on by accident.
 
