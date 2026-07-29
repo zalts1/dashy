@@ -21,6 +21,7 @@ func TestDecodeCarriesCommandAndText(t *testing.T) {
 		{"q", keyQuit, "q"},
 		{"d", keyDone, "d"},
 		{"a", keyAdd, "a"},
+		{"t", keyList, "t"},
 		{"\r", keyEnter, ""},
 		{"\x1b", keyEscape, ""},
 		{"\x7f", keyBackspace, ""},

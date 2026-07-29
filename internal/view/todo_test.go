@@ -313,3 +313,26 @@ func TestTableCountsTodosApartFromSessions(t *testing.T) {
 		t.Errorf("empty todo list still drew a cell:\n%s", plain)
 	}
 }
+
+// Walking to the list means stepping past every quiet row, which on a real fleet is
+// fifteen presses to reach a note. `t` goes straight there (DESIGN.md §12).
+func TestFirstTodoIsTheListsEntryPoint(t *testing.T) {
+	if got := FirstTodo(withTodos(fixture(), "oldest", "newer")); got != "todo:t0" {
+		t.Errorf("FirstTodo = %q, want the oldest todo — the top of the list", got)
+	}
+	// Nothing to jump to is empty, not the first row of something else: an empty string
+	// is the ambient selection, so the caller can report instead of moving the cursor.
+	if got := FirstTodo(fixture()); got != "" {
+		t.Errorf("FirstTodo on a fleet with no todos = %q, want empty", got)
+	}
+}
+
+// §9.14: never name a key that does nothing. `t` exists only when the list does.
+func TestTheListKeyIsAdvertisedOnlyWhenThereIsAList(t *testing.T) {
+	if out := Frame(fixture(), screen(44, 130), UI{}); strings.Contains(out, "t list") {
+		t.Error("the list key is advertised with no todos to jump to")
+	}
+	if out := Frame(withTodos(fixture(), "a todo"), screen(44, 130), UI{}); !strings.Contains(out, "t list") {
+		t.Error("the list key is not advertised when there is a list")
+	}
+}

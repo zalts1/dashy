@@ -79,7 +79,7 @@ protecting against, because that is what determines whether it still applies.
 | not a task manager, no kanban | scope creep into Linear's job | **keep** |
 | ~300 lines | scope creep | **restated** — see below |
 | under 200ms | felt latency on a one-shot command | **restated** — see below |
-| three actions, total | modes and menus to learn | **restated** — two actions |
+| three actions, total | modes and menus to learn | **restated** — jump, label, todo |
 | no TUI | building something you must keep open | **retired** — see below |
 | three-week trial before v2 | shipping on speculation | **retired**, superseded |
 | notification fan-out in v1 | missing work while away | **parked**, mechanism inert (§10.1) |
@@ -104,8 +104,8 @@ ambient tab is the primary surface anyway, where 220ms per 10s is a 2% duty cycl
 **"No TUI" is retired in letter, kept in spirit.** The ambient dashboard *is* a TUI
 and was asked for directly. What the constraint was actually protecting — no modes,
 nothing to learn, and never *requiring* the app to be open — is still enforced: the
-keymap is five keys, ctrl-c exits, and the one-shot table stays first-class so board
-is useful without a dedicated tab.
+keymap is a handful of single keys that each do one thing, ctrl-c exits, and the
+one-shot table stays first-class so board is useful without a dedicated tab.
 
 **"Three actions" is now three: jump, label, and todo.** Dismiss was rejected (§8).
 Todos add capture and removal (§12) — the third action, entered here as this rule
@@ -571,6 +571,9 @@ already in.
 
 - `a` opens the prompt, `Enter` adds, `Esc` cancels. Empty text is a cancel, not an
   error — the mode is one keystroke away, so opening it by accident must cost nothing.
+- `t` selects the top of the list. Stepping there means walking past every quiet row —
+  fifteen presses on a real fleet — and a list you have to travel to is one you stop
+  acting on. Like `d`, it is named in the legend only where it does something (§9.14).
 - `d` on a selected todo row removes it. This is the one place removing a row is not
   the lie dismiss was (§8): dismiss hid a session that stayed alive, whereas a todo has
   nothing behind it, so removal is the honest end of it. Done and dropped are the same

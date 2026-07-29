@@ -138,6 +138,14 @@ func Run(interval time.Duration) {
 				}
 			case keyEscape:
 				sel = ""
+			case keyList:
+				// Straight to the top of the list: stepping there means walking past every
+				// quiet row (DESIGN.md §12).
+				if k := view.FirstTodo(f); k != "" {
+					sel, notice = k, ""
+				} else {
+					notice = "no todos · a to add one"
+				}
 			case keyUp:
 				sel = view.Step(view.DisplayOrder(f), sel, -1)
 			case keyDown:

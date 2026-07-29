@@ -228,6 +228,9 @@ func bottom(f board.Fleet, u UI, bars bool) string {
 	// else, so it is named only there: §9.14 was a chevron promising a key that did not
 	// exist, and the same rule read forwards means an available key should say so.
 	hints := dim("   a new todo")
+	if FirstTodo(f) != "" {
+		hints += dim("   t list")
+	}
 	if r, ok := f.ByKey(u.Sel); ok {
 		if _, isTodo := r.TodoID(); isTodo {
 			hints += dim("   d done")

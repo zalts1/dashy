@@ -16,6 +16,7 @@ const (
 	keyQuit
 	keyDone
 	keyAdd
+	keyList
 	keyBackspace
 )
 
@@ -110,6 +111,8 @@ func command(r rune) key {
 		return keyDone
 	case 'a':
 		return keyAdd
+	case 't':
+		return keyList
 	}
 	return keyNone
 }

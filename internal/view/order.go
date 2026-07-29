@@ -55,3 +55,15 @@ func Step(order []string, sel string, delta int) string {
 	}
 	return order[0] // the selected session vanished between ticks
 }
+
+// FirstTodo is the key of the oldest todo, or empty when there is no list. Stepping to
+// the list means walking past every quiet row — fifteen presses on a real fleet — so `t`
+// goes straight to the top of it. Empty rather than a fallback: an empty selection is the
+// ambient state, so the caller reports instead of moving the cursor somewhere arbitrary.
+func FirstTodo(f board.Fleet) string {
+	_, _, todo, _ := f.Bands()
+	if len(todo) == 0 {
+		return ""
+	}
+	return todo[0].Key
+}
