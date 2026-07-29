@@ -29,7 +29,7 @@ grep -n '^#\+ ' DESIGN.md        # § → line, then Read with offset/limit
 | 7 | interaction: jump, keymap, identity-not-position, the explicit pause | `watch/`, `view/order.go`, `cmux/focus.go` |
 | 8 | safety invariants — nothing ends a session | any write action |
 | 9 | **evidence log — in `EVIDENCE.md`** | the finding that constrains the code you are touching |
-| 10 | deferred ideas, each with the trigger that would revive it | before building one of them |
+| 10 | deferred ideas, each with the trigger that would revive it | before building one of them, and §10.8 before touching the keymap |
 | 11 | the pure seams and their fixture shapes | writing any test |
 | 12 | todos: a row with no process, the cap of 10, where capture and removal each live | `config/`, `board/build.go`, the `TODO` band |
 
@@ -514,6 +514,25 @@ times in two months, none inside the window the band showed. If that changes, th
 cheap form is **one KPI cell that appears only when non-zero**, not a band; and it
 still has to answer "what do I do about it", which for a dead session is nothing.
 Reviving the rows needs a new answer to §5's table, not a new filter.
+
+### 10.8 Layout-independent keys — considered, declined (2026-07-29)
+
+A keymap of single letters is dead in any non-Latin input source, and the Hebrew layout is
+handled by mapping the same physical keys (§7). Two ways to generalise, both declined:
+
+- **The kitty keyboard protocol** reports the base-layout key alongside the typed rune,
+  which is the only mechanism that actually recovers "which key was pressed" — a terminal
+  otherwise receives characters, not keycodes. It needs `CSI > 1 u` negotiation, a CSI-u
+  parser, and a fallback for the terminals that decline. Too much machinery for six keys.
+- **Tab for the list and Backspace/Delete for finishing** are layout-invariant, and
+  arguably better bindings than `t` and `d` on their own merits. Declined only because the
+  letters plus §7's Hebrew mapping already cover the layouts in use here.
+
+*Trigger:* a third input source, or a second person using this. The second bullet is the
+cheap half and does not need the first.
+
+*Not to do:* grow the layout table to Russian, Arabic, Greek and so on. It is unbounded,
+and every entry is a guess about a layout nobody here can verify.
 
 ---
 
