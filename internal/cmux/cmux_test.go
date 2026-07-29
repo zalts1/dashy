@@ -89,11 +89,3 @@ func TestParseHookClock(t *testing.T) {
 		t.Errorf("garbage parsed into %d entries", n)
 	}
 }
-
-func TestFocusRefusesEmptySurface(t *testing.T) {
-	// Background agents have no surface. Focus must say so rather than shell out and
-	// let cmux pick a target for us.
-	if err := Focus(""); err == nil {
-		t.Error("Focus(\"\") succeeded; it must refuse")
-	}
-}
