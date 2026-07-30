@@ -360,7 +360,7 @@ half-second, which is why the reading "lead with `3 NEED YOU`" was rejected.
 
     board jump <substring>     from any tab, matches label or workspace
     ↑/↓ or k/j then Enter      from inside board watch
-    Esc clears · q or ctrl-c exits
+    z folds QUIET to its count · Esc clears · q or ctrl-c exits
 
 **Why this is not redundant with `claude agents`.** Agent View covers a lot of this
 ground and covers it well — a native status, plus select → peek → reply → attach,
@@ -389,11 +389,17 @@ under the cursor and Enter jumps to the wrong session.
   should be stated, not hidden. A 10s no-keypress timeout returns to ambient, so the
   tab can never get stuck.
 - **The letter keys are mapped on the Hebrew layout too**, to the same physical keys
-  (`א ש ג ח ל`). A keymap of single letters is otherwise dead in any non-Latin input
+  (`א ש ג ח ל ז`). A keymap of single letters is otherwise dead in any non-Latin input
   source — for a bilingual user half the day — and telling someone to switch layouts to
   press one key is not a keymap. Those runes cannot come from a Latin layout, so nothing
   is ambiguous; `q` is the exception, because its Hebrew position emits `/`, which a
   Latin user does have a key for. Quitting from a non-Latin layout is ctrl-c.
+- **The fold is the one key that changes what is drawn, not where the cursor is.** QUIET
+  opens by default and `z` folds it to its header and count; the rows it frees go to the
+  bands where something is happening. It is the reader's, so it holds across refreshes and
+  is not persisted — a fold is about this sitting at the tab, not a preference. Folding
+  clears a selection inside the band, and folded rows leave `DisplayOrder`: the order
+  follows the screen, so a row the frame is not drawing cannot be a stop (§9.21).
 - **Stepping clamps, it does not wrap.** Wrapping past the bottom of QUIET lands on a
   blocked session — the one row you must never act on by accident.
 

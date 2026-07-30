@@ -17,8 +17,14 @@ import "board/internal/board"
 // jobs — it picks the jump target and it lifts a row out of the collapsed quiet tail —
 // so skipping them made a row that the frame counts and can never draw (§9.14). Enter
 // on one reports that there is no tab.
-func DisplayOrder(f board.Fleet) []string {
+// A folded quiet band contributes no stops: stepping into a row the frame is not drawing
+// puts the caret somewhere invisible and points Enter at it. That is the same rule read
+// the other way round — the order follows the screen, and a folded row is not on it.
+func DisplayOrder(f board.Fleet, u UI) []string {
 	blocked, working, todo, quiet := f.Bands()
+	if u.QuietCollapsed {
+		quiet = nil
+	}
 	var out []string
 	for _, group := range [][]board.Row{blocked, working, quiet, todo} {
 		for _, r := range group {

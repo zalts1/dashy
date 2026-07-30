@@ -38,6 +38,10 @@ type UI struct {
 	// mode cannot change the frame's height (§12).
 	Typing bool
 	Input  string
+	// QuietCollapsed folds the quiet band to its count. It defaults to false — the band
+	// starts open, and folding is something the viewer asks for. Distinct from the fit
+	// loop's trim, which is the terminal's height talking, not the reader (§9.21).
+	QuietCollapsed bool
 }
 
 // Frame renders the screen so that it always fits the terminal.
@@ -49,6 +53,11 @@ type UI struct {
 func Frame(f board.Fleet, s Screen, u UI) string {
 	_, _, todo, quiet := f.Bands()
 	keepQuiet, keepTodo := len(quiet), len(todo)
+	// A folded band draws no rows, so trimming its tail would shed nothing and the stages
+	// below would spin without converging. Zero here makes both quiet stages inert.
+	if u.QuietCollapsed {
+		keepQuiet = 0
+	}
 	out := ""
 	// Absorbers in order of expendability, each cutting by the exact overflow so a stage
 	// converges in one pass: the quiet tail to its floor, then the list to its own, then
@@ -163,14 +172,25 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
 	}
 
 	if total := len(quiet.rows) + quiet.hidden; total > 0 {
-		b.WriteString("\n  " + fg(inkSecondary, "QUIET") + " " + dim(fmt.Sprintf("· %d", total)) + "\n")
-		for _, r := range quiet.rows {
-			b.WriteString(row(mark(dim("○"), 1), r.Label, true, r))
+		head := "\n  " + fg(inkSecondary, "QUIET") + " " + dim(fmt.Sprintf("· %d", total))
+		// Folded, the band costs one line and still states its size. `collapsed` is what
+		// separates the two ways rows can be missing: this one the reader chose, the trim
+		// below is the terminal's height. Neither may be silent (§9.14).
+		if u.QuietCollapsed {
+			b.WriteString(head + dim(" · collapsed") + "\n")
+		} else {
+			b.WriteString(head + "\n")
+			for _, r := range quiet.rows {
+				b.WriteString(row(mark(dim("○"), 1), r.Label, true, r))
+			}
 		}
-		// The count stays visible so the backlog can never hide by being collapsed — and
-		// it is a count, not a control: nothing expands the band, and the chevron this
-		// used to draw promised otherwise (§9.14).
-		if quiet.hidden > 0 {
+		// The count stays visible so the backlog can never hide by being collapsed. It is
+		// still a count and not a control — the chevron that used to sit here promised a key
+		// on the row itself, and the key that exists now is named in the legend where the
+		// other keys are, and works from anywhere (§9.14, §9.21).
+		//
+		// Folded, this line would restate the header's own count as "+13 quiet".
+		if quiet.hidden > 0 && !u.QuietCollapsed {
 			b.WriteString("   " + strings.Repeat(" ", gutter) + dim(fmt.Sprintf("+%d quiet", quiet.hidden)) + "\n")
 		}
 	}
@@ -238,6 +258,15 @@ func bottom(f board.Fleet, u UI, bars bool) string {
 	hints := dim("   a new todo")
 	if FirstTodo(f) != "" {
 		hints += dim("   t list")
+	}
+	// Named only when there is a band to fold, and named in both states: once the rows are
+	// folded away this is the only route back to them (§9.14).
+	if _, _, _, quiet := f.Bands(); len(quiet) > 0 {
+		if u.QuietCollapsed {
+			hints += dim("   z unfold")
+		} else {
+			hints += dim("   z fold")
+		}
 	}
 	if r, ok := f.ByKey(u.Sel); ok {
 		if _, isTodo := r.TodoID(); isTodo {

@@ -145,6 +145,36 @@ func TestLabelPrecedence(t *testing.T) {
 	}
 }
 
+// A label is passed through with its tone intact, at every level of the precedence.
+// Board briefly title-cased the all-caps ones to stop them out-shouting their band; the
+// case against that is that caps are a choice — someone naming a tab TASKS in caps may
+// well mean it — and a reporting surface does not get to overrule the name (§9.20).
+func TestLabelsKeepTheirTone(t *testing.T) {
+	for _, in := range []string{
+		"TASKS",
+		"DLP/EMAIL MGMNT REVIEW",
+		"ROLLOUT STRAT",
+		"PT.7",
+		"merge app#1497",
+		"watch CI to green?",
+	} {
+		t.Run(in, func(t *testing.T) {
+			// Claude's own string and the tab title, the two inherited levels — a user's
+			// own label is covered by TestLabelPrecedence.
+			job := one(t, snap(interactive(), func(s *Snapshot) { s.JobLabels["sess-1"] = in })).Label
+			if job != in {
+				t.Errorf("job label = %q, want %q unchanged", job, in)
+			}
+			tab := one(t, snap(interactive(), func(s *Snapshot) {
+				s.Titles[100] = cmux.Titles{ID: "S-1", Workspace: "APP", Surface: in}
+			})).Label
+			if tab != in {
+				t.Errorf("tab title = %q, want %q unchanged", tab, in)
+			}
+		})
+	}
+}
+
 func TestIdleAndStale(t *testing.T) {
 	clock := func(d time.Duration) func(*Snapshot) {
 		return func(s *Snapshot) { s.Clock["sess-1"] = now.Add(d) }

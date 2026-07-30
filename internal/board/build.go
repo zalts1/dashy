@@ -104,6 +104,10 @@ func Build(s Snapshot, now time.Time) Fleet {
 
 // label picks the most specific name available: what the user called it, then what
 // Claude Code calls it, then the tab title, then the directory.
+//
+// Every level is passed through verbatim, including the all-caps ones. Board does not
+// restyle a name it was given: caps may be deliberate, and the board is reporting on
+// the fleet, not editing it (§9.20).
 func label(a claude.Agent, t cmux.Titles, userLabels, jobLabels map[string]string) string {
 	if l := userLabels[t.ID]; l != "" {
 		return l

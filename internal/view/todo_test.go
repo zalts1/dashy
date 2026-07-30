@@ -183,7 +183,7 @@ func TestTodosSurviveTheCollapse(t *testing.T) {
 // Navigation follows the screen, so the list is the last stop — walking down past the
 // quiet tail arrives at the todos (§9.19).
 func TestDisplayOrderEndsWithTheTodoList(t *testing.T) {
-	got := DisplayOrder(withTodos(fixture(), "a todo"))
+	got := DisplayOrder(withTodos(fixture(), "a todo"), UI{})
 	want := []string{"K-BLK", "K-BG", "K-RUN", "K-OLD", "K-NEW", "todo:t0"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("display order: got %v want %v", got, want)

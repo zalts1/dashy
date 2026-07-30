@@ -178,3 +178,98 @@ func TestColumnWidths(t *testing.T) {
 		t.Errorf("tail column = %d, want %d", got, len("platform-migration"))
 	}
 }
+
+// The quiet band folds on a key, and the fold is the viewer's, not the fit loop's: it
+// starts expanded, and what it costs when folded is one line. The count stays on that
+// line because a band collapsed to its count still reports — nothing may leave the frame
+// silently (§9.14).
+func TestQuietFolds(t *testing.T) {
+	f := fixture()
+	open := Frame(f, screen(44, 130), UI{})
+	folded := Frame(f, screen(44, 130), UI{QuietCollapsed: true})
+
+	t.Run("expanded is the default", func(t *testing.T) {
+		if !strings.Contains(open, "rotting thing") || !strings.Contains(open, "fresh thing") {
+			t.Error("quiet rows are not drawn without the fold being asked for")
+		}
+		if strings.Contains(open, "collapsed") {
+			t.Error("an unfolded band says it is collapsed")
+		}
+	})
+
+	t.Run("folded draws the count and no rows", func(t *testing.T) {
+		for _, label := range []string{"rotting thing", "fresh thing"} {
+			if strings.Contains(folded, label) {
+				t.Errorf("folded band still draws %q", label)
+			}
+		}
+		if !strings.Contains(folded, "QUIET") {
+			t.Error("the band header went with the rows")
+		}
+		// Two quiet rows in the fixture, and the fold must not lie about how many.
+		if !regexp.MustCompile(`QUIET.*2`).MatchString(folded) {
+			t.Error("folded band does not report its count")
+		}
+		if !strings.Contains(folded, "collapsed") {
+			t.Error("folded band does not say the rows are hidden by choice")
+		}
+	})
+
+	t.Run("folding buys screen rows back", func(t *testing.T) {
+		if height(folded) >= height(open) {
+			t.Errorf("folded frame is %d lines, open is %d — the fold bought nothing",
+				height(folded), height(open))
+		}
+	})
+
+	t.Run("the key is named in both states", func(t *testing.T) {
+		// §9.14: a key that exists should say so, and it is the only way to get the rows
+		// back once they are folded away.
+		if !strings.Contains(open, "z fold") {
+			t.Error("the fold key is not named while the band is open")
+		}
+		if !strings.Contains(folded, "z unfold") {
+			t.Error("the unfold key is not named while the band is folded")
+		}
+	})
+
+	t.Run("no quiet band, no key", func(t *testing.T) {
+		bare := board.Fleet{Rows: []board.Row{
+			{Key: "K-RUN", State: "running", Label: "busy thing", Workspace: "KILL", Rank: board.RankWorking},
+		}}
+		if strings.Contains(Frame(bare, screen(44, 130), UI{}), "fold") {
+			t.Error("a fold key offered for a band that is not there")
+		}
+	})
+}
+
+// Navigation follows the screen, so a folded row is not a stop. Stepping into a row the
+// frame is not drawing would put the caret somewhere invisible and point Enter at it.
+func TestFoldedRowsAreNotNavigationStops(t *testing.T) {
+	f := fixture()
+	open := DisplayOrder(f, UI{})
+	folded := DisplayOrder(f, UI{QuietCollapsed: true})
+	for _, k := range []string{"K-OLD", "K-NEW"} {
+		if !contains(open, k) {
+			t.Errorf("%s is not a stop while the band is open", k)
+		}
+		if contains(folded, k) {
+			t.Errorf("%s is still a stop while the band is folded", k)
+		}
+	}
+	// The other bands are untouched: folding QUIET must not cost the blocked rows.
+	for _, k := range []string{"K-BLK", "K-BG", "K-RUN"} {
+		if !contains(folded, k) {
+			t.Errorf("folding QUIET dropped %s from the order", k)
+		}
+	}
+}
+
+func contains(s []string, k string) bool {
+	for _, v := range s {
+		if v == k {
+			return true
+		}
+	}
+	return false
+}

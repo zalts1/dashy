@@ -87,14 +87,27 @@ func TestIdleRampBrightensWithAge(t *testing.T) {
 	}
 }
 
+// The legend is the key to the ramp, so it has to show every rung the table can
+// paint — exactly once. The marks are round durations for readability, but the rung
+// each one lands on comes out of idleScale, so a change to the scale or the ramp
+// silently re-pointed them: the round numbers were 1h/6h/1d/3d/7d, which mapped to
+// rungs 0,1,3,4,4 — one rung duplicated and one that rows were using left out of its
+// own key (EVIDENCE.md §9.20).
 func TestScaleLegendCoversTheRamp(t *testing.T) {
 	legend := scaleLegend()
-	for _, mark := range []string{"1h", "6h", "1d", "3d", "7d"} {
-		if !strings.Contains(legend, mark) {
-			t.Errorf("legend is missing the %s mark", mark)
+	for i, hex := range idleRamp {
+		if n := strings.Count(legend, swatch(hex)); n != 1 {
+			t.Errorf("rung %d (%s) appears %d times in the legend, want exactly 1", i, hex, n)
 		}
 	}
+	if n := strings.Count(legend, "▇"); n != len(idleRamp) {
+		t.Errorf("legend draws %d swatches for a ramp of %d rungs", n, len(idleRamp))
+	}
 }
+
+// swatch is one legend cell as it is painted, so the assertion above compares colour
+// rather than the label beside it.
+func swatch(hex string) string { return fg(hex, "▇") }
 
 // visibleWidth counts printable runes, ignoring the SGR escape sequences.
 func visibleWidth(s string) int {

@@ -30,12 +30,19 @@ so `board watch > frame.txt` works.
 
 Inside `board watch`: `↑`/`↓` (or `k`/`j`) select a row, `Enter` focuses that
 session's cmux tab **and leaves board running**, `a` adds a todo, `t` jumps to the top
-of the list, `d` finishes the selected one, `Esc` clears, `q` or `Ctrl-C` exits. That is the whole keymap — no
+of the list, `d` finishes the selected one, `z` folds the quiet band to its count,
+`Esc` clears, `q` or `Ctrl-C` exits. That is the whole keymap — no
 sorting, no filtering.
 
+`z` is the one thing that changes what the frame shows rather than where the cursor is.
+QUIET starts **open**; folded, it keeps its header and its count — `QUIET · 13 ·
+collapsed` — so the backlog can be out of the way without being out of sight, and the
+rows it gives back go to the bands where something is happening. Folded rows are not
+selectable, because `↑`/`↓` follow the screen.
+
 The letter keys also work on the Hebrew layout, on the same physical keys — `א` for the
-list, `ש` to add, `ג` to finish, `ח`/`ל` to move. `q` is the exception: quit from a
-non-Latin layout with `Ctrl-C`.
+list, `ש` to add, `ג` to finish, `ז` to fold, `ח`/`ל` to move. `q` is the exception: quit
+from a non-Latin layout with `Ctrl-C`.
 
 `a` opens a prompt on the bottom line: type, `Enter` adds, `Esc` cancels, and empty text
 is a cancel. It is the one mode board has, and it stays deliberately dumb — no cursor
