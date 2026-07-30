@@ -36,6 +36,7 @@ grep -n '^#\+ ' DESIGN.md        # § → line, then Read with offset/limit
 | 10 | deferred ideas, each with the trigger that would revive it | before building one of them, and §10.8 before touching the keymap |
 | 11 | the pure seams and their fixture shapes | writing any test |
 | 12 | todos: a row with no process, the cap of 10, where capture and removal each live | `config/`, `board/build.go`, the `TODO` band |
+| 13 | `version`: the tag is the release, upstreams reported verbatim, absence never raised | `version/`, `host/probe.go`, releasing |
 
 ---
 
@@ -567,6 +568,8 @@ The pure seams exist for this and must stay pure:
 | `parseAgents` | `claude` | JSON literal |
 | `hasCommand` | `hooks` | settings-shaped literals |
 | `AddTodo` / `DeleteTodo` / `FindTodo` | `config` | a `State` literal — the cap, the prefix match, the age |
+| `Format(Info)` | `version` | an `Info` literal — the interesting cases are the missing tools, which no fixture-free test could reach (§13) |
+| `firstLine` | `host` | stdout-shaped byte literals |
 
 `Collect`, `Agents` and `TitlesByPid` touch `$HOME` and subprocesses —
 keep logic out of them and test the parsers they feed. **Never write a test that
@@ -685,3 +688,35 @@ undone, the todo has to come back, with its original age intact.
 added, todos removed as done, and the median age at removal. A count that grows while
 the median sits at two weeks means this is a backlog wearing a dashboard's clothes, and
 it goes back to Linear (§9.17).
+
+---
+
+## 13. `version` — what is installed
+
+board is a third of its own bug report. The roster comes from `claude agents --json`
+and the tabs from cmux, neither is a documented contract, and both have moved before
+(§9.1, §9.3) — so "board is broken" is unanswerable without the two upstream versions
+beside board's own. That is the whole command: three lines, meant to be pasted.
+
+**There is no version constant and no `-ldflags`.** `runtime/debug.ReadBuildInfo`
+already knows: `go install ...@v0.1.0` stamps the tag, and since Go 1.24 a plain
+`go build` inside the repo synthesises a pseudo-version from VCS, with `+dirty` when
+the tree is modified. **The tag is the release** — nothing to bump, so nothing to
+forget to bump. A build with no VCS directory reports `(devel)`, which is a fact about
+how that binary was made and is passed through rather than laundered into `unknown`.
+
+The two upstream strings are printed **verbatim**. Parsing them to a bare number would
+put a parser over two undocumented surfaces on the far side of someone else's machine,
+which is §9.1's mistake in a new place; cmux's build number and commit are also the
+next thing anyone would ask for. The single exception is a leading token that repeats
+the label — `cmux --version` names itself and `claude --version` does not — dropped so
+the block reads, at a cost of one duplicated word if either format changes.
+
+**Absence is reported, never raised.** This is the command someone runs when nothing
+works, so a missing tool is `not found` and an unreadable board is `unknown`: distinct,
+because one sends you to an install and the other does not. It cannot fail and cannot
+print an empty field (§8, and §11 for the fixtures that pin it).
+
+`claude.Version` and `cmux.Version` live beside the other calls to their own binaries,
+so everything that shells out to a tool is greppable in one package; `host.Probe` holds
+the one shared judgement, which line of stdout to believe.

@@ -39,6 +39,7 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.20 | The legend was keyed by round numbers, not by rungs — a colour in use had no key. Label restyling tried and reverted: board reports names, it does not edit them | `view/scale.go`, `board/build.go` |
 | 9.21 | The quiet band folds on `z`, open by default — the fold is the reader's, and a folded row is not a navigation stop | `view/frame.go`, `view/order.go`, `watch/keys.go` |
 | 9.22 | `module board` built for a year and could never be installed — a module path is an address, and "no dependencies" hid it | `go.mod`, every import, `README.md`, `CLAUDE.md` |
+| 9.23 | The toolchain already stamps the version — `-ldflags` was cargo; and fixtures passed while the real output stuttered | `version/`, `host/probe.go`, `DESIGN.md` §13 |
 
 ---
 
@@ -626,3 +627,32 @@ passing, and the five golden frames byte-identical. A rename that changed a fram
 have meant it was not a rename. End-to-end `@latest` cannot be verified until the branch is
 pushed — the proof available locally is that the module path resolves and `go install
 ./cmd/board` produces `board`.
+
+### 9.23 The toolchain already knew the version; `-ldflags` was cargo (2026-07-30)
+
+`board version` was planned around the standard recipe: a `var version = "dev"` and
+`-ldflags "-X main.version=..."` to stamp it, because a plain `go build` is famously
+`(devel)`. Probed before being written, on Go 1.26:
+
+| built by | `debug.ReadBuildInfo().Main.Version` |
+|---|---|
+| `go build` in the repo | `v0.0.0-20260730194508-eae1cf35ad39+dirty` |
+| `go build` in a copy with no `.git` | `(devel)` |
+| `go install ...@latest` | the pseudo-version (§9.22 verified the path) |
+
+So the famous `(devel)` is only the no-VCS case, and every way board is actually
+installed self-reports with no build flags at all. The recipe would have added a
+constant to forget to bump and a flag to forget to pass, in exchange for nothing. **The
+tag is the release** (§13). Recorded because an absent `-ldflags` looks like an omission
+to the next reader, and the argument against it is not visible in the code.
+
+Two smaller corrections from probing rather than assuming:
+
+- **`cmux --version` exists**, printing `cmux 0.64.16 (96) [5321becb6]`. The plan was to
+  read `CFBundleShortVersionString` out of `/Applications/cmux.app`, which would have
+  hardcoded an install path and an app-bundle layout to learn the same string.
+- **The fixtures passed and the output was still wrong.** cmux names itself in its own
+  version string and claude does not, so the first real run printed `cmux   cmux
+  0.64.16`. Nothing in a table of made-up version strings suggests that; it took
+  building the binary and looking. The fix is pinned by a test now, but the fixtures did
+  not find it — §11's manual verification path is doing work the suite cannot.

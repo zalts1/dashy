@@ -23,6 +23,7 @@ running      build board: cmux fleet status CLI           INFRA                 
     board todo "<text>"       add one (max 10)
     board todo done <text|id> finish one, matched like jump
     board install-hooks       merge Stop + Notification hooks into ~/.claude/settings.json
+    board version             board's version, and claude's and cmux's
 
 `board watch` is meant to live in its own cmux tab. It needs no daemon and opens no
 port — the tab is the process. Piped or redirected it prints one frame and exits,
@@ -135,6 +136,19 @@ to report without both.
 
 No dependencies, no daemon, no port. `board watch` in a dedicated tab is the whole
 runtime.
+
+Substitute a tag for `@latest` to pin one — `@v0.1.0`. Either way the binary knows what
+it is, with no build flags, and reports what it depends on beside it:
+
+    $ board version
+    board  v0.1.0
+    claude 2.1.220 (Claude Code)
+    cmux   0.64.16 (96) [5321becb6]
+
+**Quote all three in a bug report.** board reads its roster from `claude agents --json`
+and its tabs from cmux, and neither is a documented contract — the two upstream lines
+are usually the answer. A tool that could not be asked reads `not found`; a board built
+outside a git tree reads `(devel)`, which says how it was built rather than hiding it.
 
 ## Config — `~/.board.json`
 
