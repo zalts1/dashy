@@ -12,11 +12,13 @@ import (
 
 	"github.com/zalts1/dashy/internal/config"
 	"github.com/zalts1/dashy/internal/hooks"
+	"github.com/zalts1/dashy/internal/version"
 	"github.com/zalts1/dashy/internal/watch"
 )
 
 const usage = `usage: board | board watch [interval] | board jump <substring> | board label "<text>"
-       board todo | board todo "<text>" | board todo done <text or id> | board install-hooks`
+       board todo | board todo "<text>" | board todo done <text or id>
+       board install-hooks | board version`
 
 func main() {
 	args := os.Args[1:]
@@ -41,6 +43,8 @@ func main() {
 		err = todo(args[1:])
 	case "install-hooks":
 		err = hooks.Install()
+	case "version":
+		fmt.Print(version.Format(version.Report()))
 	default:
 		fmt.Fprintln(os.Stderr, usage)
 		os.Exit(2)
