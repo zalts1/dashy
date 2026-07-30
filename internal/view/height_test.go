@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"board/internal/board"
+	"github.com/zalts1/dashy/internal/board"
 )
 
 // fleetOf builds a fleet with the given band sizes.

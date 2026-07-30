@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"board/internal/board"
+	"github.com/zalts1/dashy/internal/board"
 )
 
 // withTodos returns the standard fixture plus todo rows, oldest first as Build sorts

@@ -11,7 +11,7 @@ import (
 	"os"
 	"time"
 
-	"board/internal/host"
+	"github.com/zalts1/dashy/internal/host"
 )
 
 const (

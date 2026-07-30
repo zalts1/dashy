@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"board/internal/config"
+	"github.com/zalts1/dashy/internal/config"
 )
 
 // These are the loop's only writes, and they write user text, so they are pinned rather

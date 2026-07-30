@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"board/internal/config"
-	"board/internal/host"
+	"github.com/zalts1/dashy/internal/config"
+	"github.com/zalts1/dashy/internal/host"
 )
 
 // Install merges the Stop and Notification hooks into the user's Claude Code

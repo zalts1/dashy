@@ -14,10 +14,10 @@ import (
 	"syscall"
 	"time"
 
-	"board/internal/board"
-	"board/internal/cmux"
-	"board/internal/config"
-	"board/internal/view"
+	"github.com/zalts1/dashy/internal/board"
+	"github.com/zalts1/dashy/internal/cmux"
+	"github.com/zalts1/dashy/internal/config"
+	"github.com/zalts1/dashy/internal/view"
 )
 
 // selectTimeout returns the tab to ambient on its own, so a stray arrow key can

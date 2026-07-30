@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"board/internal/claude"
-	"board/internal/cmux"
+	"github.com/zalts1/dashy/internal/claude"
+	"github.com/zalts1/dashy/internal/cmux"
 )
 
 var now = time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)

@@ -38,6 +38,7 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.19 | The bar meant two different clocks, and the band sat inside a ranking it is not part of | `view/frame.go`, `view/format.go`, `view/layout.go` |
 | 9.20 | The legend was keyed by round numbers, not by rungs — a colour in use had no key. Label restyling tried and reverted: board reports names, it does not edit them | `view/scale.go`, `board/build.go` |
 | 9.21 | The quiet band folds on `z`, open by default — the fold is the reader's, and a folded row is not a navigation stop | `view/frame.go`, `view/order.go`, `watch/keys.go` |
+| 9.22 | `module board` built for a year and could never be installed — a module path is an address, and "no dependencies" hid it | `go.mod`, every import, `README.md`, `CLAUDE.md` |
 
 ---
 
@@ -597,3 +598,31 @@ What the goldens proved: the five pre-existing frames differ by exactly one line
 the legend gaining `z fold` — and `frame-empty` did not move at all, because a fleet with
 no quiet band is offered no fold key. So nothing about row rendering changed while a band
 learned to disappear.
+
+### 9.22 `module board` built for a year and could never be installed (2026-07-30)
+
+A Go module path is a download address, not a name. `module board` resolved every
+`board/internal/...` import correctly for as long as the build started *inside* the
+directory — Go sees the module declaring itself `board`, and the folder is right there.
+`go install <url>@latest` runs the resolution backwards: it starts from the remote, opens
+`go.mod`, finds a module calling itself `board`, and has nowhere to look, because `board`
+is not a place. Hard stop, not a warning.
+
+**§2's "no dependencies" is what hid it.** A module that never fetches anything never
+exercises module resolution, so nothing in a year of green builds and passing tests ever
+required the path to be real. The one command that would have caught it is the one command
+only a stranger runs. That generalises past this repo: an invariant no local path
+exercises is not verified by the suite being green, and this one was load-bearing for
+every other publishing step.
+
+The path is `github.com/zalts1/dashy` — the remote's actual URL. The repo keeps `dashy`
+and the binary stays `board`; renaming the GitHub repo was considered and declined, so the
+mismatch is deliberate and now confined to `go.mod` and the import prefix. `cmd/board/` is
+what names the binary, so `go install github.com/zalts1/dashy/cmd/board@latest` still puts
+`board` on the PATH.
+
+Verified by what does not move: `gofmt -l` clean, `go vet` clean, all eight packages
+passing, and the five golden frames byte-identical. A rename that changed a frame would
+have meant it was not a rename. End-to-end `@latest` cannot be verified until the branch is
+pushed — the proof available locally is that the module path resolves and `go install
+./cmd/board` produces `board`.

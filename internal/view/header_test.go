@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"board/internal/board"
+	"github.com/zalts1/dashy/internal/board"
 )
 
 var ansi = regexp.MustCompile(`\033\[[0-9;]*m`)

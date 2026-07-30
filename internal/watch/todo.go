@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"board/internal/config"
+	"github.com/zalts1/dashy/internal/config"
 )
 
 // commitTodo stores what was typed. Empty text is a cancel rather than an error: the

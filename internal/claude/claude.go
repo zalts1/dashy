@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"board/internal/host"
+	"github.com/zalts1/dashy/internal/host"
 )
 
 type Agent struct {

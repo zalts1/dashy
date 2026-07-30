@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"board/internal/claude"
-	"board/internal/cmux"
-	"board/internal/config"
+	"github.com/zalts1/dashy/internal/claude"
+	"github.com/zalts1/dashy/internal/cmux"
+	"github.com/zalts1/dashy/internal/config"
 )
 
 func todos(ts ...config.Todo) func(*Snapshot) {

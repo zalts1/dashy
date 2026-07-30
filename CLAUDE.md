@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-`board` is a Go CLI (module `board`, stdlib only) reporting on every live Claude Code
+`board` is a Go CLI (module `github.com/zalts1/dashy`, stdlib only) reporting on every live Claude Code
 session under cmux.
 
 ## Where things are written down
