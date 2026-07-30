@@ -22,6 +22,7 @@ func TestDecodeCarriesCommandAndText(t *testing.T) {
 		{"d", keyDone, "d"},
 		{"a", keyAdd, "a"},
 		{"t", keyList, "t"},
+		{"z", keyFold, "z"},
 		// The same physical keys on the Hebrew layout: a keymap of single letters is dead
 		// in any non-Latin input source, and switching layouts to press one key is not a
 		// keymap. These runes cannot be typed on a Latin layout, so nothing is ambiguous.
@@ -30,6 +31,7 @@ func TestDecodeCarriesCommandAndText(t *testing.T) {
 		{"ג", keyDone, "ג"},
 		{"ח", keyDown, "ח"},
 		{"ל", keyUp, "ל"},
+		{"ז", keyFold, "ז"},
 		{"\r", keyEnter, ""},
 		{"\x1b", keyEscape, ""},
 		{"\x7f", keyBackspace, ""},

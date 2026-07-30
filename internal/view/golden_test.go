@@ -38,6 +38,11 @@ func TestGoldenFrames(t *testing.T) {
 		{"frame-todo.txt", goldenTodoFleet(),
 			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118},
 			UI{Sel: "todo:t1", Paused: true}},
+		// The quiet band folded, on the fleet whose tail is long enough for it to matter:
+		// 32 rows to one line, and the rows the fold buys back go to the list (§9.21).
+		{"frame-folded.txt", goldenTodoFleet(),
+			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118},
+			UI{QuietCollapsed: true}},
 		// The capture mode, pinned in the slot the legend occupies when ambient.
 		{"frame-typing.txt", goldenTodoFleet(),
 			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118},

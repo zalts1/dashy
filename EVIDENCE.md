@@ -36,6 +36,8 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.17 | §9.9 was evidence about labels, not about todos; `TodoWrite` is 3/100 — todos ship capped at 10 | `DESIGN.md` §12, `config/`, `board/build.go` |
 | 9.18 | Two entry points for one thing was the friction — capture moved into the frame | `watch/keys.go`, `watch/todo.go`, `view/frame.go` |
 | 9.19 | The bar meant two different clocks, and the band sat inside a ranking it is not part of | `view/frame.go`, `view/format.go`, `view/layout.go` |
+| 9.20 | The legend was keyed by round numbers, not by rungs — a colour in use had no key. Label restyling tried and reverted: board reports names, it does not edit them | `view/scale.go`, `board/build.go` |
+| 9.21 | The quiet band folds on `z`, open by default — the fold is the reader's, and a folded row is not a navigation stop | `view/frame.go`, `view/order.go`, `watch/keys.go` |
 
 ---
 
@@ -503,3 +505,95 @@ Three changes, and the second one was hiding behind the first:
 What the goldens proved on re-blessing: the four pre-existing frames differ by exactly one
 line each — the legend gaining `a new todo` — so nothing about session rendering moved
 while the todo band was rebuilt twice.
+
+### 9.20 The legend was keyed by round numbers, not by rungs (2026-07-29)
+
+A design review of the live frame, asked for as feedback rather than as a bug hunt. Two of
+the four findings held up, and the one that mattered was in the key to the scale.
+
+**The legend advertised five rungs and painted four.** `scaleLegend` picked round marks —
+1h, 6h, 1d, 3d, 7d — and then asked `idleScale` which rung each landed on. The log
+boundaries are not round: they fall at ~1h48m, 6h47m, 20h42m and 2d12h. So 1d was already
+past the third boundary, and the five marks mapped to rungs **0, 1, 3, 4, 4**. `#cde2fb`
+was drawn twice and `#6da7ec` was drawn nowhere — while three rows on screen were painted
+with it. A colour in use with no entry in its own key is the exact failure §6 forbids when
+it says a value scale without a key is decoration.
+
+The bug survived because `TestScaleLegendCoversTheRamp` asserted the *labels* were present,
+never the rungs — a test whose name claimed the coverage it did not check. It now counts
+painted swatches per ramp entry, so the marks cannot silently re-point again if the scale
+or the ramp moves. Marks are 1h, 3h, 12h, 2d, 7d: still round, one inside each rung.
+
+**Labels were briefly calmed, and that was reverted.** A tab named `DLP/EMAIL MGMNT
+REVIEW` sat beside `Claude design capabilities for CLI tools` in the same band, and
+uppercase reads as loud, so the argument was that whoever named the tab outranked the rank
+ordering. A `calm` helper title-cased any label with no lowercase in it, applied below the
+user's own label and never to it, on the §9.9 reasoning that everything under that level
+is inherited rather than chosen.
+
+Rejected on sight of the result — `TASKS` had become `Tasks`:
+
+> if someone labels all caps, there might be a reason for that
+
+Which is the stronger position, and it generalises past case: **an inherited name is still
+somebody's name.** §9.9 says users rarely label in `~/.board.json`, and the conclusion
+drawn from that was that the fallbacks are therefore not deliberate — but a cmux tab title
+*is* typed by hand, so the precedence's lower levels are inherited by board and authored by
+the user all the same. The distinction `calm` relied on does not exist.
+
+The reporting boundary is the real rule here, and it is the same one that makes §8 safe:
+board states what is, and restyling a name is editing the fleet's data to suit the frame.
+If shouting labels ever do break the hierarchy, the fix belongs in what board controls —
+weight, colour, band — not in the string. `TestLabelsKeepTheirTone` pins the pass-through
+at both inherited levels so this cannot come back by accident.
+
+**Two findings did not survive their own record, and one was simply wrong.**
+
+- *Group the quiet band by workspace* — §10.5 rejected this already, with the better
+  argument: one workspace held 7 unrelated sessions, so grouping scatters the two rows
+  that need you across five boxes. The live frame agrees; `INTERGARTION CAP` holds four.
+- *The `⚠` is a third encoding of idle, on 83% of rows* — **wrong on the facts.** The bar's
+  ramp is absolute (0→7d); `Stale` is relative to the user's configured threshold. The `⚠`
+  is the only threshold-relative mark on a row, so it is not a duplicate of anything. What
+  is true is narrower and unresolved: magnitude and threshold are shown as two separate
+  marks, and at a 4h threshold the second one fires on almost every quiet row. Recorded
+  here rather than acted on, because the fix worth having puts the threshold *into* the
+  bar, and that changes an encoding §6 pins.
+
+### 9.21 The quiet band folds, and the fold is the reader's (2026-07-30)
+
+QUIET is the largest block on a real frame — 13 of ~20 content rows — and the least
+actionable: nothing in it is happening. Asked for as "collapse it", specified as **open by
+default, with one key to toggle**, which is the right way round. The band's whole value is
+being seen without being asked for; a default-folded backlog is one nobody reads again.
+
+`z`, and `ז` at the same physical position (§7). Not `c`: this tool has exactly one
+dangerous documented action and it is called `close` (§10.6), so a key that reads as
+"collapse" to the author and "close" to the finger is not worth the mnemonic. `z` is vim's
+fold prefix, which is the prior art for exactly this gesture.
+
+Three things fell out of the existing record rather than being designed:
+
+- **The band keeps its header and its count** — `QUIET · 32 · collapsed`. §9.14 removed a
+  `⌄ 3 more` chevron for promising a key that did not exist; the same rule forwards means
+  the count must stay and the key must be named, so the legend says `z fold` / `z unfold`
+  and names it in both states. `collapsed` is load-bearing: it separates rows the reader
+  folded from rows the fit loop trimmed, which are two different facts about the same
+  absence.
+- **Folded rows leave `DisplayOrder`.** Navigation follows the screen (§7), so a row the
+  frame is not drawing cannot be a stop — otherwise the caret sits somewhere invisible with
+  Enter pointed at it and the refresh paused for it. Folding also clears a selection inside
+  the band, because `Step` over an order that no longer holds the selection returns the
+  first row, which would teleport the cursor to a blocked session.
+- **The fit loop needed the fold zeroed, not just skipped.** A folded band draws no rows,
+  so trimming its tail sheds no lines; the absorber stages would have spun ten times and
+  fallen through to `clip`. Setting `keepQuiet = 0` makes both quiet stages inert by their
+  own `> floor` test, so the trim order did not have to learn about the fold.
+
+The fold is not persisted to `~/.board.json`. It is state about this sitting at the tab,
+and the config file is for what should survive one (§8: it stays the only file written).
+
+What the goldens proved: the five pre-existing frames differ by exactly one line each —
+the legend gaining `z fold` — and `frame-empty` did not move at all, because a fleet with
+no quiet band is offered no fold key. So nothing about row rendering changed while a band
+learned to disappear.

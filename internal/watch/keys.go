@@ -17,6 +17,7 @@ const (
 	keyDone
 	keyAdd
 	keyList
+	keyFold
 	keyBackspace
 )
 
@@ -119,6 +120,10 @@ func command(r rune) key {
 		return keyAdd
 	case 't', 'א':
 		return keyList
+	// `z` is vim's fold prefix, and deliberately not `c`: this tool has exactly one
+	// dangerous documented action and it is called `close` (§10.6).
+	case 'z', 'ז':
+		return keyFold
 	}
 	return keyNone
 }

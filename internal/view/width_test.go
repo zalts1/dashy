@@ -39,7 +39,10 @@ func TestNoLineExceedsTheTerminalWidth(t *testing.T) {
 		// A typed line is unbounded user input on the one line the layout does not size,
 		// so it belongs in this matrix as much as any workspace name does.
 		{Typing: true, Paused: true},
-		{Typing: true, Paused: true, Input: strings.Repeat("reply to the ACME export request ", 12)}}
+		{Typing: true, Paused: true, Input: strings.Repeat("reply to the ACME export request ", 12)},
+		// The fold changes the legend's contents and the band's line, both of which the
+		// clamp has to hold at every width.
+		{QuietCollapsed: true}, {QuietCollapsed: true, Sel: "S-OLD", Paused: true}}
 	for _, cols := range []int{40, 52, 58, 64, 72, 80, 90, 100, 118, 140, 200, 300} {
 		for _, rows := range []int{12, 20, 24, 44, 60} {
 			for _, u := range states {

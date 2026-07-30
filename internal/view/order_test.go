@@ -13,7 +13,7 @@ import (
 // skipping the tab-less rows made them countable and undrawable (EVIDENCE.md §9.14).
 // Enter on one reports that there is nothing to focus.
 func TestDisplayOrderMatchesScreen(t *testing.T) {
-	got := DisplayOrder(fixture())
+	got := DisplayOrder(fixture(), UI{})
 	want := []string{"K-BLK", "K-BG", "K-RUN", "K-OLD", "K-NEW"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("display order: got %v want %v", got, want)
@@ -28,7 +28,7 @@ func TestDisplayOrderMatchesScreen(t *testing.T) {
 }
 
 func TestStepClamps(t *testing.T) {
-	o := DisplayOrder(fixture())
+	o := DisplayOrder(fixture(), UI{})
 	cases := []struct {
 		name  string
 		sel   string

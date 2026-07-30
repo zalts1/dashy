@@ -71,7 +71,18 @@ func Run(interval time.Duration) {
 	// The one mode this UI has, and the only state that holds unsaved user text.
 	var typing bool
 	var input string
+	// The quiet fold, which belongs to the viewer and so survives a refresh. It is not
+	// persisted: a fold is about this sitting at the tab, not a preference (§9.21).
+	var folded bool
 	var lastKey, lastFetch time.Time
+
+	// One UI value for both the frame and the navigation order, because the order has to
+	// follow the screen — building it twice is how the two would come to disagree about
+	// which rows are on it.
+	ui := func() view.UI {
+		return view.UI{Sel: sel, Paused: sel != "" || typing, Notice: notice,
+			Typing: typing, Input: input, QuietCollapsed: folded}
+	}
 
 	draw := func() {
 		rows, cols := termSize()
@@ -81,8 +92,7 @@ func Run(interval time.Duration) {
 			Threshold: config.Load().Threshold(),
 			Rows:      rows,
 			Cols:      cols,
-		}, view.UI{Sel: sel, Paused: sel != "" || typing, Notice: notice,
-			Typing: typing, Input: input})
+		}, ui())
 		render(out, s)
 	}
 	refresh := func() { f, lastFetch = board.Collect(), time.Now(); draw() }
@@ -146,10 +156,18 @@ func Run(interval time.Duration) {
 				} else {
 					notice = "no todos · a to add one"
 				}
+			case keyFold:
+				folded = !folded
+				// A folded row is not a navigation stop, so a selection left inside the band
+				// would sit on a row the frame is not drawing — with Enter still pointed at
+				// it and the refresh still paused for it.
+				if r, ok := f.ByKey(sel); folded && ok && r.Rank == board.RankQuiet {
+					sel = ""
+				}
 			case keyUp:
-				sel = view.Step(view.DisplayOrder(f), sel, -1)
+				sel = view.Step(view.DisplayOrder(f, ui()), sel, -1)
 			case keyDown:
-				sel = view.Step(view.DisplayOrder(f), sel, +1)
+				sel = view.Step(view.DisplayOrder(f, ui()), sel, +1)
 			case keyDone:
 				// The only write this loop makes, and the only destructive key in the
 				// frame. It is gated on the row being a todo — nothing here can end a
