@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"board/internal/config"
-	"board/internal/hooks"
-	"board/internal/watch"
+	"github.com/zalts1/dashy/internal/config"
+	"github.com/zalts1/dashy/internal/hooks"
+	"github.com/zalts1/dashy/internal/watch"
 )
 
 const usage = `usage: board | board watch [interval] | board jump <substring> | board label "<text>"

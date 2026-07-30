@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"board/internal/board"
+	"github.com/zalts1/dashy/internal/board"
 )
 
 var frameNow = time.Date(2026, 7, 28, 14, 30, 0, 0, time.UTC)

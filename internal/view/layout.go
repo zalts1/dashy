@@ -9,7 +9,7 @@ package view
 import (
 	"strings"
 
-	"board/internal/board"
+	"github.com/zalts1/dashy/internal/board"
 )
 
 // Layout constants shared by every band so labels line up on one left edge.

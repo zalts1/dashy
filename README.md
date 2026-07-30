@@ -121,9 +121,17 @@ unresolved Feed cards instead, so it stays rare and worth reacting to.
 ~60ms it managed when it derived state from cmux alone. That buys 10 sessions it
 used to miss, including background agents blocked for weeks.
 
-## Build
+## Install
+
+    go install github.com/zalts1/dashy/cmd/board@latest
+
+Or from a clone:
 
     go build -o board ./cmd/board
+
+Requires macOS, [cmux](https://github.com/manaflow-ai/cmux), and Claude Code — board
+reads the roster from `claude agents --json` and the tabs from cmux, so it has nothing
+to report without both.
 
 No dependencies, no daemon, no port. `board watch` in a dedicated tab is the whole
 runtime.

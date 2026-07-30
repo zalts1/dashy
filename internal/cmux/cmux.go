@@ -8,7 +8,7 @@ import (
 	"os"
 	"os/exec"
 
-	"board/internal/host"
+	"github.com/zalts1/dashy/internal/host"
 )
 
 func output(args ...string) ([]byte, error) { return host.Output("cmux", args...) }

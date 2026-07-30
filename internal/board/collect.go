@@ -4,9 +4,9 @@ import (
 	"strings"
 	"time"
 
-	"board/internal/claude"
-	"board/internal/cmux"
-	"board/internal/config"
+	"github.com/zalts1/dashy/internal/claude"
+	"github.com/zalts1/dashy/internal/cmux"
+	"github.com/zalts1/dashy/internal/config"
 )
 
 // Collect gathers one Snapshot and builds a Fleet from it. This is the only impure

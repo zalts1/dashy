@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"board/internal/board"
+	"github.com/zalts1/dashy/internal/board"
 )
 
 // The header is the frame's title bar, and it answers two questions and no others:

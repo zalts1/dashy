@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"board/internal/host"
+	"github.com/zalts1/dashy/internal/host"
 )
 
 // hookSession is one record in cmux's Claude Code hook file. Only the clock is

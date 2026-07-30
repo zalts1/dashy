@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"board/internal/board"
-	"board/internal/config"
-	"board/internal/view"
+	"github.com/zalts1/dashy/internal/board"
+	"github.com/zalts1/dashy/internal/config"
+	"github.com/zalts1/dashy/internal/view"
 )
 
 // todo is add, list and done. Listing builds a Fleet from the todos alone rather than

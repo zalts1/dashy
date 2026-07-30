@@ -5,9 +5,9 @@ import (
 	"sort"
 	"time"
 
-	"board/internal/claude"
-	"board/internal/cmux"
-	"board/internal/config"
+	"github.com/zalts1/dashy/internal/claude"
+	"github.com/zalts1/dashy/internal/cmux"
+	"github.com/zalts1/dashy/internal/config"
 )
 
 // Snapshot is everything read from the outside world for one tick. Build is a pure

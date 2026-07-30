@@ -15,8 +15,8 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"board/internal/cmux"
-	"board/internal/config"
+	"github.com/zalts1/dashy/internal/cmux"
+	"github.com/zalts1/dashy/internal/config"
 )
 
 func Notify() {

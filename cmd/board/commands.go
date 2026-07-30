@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"os"
 
-	"board/internal/board"
-	"board/internal/cmux"
-	"board/internal/config"
-	"board/internal/view"
+	"github.com/zalts1/dashy/internal/board"
+	"github.com/zalts1/dashy/internal/cmux"
+	"github.com/zalts1/dashy/internal/config"
+	"github.com/zalts1/dashy/internal/view"
 )
 
 // show is the one-shot table. Not an error to have nothing to report: board is a

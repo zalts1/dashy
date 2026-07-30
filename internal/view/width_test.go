@@ -7,7 +7,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"board/internal/board"
+	"github.com/zalts1/dashy/internal/board"
 )
 
 // wideFleet is the width-hostile case: labels longer than any column, workspace names

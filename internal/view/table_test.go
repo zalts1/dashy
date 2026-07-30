@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"board/internal/board"
+	"github.com/zalts1/dashy/internal/board"
 )
 
 // The one-shot table is often piped or pasted, so it carries no colour and no

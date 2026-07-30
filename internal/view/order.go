@@ -1,6 +1,6 @@
 package view
 
-import "board/internal/board"
+import "github.com/zalts1/dashy/internal/board"
 
 // Navigation lives with the renderer because it must follow the screen, not the
 // data. Two rules taken from prior art rather than invented: selection is keyed on

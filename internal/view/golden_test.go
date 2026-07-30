@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"board/internal/board"
+	"github.com/zalts1/dashy/internal/board"
 )
 
 // The golden files were captured from the pre-package-split renderer. They pin the

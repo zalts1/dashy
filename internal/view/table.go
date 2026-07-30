@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"board/internal/board"
+	"github.com/zalts1/dashy/internal/board"
 )
 
 // Column widths for the one-shot table. Fixed, unlike the dashboard's: this output

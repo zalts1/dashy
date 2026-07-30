@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"board/internal/board"
+	"github.com/zalts1/dashy/internal/board"
 )
 
 // Screen is where and when the frame is being drawn.
