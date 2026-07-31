@@ -57,10 +57,10 @@ func Load() *State {
 //
 // No fsync before the rename, deliberately. Rename already covers what board can be
 // killed by — a crash, a Ctrl-C, a shell racing the watch tab — because the old file
-// stands until the new one is complete. Beyond that is power loss, where on darwin a
-// plain fsync is not a durability barrier anyway (that is F_FULLFSYNC, which Sync does
-// not issue), so it would buy the look of safety at a real cost on a path a human takes
-// interactively.
+// stands until the new one is complete. Beyond that is power loss, and Sync on darwin is
+// a real barrier there: Go issues F_FULLFSYNC, which flushes the drive's own cache. That
+// is the reason to skip it, not a reason to add it — a full flush on every todo and every
+// label, on a path a human takes interactively, to protect a list that can be retyped.
 func (s *State) Save() error {
 	b, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {

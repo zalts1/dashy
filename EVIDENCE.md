@@ -779,10 +779,19 @@ assumption about the machine rather than a mistake in the judgement.
 
 **No fsync before the rename, deliberately.** Rename already covers everything board can
 be killed by — a crash, a Ctrl-C, a shell racing the watch tab — because the old file
-stands until the new one is whole. What is left is power loss, and on darwin a plain
-`fsync` is not a durability barrier anyway (that is `F_FULLFSYNC`, which `File.Sync` does
-not issue), so it would buy the appearance of safety at a real cost on a path a person
-takes interactively.
+stands until the new one is whole. What is left is power loss.
+
+The first draft of this entry justified skipping it on the grounds that `File.Sync` does
+not issue `F_FULLFSYNC` on darwin and so buys nothing. **That is false** — Go has issued
+`F_FULLFSYNC` there for years (`internal/poll/fd_fsync_darwin.go`), which is a genuine
+drive-cache barrier. Checked in the toolchain rather than recalled, and corrected before
+merge, because a wrong premise in this log outlives the change it was written about.
+
+The conclusion survives and is better supported by the correction: the call is skipped
+**because** it is a real barrier and therefore a real cost — a full drive flush on every
+todo and every label, on a path a person takes interactively, to protect a list of at
+most ten lines that can be retyped. Cheap-and-useless would have been an easy call;
+expensive-and-effective is the one worth recording.
 
 **What it does not fix:** two writers can still each read ten todos and each write eleven.
 Atomic is not exclusive, and the fix for that is not a lock — see `DESIGN.md` §10.9.
