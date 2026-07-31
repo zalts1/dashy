@@ -549,6 +549,31 @@ cheap half and does not need the first.
 *Not to do:* grow the layout table to Russian, Arabic, Greek and so on. It is unbounded,
 and every entry is a guess about a layout nobody here can verify.
 
+### 10.9 Locking the config against a lost update — deferred (2026-07-31)
+
+`Save` became atomic in §9.27: a reader sees the old file or the new one, never half of
+one. **Atomic is not exclusive.** Every writer does Load → mutate → Save
+(`watch/todo.go:20`, `cmd/board/todo.go:21`, `commands.go:46`), so two that overlap can
+each read ten todos and each write eleven — the second rename wins, one addition is gone,
+and nothing reports it.
+
+Not built, because the window is the microseconds between a Load and its Save on a file a
+person edits a few times a day, and each mechanism that closes it costs more than the race:
+
+- **A lock file** needs a stale-lock policy, and a stale lock is worse than a lost todo on
+  a reporting surface: it fails the write that would otherwise have succeeded.
+- **`flock` held across the read-modify-write** is correct and cheap to write, but `watch`
+  loads the config on every tick (`watch.go:92`), and a reader waiting on a writer is a
+  frame that stalls for reasons the reader cannot see.
+- **The durable fix is not locking.** Appending a todo is the only contended write, and an
+  append-only list would make two additions associative — no lock, no lost update. That is
+  a file format change and belongs with §12, not here.
+
+*Trigger:* a lost todo somebody actually notices, or a second writer that is not a human
+keystroke — a hook, a daemon, or `$HOME` on a file-sync service. The last is the one to
+watch: sync makes the window as wide as its own interval, and it can resurrect a deleted
+todo as easily as drop a new one.
+
 ---
 
 ## 11. How this is verified
@@ -578,6 +603,11 @@ The pure seams exist for this and must stay pure:
 `Collect`, `Agents` and `TitlesByPid` touch `$HOME` and subprocesses —
 keep logic out of them and test the parsers they feed. **Never write a test that
 depends on the live fleet;** capture lines into a fixture instead.
+
+`Save` is the one impure function with tests of its own (`config/save_test.go`), because
+atomicity and file mode are properties of the write and cannot be reached from a parser.
+They isolate `$HOME` with `t.Setenv` — a test that wrote the real `~/.board.json` would
+destroy the user's todos, which is precisely what §9.27 is about.
 
 Manual verification, for layout and colour:
 

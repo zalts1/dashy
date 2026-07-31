@@ -9,6 +9,7 @@ package config
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/zalts1/dashy/internal/host"
@@ -48,12 +49,43 @@ func Load() *State {
 	return s
 }
 
+// Save writes a temp file and renames it over the target, because the rename is the only
+// step a reader can see and it is atomic. os.WriteFile truncated first and wrote second,
+// so between those two syscalls this file was zero bytes — and Load turns an unparseable
+// file into defaults rather than an error, so a reader in that window was handed an empty
+// todo list instead of a failure (EVIDENCE.md §9.27). The content exists nowhere else.
+//
+// No fsync before the rename, deliberately. Rename already covers what board can be
+// killed by — a crash, a Ctrl-C, a shell racing the watch tab — because the old file
+// stands until the new one is complete. Beyond that is power loss, where on darwin a
+// plain fsync is not a durability barrier anyway (that is F_FULLFSYNC, which Sync does
+// not issue), so it would buy the look of safety at a real cost on a path a human takes
+// interactively.
 func (s *State) Save() error {
 	b, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(Path(), b, 0o600)
+	path := Path()
+	// Same directory: a rename across filesystems is a copy, and a copy is not atomic.
+	f, err := os.CreateTemp(filepath.Dir(path), ".board.json-*")
+	if err != nil {
+		return err
+	}
+	// Removed on every path. After a successful rename nothing is there and this is a
+	// harmless miss; on every failure it is what keeps a temp file from accumulating
+	// next to the real one.
+	defer os.Remove(f.Name())
+	// CreateTemp already opens at 0600, which is the mode this file must keep. Rename
+	// carries it, so a target a user had loosened is tightened rather than widened.
+	if _, err := f.Write(b); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), path)
 }
 
 func (s *State) Threshold() time.Duration {
