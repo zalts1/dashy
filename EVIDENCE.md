@@ -43,6 +43,7 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.24 | The suite passed from cache while the environment was the variable under test — `-count=1` when the machine is the question | `.github/workflows/ci.yml`, `DESIGN.md` §11 |
 | 9.25 | `@v0.1.0` reports `v0.1.0`, settling §9.23's unprobed row — and one row of that table was true only until a tag existed | `version/`, `DESIGN.md` §13 |
 | 9.26 | An unreadable world rendered as an empty one; `watch` needed no guard, and `cmux.Available()` answered a question nobody asked | `claude/`, `board/`, `view/header.go`, `cmux/cmux.go`, `doctor/`, `DESIGN.md` §14 |
+| 9.27 | The config write truncated before writing, and `os.WriteFile`'s mode applies only at creation — the `0600` was aspirational | `config/config.go`, `DESIGN.md` §10.9 |
 
 ---
 
@@ -751,3 +752,46 @@ that has them.
 **Cost:** five existing golden frames byte-identical, one added on purpose
 (`frame-trouble.txt`) pinning the case where the trouble and a surviving row are both
 true at once.
+
+### 9.27 The write was not atomic, and the mode was aspirational (2026-07-31)
+
+`Save` was `os.WriteFile`: truncate, then write. Between those two syscalls
+`~/.board.json` is zero bytes, and `Load` turns an unparseable file into defaults rather
+than an error — by design, so board still reports. Together those two reasonable choices
+make a silent loss: a reader inside the window is handed **an empty todo list**, not a
+failure, and the todos are the one thing in the stack that exists nowhere else (§12).
+
+**Measured rather than argued.** A reader spinning against 300 saves saw a list that was
+not there 3–5 times per run, in five runs out of five — around 1% of reads, on a file the
+watch tab loads every tick while a shell writes to it. The red was probabilistic; the
+green is structural, because a reader now opens either the old inode or the new one and
+there is no window left to catch. Eight clean runs, and there cannot be a flaky one.
+
+**The second finding, which nobody was looking for.** `os.WriteFile`'s mode argument
+applies **only when it creates the file**. For a config that already existed it was
+ignored, so the `0o600` in that call was a statement of intent, not a fact: a
+`~/.board.json` that had ever come into being at `0644` stayed world-readable while board
+kept writing the user's own labels and todos into it. `CreateTemp` opens at `0600` and
+rename carries the mode onto the target, so the fix tightens what the old call could only
+ever have set on the very first write. Pinned by a test that reads `0644` against the old
+code — the same shape as §9.23 and §9.24, where the thing that was wrong was an
+assumption about the machine rather than a mistake in the judgement.
+
+**No fsync before the rename, deliberately.** Rename already covers everything board can
+be killed by — a crash, a Ctrl-C, a shell racing the watch tab — because the old file
+stands until the new one is whole. What is left is power loss.
+
+The first draft of this entry justified skipping it on the grounds that `File.Sync` does
+not issue `F_FULLFSYNC` on darwin and so buys nothing. **That is false** — Go has issued
+`F_FULLFSYNC` there for years (`internal/poll/fd_fsync_darwin.go`), which is a genuine
+drive-cache barrier. Checked in the toolchain rather than recalled, and corrected before
+merge, because a wrong premise in this log outlives the change it was written about.
+
+The conclusion survives and is better supported by the correction: the call is skipped
+**because** it is a real barrier and therefore a real cost — a full drive flush on every
+todo and every label, on a path a person takes interactively, to protect a list of at
+most ten lines that can be retyped. Cheap-and-useless would have been an easy call;
+expensive-and-effective is the one worth recording.
+
+**What it does not fix:** two writers can still each read ten todos and each write eleven.
+Atomic is not exclusive, and the fix for that is not a lock — see `DESIGN.md` §10.9.
