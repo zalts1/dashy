@@ -10,11 +10,24 @@ package claude
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/zalts1/dashy/internal/host"
+)
+
+// The three ways the roster fails to arrive, kept separate because they are three
+// different repairs: install claude, find out why the query failed, or find out what
+// shape it answers in now. Callers name the kind rather than reporting "something
+// broke" (EVIDENCE.md §9.26).
+var (
+	ErrNotInstalled = errors.New("claude not found")
+	ErrQueryFailed  = errors.New("claude agents failed")
+	ErrUnreadable   = errors.New("claude agents answered in an unknown shape")
 )
 
 type Agent struct {
@@ -31,20 +44,30 @@ type Agent struct {
 
 const Background = "background"
 
-func Agents() []Agent {
+// Agents reads the roster. The error is half the answer: no agents and no error is a
+// quiet fleet, no agents and an error is a fleet board cannot see, and returning nil
+// for both is what let a broken machine look like an idle one (EVIDENCE.md §9.26).
+func Agents() ([]Agent, error) {
 	b, err := host.Output("claude", "agents", "--json")
 	if err != nil {
-		return nil
+		// Not installed is worth its own answer: it is the one failure with an obvious
+		// repair, and the likeliest on a machine board has just been copied to.
+		if errors.Is(err, exec.ErrNotFound) {
+			return nil, ErrNotInstalled
+		}
+		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
 	return parseAgents(b)
 }
 
-func parseAgents(b []byte) []Agent {
+func parseAgents(b []byte) ([]Agent, error) {
 	var out []Agent
-	if json.Unmarshal(b, &out) != nil {
-		return nil
+	if err := json.Unmarshal(b, &out); err != nil {
+		// The shape is undocumented and has changed before (§9.1, §9.3), so this is the
+		// failure most likely to arrive without anyone touching board.
+		return nil, fmt.Errorf("%w: %v", ErrUnreadable, err)
 	}
-	return out
+	return out, nil
 }
 
 // Blocked reports whether this session is waiting on a human. One field now,

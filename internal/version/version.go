@@ -41,6 +41,11 @@ func buildVersion() string {
 	return bi.Main.Version
 }
 
+// LabelWidth is the column the answers start in. Exported because `doctor` prints these
+// three lines above four more of its own and they have to line up as one block; a second
+// copy of the number is a second thing to change.
+const LabelWidth = 6
+
 // Format renders the report as three pasteable lines.
 //
 // The upstream strings are passed through verbatim rather than parsed down to a
@@ -52,7 +57,7 @@ func Format(in Info) string {
 		if got = unstutter(tool, got); got == "" {
 			got = absent
 		}
-		fmt.Fprintf(&b, "%-6s %s\n", tool, got)
+		fmt.Fprintf(&b, "%-*s %s\n", LabelWidth, tool, got)
 	}
 	// "unknown" and "not found" are different facts: board is always installed, so its
 	// version can only be unreadable, while claude and cmux can genuinely be absent.

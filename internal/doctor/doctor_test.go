@@ -1,0 +1,163 @@
+package doctor
+
+import (
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/zalts1/dashy/internal/claude"
+	"github.com/zalts1/dashy/internal/version"
+)
+
+// Format is the whole reason this package is not a handful of Printf calls in
+// cmd/board: every interesting case is a broken machine, and they are only reachable
+// as fixtures (§11). doctor is the command someone runs *because* board is not working,
+// so "it printed nothing" and "it returned an error" are both failures of the command.
+
+func healthy() Report {
+	return Report{
+		Versions:     version.Info{Board: "v0.1.0", Claude: "2.1.220 (Claude Code)", Cmux: "0.64.16 (96)"},
+		Sessions:     16,
+		Tabs:         22,
+		Workspaces:   7,
+		Hooks:        []string{"Stop", "Notification"},
+		ConfigPath:   "/Users/x/.board.json",
+		ConfigOnDisk: true,
+		NotifyOn:     true,
+	}
+}
+
+// Every label is present in every state. A diagnostic that silently omits a row is one
+// that answers a question the reader did not ask.
+func TestFormatAlwaysReportsEveryLabel(t *testing.T) {
+	labels := []string{"board", "claude", "cmux", "roster", "tabs", "hooks", "config", "notify"}
+	for _, c := range []struct {
+		name string
+		r    Report
+	}{
+		{"healthy", healthy()},
+		{"nothing at all", Report{}},
+		{"no upstreams", Report{RosterErr: claude.ErrNotInstalled, NoCmux: true}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			got := Format(c.r)
+			for _, l := range labels {
+				if !strings.Contains(got, l) {
+					t.Errorf("no %q row:\n%s", l, got)
+				}
+			}
+			for i, line := range strings.Split(strings.TrimRight(got, "\n"), "\n") {
+				if len(strings.Fields(line)) < 2 {
+					t.Errorf("line %d is a bare label with no answer: %q", i, line)
+				}
+			}
+		})
+	}
+}
+
+// The roster row carries the error's own words, not the frame's one-liner. The frame
+// says "roster unreadable · board doctor"; inside doctor that would be circular, and
+// the underlying error carries the detail a maintainer actually needs.
+func TestFormatReportsTheRosterErrorVerbatim(t *testing.T) {
+	got := Format(Report{RosterErr: errors.New("claude agents answered in an unknown shape: invalid character 'x'")})
+	if !strings.Contains(got, "invalid character 'x'") {
+		t.Errorf("the roster error lost its detail:\n%s", got)
+	}
+	if strings.Contains(got, "board doctor") {
+		t.Errorf("doctor told the reader to run doctor:\n%s", got)
+	}
+}
+
+// A working roster states its size, because "0 sessions" and "could not ask" are the
+// two answers this row exists to separate.
+func TestFormatCountsAReadableRoster(t *testing.T) {
+	if got := Format(healthy()); !strings.Contains(got, "16 sessions") {
+		t.Errorf("roster row does not state the count:\n%s", got)
+	}
+	got := Format(Report{Sessions: 0})
+	if !strings.Contains(got, "0 sessions") {
+		t.Errorf("an empty but readable roster does not say so:\n%s", got)
+	}
+}
+
+// Hooks are the wiring `notify` depends on, and "not installed" has to name its repair:
+// this is the one row with an action the reader can take immediately.
+func TestFormatNamesTheHookRepair(t *testing.T) {
+	got := Format(Report{})
+	if !strings.Contains(got, "install-hooks") {
+		t.Errorf("uninstalled hooks do not name the fix:\n%s", got)
+	}
+	if on := Format(healthy()); !strings.Contains(on, "Stop") || !strings.Contains(on, "Notification") {
+		t.Errorf("installed hooks do not name the events:\n%s", on)
+	}
+}
+
+// An unparseable settings.json is a different fact from "not installed", and it is the
+// one install-hooks refuses on (§8) — so doctor has to distinguish them or the reader
+// will keep running a command that keeps refusing.
+func TestFormatDistinguishesUnparseableSettings(t *testing.T) {
+	got := Format(Report{HooksErr: errors.New("unparseable /Users/x/.claude/settings.json: bad token")})
+	if !strings.Contains(got, "unparseable") {
+		t.Errorf("an unreadable settings file reads as merely uninstalled:\n%s", got)
+	}
+}
+
+// doctor output is meant to be pasted into a bug report, and notify_cmd is a shell
+// command that routinely carries a webhook URL or a token. Whether it is set is the
+// diagnostic; the command itself is the user's secret.
+func TestFormatNeverPrintsTheNotifyCommand(t *testing.T) {
+	r := healthy()
+	r.NotifyCmd = "curl -sS -d @- https://ntfy.sh/secret-topic-abc123"
+	got := Format(r)
+	if strings.Contains(got, "ntfy.sh") || strings.Contains(got, "secret-topic-abc123") {
+		t.Errorf("doctor leaked the notify command into pasteable output:\n%s", got)
+	}
+	if !strings.Contains(got, "on") {
+		t.Errorf("doctor does not say notifications are on:\n%s", got)
+	}
+	if off := Format(Report{}); !strings.Contains(off, "off") {
+		t.Errorf("doctor does not say notifications are off:\n%s", off)
+	}
+}
+
+// A config file that has never been written is worth saying: it is the normal state on
+// a fresh install and it explains an empty todo list and missing labels.
+func TestFormatSaysWhenTheConfigDoesNotExistYet(t *testing.T) {
+	got := Format(Report{ConfigPath: "/Users/x/.board.json"})
+	if !strings.Contains(got, "/Users/x/.board.json") {
+		t.Errorf("the config path is missing:\n%s", got)
+	}
+	if !strings.Contains(got, "not created") {
+		t.Errorf("an absent config file is reported as if it existed:\n%s", got)
+	}
+}
+
+// The rows line up under each other, including the three that come from version.Format:
+// one block, one column, or the reader has to hunt for the answer on every line.
+func TestFormatAlignsEveryAnswer(t *testing.T) {
+	got := Format(healthy())
+	var cols []int
+	for _, l := range strings.Split(strings.TrimRight(got, "\n"), "\n") {
+		cols = append(cols, strings.Index(l, strings.Fields(l)[1]))
+	}
+	for i, c := range cols {
+		if c != cols[0] {
+			t.Errorf("line %d starts its answer at column %d, want %d:\n%s", i, c, cols[0], got)
+		}
+	}
+}
+
+// The tabs row is the §9.3 failure made visible: a readable roster whose sessions have
+// no tabs is the exact shape of the bug where board saw 21 of 31 sessions.
+func TestFormatReportsTabsSeparatelyFromTheRoster(t *testing.T) {
+	got := Format(Report{Sessions: 16, Tabs: 0, Workspaces: 0})
+	if !strings.Contains(got, "16 sessions") {
+		t.Errorf("roster row missing:\n%s", got)
+	}
+	if !strings.Contains(got, "0 tabs") {
+		t.Errorf("a roster with no tabs does not say so:\n%s", got)
+	}
+	if missing := Format(Report{NoCmux: true}); !strings.Contains(missing, "not found") {
+		t.Errorf("a missing cmux is not reported on the tabs row:\n%s", missing)
+	}
+}

@@ -12,6 +12,21 @@ import (
 	"github.com/zalts1/dashy/internal/host"
 )
 
+// hookEvents are the two lifecycle points notify answers to. Shared with Installed so
+// the installer and the diagnosis cannot come to disagree about what "installed" means.
+var hookEvents = []string{"Stop", "Notification"}
+
+// marker identifies our own hook inside a settings file that may hold several tools'.
+// It is the running binary's name, not a constant, so a renamed or copied binary
+// installs and reports on itself rather than on whatever it used to be called.
+func marker() (string, error) {
+	self, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Base(self) + " notify", nil
+}
+
 // Install merges the Stop and Notification hooks into the user's Claude Code
 // settings. It is idempotent via the `<binary> notify` command marker, it refuses to
 // touch a file it cannot parse, and it backs up before its first change — this is
@@ -34,9 +49,12 @@ func Install() error {
 	if hooks == nil {
 		hooks = map[string]any{}
 	}
-	marker := filepath.Base(self) + " notify"
+	marker, err := marker()
+	if err != nil {
+		return err
+	}
 	var added []string
-	for _, event := range []string{"Stop", "Notification"} {
+	for _, event := range hookEvents {
 		list, _ := hooks[event].([]any)
 		if hasCommand(list, marker) {
 			continue

@@ -64,7 +64,14 @@ func header(f board.Fleet, s Screen, u UI) string {
 
 	leftPainted := fg(inkPrimary, "BOARD")
 	if span != "" {
-		leftPainted += "  " + body(span)
+		// statusWarning, the same value the ⚠ and the paused clock use. Not statusCritical:
+		// bare #d03b3b measures 2.91 as text, which is why blocked is a filled badge and
+		// nothing else may use it unfilled (§6, §9.4).
+		paint := body
+		if f.Trouble != "" {
+			paint = func(s string) string { return fg(statusWarning, s) }
+		}
+		leftPainted += "  " + paint(span)
 	}
 	rightPainted := paintMode(u, mode)
 	if notice != "" {
@@ -77,13 +84,32 @@ func header(f board.Fleet, s Screen, u UI) string {
 // spanText says how much work there is and how far it is spread. The workspace count
 // is the one fact no band below carries; sessions with no tab have no workspace, so a
 // fleet of only background agents has no span to state.
+//
+// Trouble takes the slot because it answers the same question — what am I looking at —
+// and it answers it first. "no sessions" is a claim about the fleet; an unreadable
+// roster is a claim about board, and saying the former while the latter is true is the
+// bug (EVIDENCE.md §9.26).
 func spanText(f board.Fleet, withSpan bool) string {
 	// Sessions, not rows: a todo has no process, so counting it here would report a
 	// fleet larger than the one running (§12).
 	n := f.Sessions()
+	if f.Trouble != "" {
+		// The trouble replaces the count when there is nothing to count and precedes it
+		// when there is: with no cmux the background agents still arrive, and a span that
+		// hid them would trade one silence for another.
+		if n == 0 {
+			return f.Trouble
+		}
+		return f.Trouble + " · " + sessionText(f, n, withSpan)
+	}
 	if n == 0 {
 		return "no sessions"
 	}
+	return sessionText(f, n, withSpan)
+}
+
+// sessionText is the healthy span: how many, and how far spread.
+func sessionText(f board.Fleet, n int, withSpan bool) string {
 	s := fmt.Sprintf("%d %s", n, plural(n, "session"))
 	if withSpan && f.Workspaces > 0 {
 		s += fmt.Sprintf(" in %d %s", f.Workspaces, plural(f.Workspaces, "workspace"))

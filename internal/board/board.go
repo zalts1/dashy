@@ -63,6 +63,12 @@ type Fleet struct {
 	// TodoCap is the ceiling both renderers state, so neither has to hardcode it and
 	// they cannot disagree about what the refusal at the top will be (§12).
 	TodoCap int
+	// Trouble is what board could not read, in the words both renderers print, and
+	// empty when the world was legible. Derived here for the same reason the counts
+	// are: an unreadable fleet and an empty one are different facts, and two renderers
+	// inventing their own phrasing for the difference is how they come to disagree
+	// (§3, EVIDENCE.md §9.26).
+	Trouble string
 }
 
 // Sessions counts the rows with a process behind them. Both renderers state a fleet

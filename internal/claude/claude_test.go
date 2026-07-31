@@ -1,6 +1,9 @@
 package claude
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 // The shape `claude agents --json` returns: interactive sessions carry status,
 // background ones carry state and a short id naming their jobs dir.
@@ -12,7 +15,10 @@ const agentsJSON = `[
 ]`
 
 func TestParseAgents(t *testing.T) {
-	got := parseAgents([]byte(agentsJSON))
+	got, err := parseAgents([]byte(agentsJSON))
+	if err != nil {
+		t.Fatalf("well-formed roster did not parse: %v", err)
+	}
 	if len(got) != 4 {
 		t.Fatalf("parsed %d agents, want 4", len(got))
 	}
@@ -32,10 +38,34 @@ func TestParseAgents(t *testing.T) {
 				w.blocked, w.running, w.background)
 		}
 	}
-	// Anything unparseable yields no roster rather than a partial one: an empty board
-	// is honest, a half-populated board is not.
-	if n := len(parseAgents([]byte("not json"))); n != 0 {
-		t.Errorf("garbage parsed into %d agents", n)
+}
+
+// Unparseable input yields no roster rather than a partial one — a half-populated board
+// is worse than none. But it must also say so: this used to return a bare nil, which is
+// the same answer as a quiet fleet, and the caller had no way to tell a broken machine
+// from an idle one (EVIDENCE.md §9.26).
+func TestParseAgentsSaysWhenItCouldNotRead(t *testing.T) {
+	got, err := parseAgents([]byte("not json"))
+	if len(got) != 0 {
+		t.Errorf("garbage parsed into %d agents", len(got))
+	}
+	if err == nil {
+		t.Fatal("garbage parsed without error; an unreadable roster is indistinguishable from an empty one")
+	}
+	if !errors.Is(err, ErrUnreadable) {
+		t.Errorf("error = %v, want it to wrap ErrUnreadable so the caller can name the kind", err)
+	}
+}
+
+// An empty roster is a fact, not a failure: a fleet can genuinely have nothing in it,
+// and reporting that as trouble would cry wolf on every quiet morning.
+func TestParseAgentsAcceptsAnEmptyRoster(t *testing.T) {
+	got, err := parseAgents([]byte("[]"))
+	if err != nil {
+		t.Errorf("an empty roster reported an error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("parsed %d agents from an empty list", len(got))
 	}
 }
 

@@ -40,6 +40,11 @@ func Todos(f board.Fleet) string {
 // snapshot as the dashboard, flattened for a scrollback or a pipe.
 func Table(f board.Fleet, threshold time.Duration) string {
 	var b strings.Builder
+	// First, before the rows it qualifies. This output is piped and pasted, so a reader
+	// who takes only the head must not miss that everything below is partial (§9.26).
+	if f.Trouble != "" {
+		fmt.Fprintf(&b, "%s\n\n", f.Trouble)
+	}
 	fmt.Fprintf(&b, "%s %s %s %7s\n",
 		pad("STATE", colState), pad("LABEL", colLabel), pad("WORKSPACE", colWorkspace), "IDLE")
 	var running, todos int

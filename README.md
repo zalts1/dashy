@@ -24,6 +24,7 @@ running      build board: cmux fleet status CLI           INFRA                 
     board todo done <text|id> finish one, matched like jump
     board install-hooks       merge Stop + Notification hooks into ~/.claude/settings.json
     board version             board's version, and claude's and cmux's
+    board doctor              what board can and cannot read on this machine
 
 `board watch` is meant to live in its own cmux tab. It needs no daemon and opens no
 port — the tab is the process. Piped or redirected it prints one frame and exits,
@@ -149,6 +150,34 @@ it is, with no build flags, and reports what it depends on beside it:
 and its tabs from cmux, and neither is a documented contract — the two upstream lines
 are usually the answer. A tool that could not be asked reads `not found`; a board built
 outside a git tree reads `(devel)`, which says how it was built rather than hiding it.
+
+## When the board looks wrong — `board doctor`
+
+    $ board doctor
+    board  v0.1.0
+    claude 2.1.220 (Claude Code)
+    cmux   0.64.16 (96) [5321becb6]
+    roster 16 sessions
+    tabs   22 tabs in 7 workspaces
+    hooks  Stop, Notification
+    config /Users/you/.board.json
+    notify off — set notify_cmd to push
+
+Eight lines saying what board can and cannot read here. `roster` is `claude agents
+--json`; `tabs` is cmux. **`16 sessions` with `0 tabs` is the interesting failure** —
+board joins the two on pid and drops any interactive session with no tab, so a fleet
+that looks too small usually means the tabs did not arrive.
+
+It reads and never writes, so it works on a machine where `install-hooks` refuses. It
+**never prints `notify_cmd`**, only whether one is set: this output is meant to be
+pasted, and that field is a shell command that often carries a webhook URL.
+
+An empty board and an unreadable one are different reports, and the screen says which:
+
+    claude not found · board doctor
+
+That line takes the header's own slot in `board watch` and leads the one-shot table, in
+place of the session count. `no sessions` means board looked and the fleet is quiet.
 
 ## Config — `~/.board.json`
 
