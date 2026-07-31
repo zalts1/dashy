@@ -23,6 +23,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          # No go.sum to key a cache on, because there are no dependencies (§2). Left
+          # on, setup-go warns about the missing file on every single run, and a
+          # permanent warning is one nobody reads.
+          cache: false
 
       # The runner is the outsider machine — no cmux, no claude — which is what makes
       # every degraded path below a fact rather than an argument. Asserted, not assumed:
