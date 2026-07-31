@@ -34,11 +34,13 @@ go test ./internal/view -run TestGolden        # frame is pinned byte-for-byte
 COLUMNS=118 LINES=44 ./board watch | cat       # non-TTY: one frame, then exit
 ./board version                                # board's, claude's and cmux's
 
-git tag v0.1.0 && git push origin v0.1.0       # releasing: the tag IS the version
+git tag -a vX.Y.Z && git push origin vX.Y.Z     # releasing: the tag IS the version
 ```
 
 There is no version constant to bump and no `-ldflags`: the tag is what
-`go install ...@v0.1.0` stamps in, so tagging is the whole release (§13).
+`go install ...@vX.Y.Z` stamps in, so tagging is the whole release (§13, verified at
+`v0.1.0` in §9.25). Annotated, because the message is the only place a release says
+what it is.
 
 That last form is the manual verification path — layout and colour diffed without a
 terminal to drive. Golden frames re-bless deliberately, with a reason:
