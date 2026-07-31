@@ -41,6 +41,7 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.22 | `module board` built for a year and could never be installed — a module path is an address, and "no dependencies" hid it | `go.mod`, every import, `README.md`, `CLAUDE.md` |
 | 9.23 | The toolchain already stamps the version — `-ldflags` was cargo; and fixtures passed while the real output stuttered | `version/`, `host/probe.go`, `DESIGN.md` §13 |
 | 9.24 | The suite passed from cache while the environment was the variable under test — `-count=1` when the machine is the question | `.github/workflows/ci.yml`, `DESIGN.md` §11 |
+| 9.25 | `@v0.1.0` reports `v0.1.0`, settling §9.23's unprobed row — and one row of that table was true only until a tag existed | `version/`, `DESIGN.md` §13 |
 
 ---
 
@@ -681,3 +682,22 @@ Of a piece with §9.23's second half, one layer out: there, fixtures passed whil
 real output was wrong; here, the suite passed while the real environment was untested.
 Both are the same shape — **a green result answers only the question it was actually
 given** — and both were caught by running the thing rather than reading it.
+
+### 9.25 The tagged row of §9.23's table, filled in (2026-07-31)
+
+`v0.1.0` is the repo's first tag, so the one build §9.23 could not probe is now probable.
+It behaves as claimed:
+
+| built by | `debug.ReadBuildInfo().Main.Version` |
+|---|---|
+| `go install ...@v0.1.0` | `v0.1.0` |
+
+No `-ldflags`, no constant, nothing to bump — §13 stands as written, and the README's
+`board  v0.1.0` example was accurate before anything could confirm it.
+
+**One row of §9.23's table was true only of the day it was measured.** It records
+`go install ...@latest` → *the pseudo-version*, which was a fact about a module with no
+tags, not about `@latest`. `@latest` now resolves to `v0.1.0` and reports it. The
+measurement was right and its scope was wider than its wording: a probe records the
+state of the repo at probe time, and this one aged the moment a tag existed. Worth
+knowing before treating any other row of a probe table as permanent.
