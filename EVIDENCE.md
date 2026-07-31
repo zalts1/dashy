@@ -42,6 +42,7 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.23 | The toolchain already stamps the version — `-ldflags` was cargo; and fixtures passed while the real output stuttered | `version/`, `host/probe.go`, `DESIGN.md` §13 |
 | 9.24 | The suite passed from cache while the environment was the variable under test — `-count=1` when the machine is the question | `.github/workflows/ci.yml`, `DESIGN.md` §11 |
 | 9.25 | `@v0.1.0` reports `v0.1.0`, settling §9.23's unprobed row — and one row of that table was true only until a tag existed | `version/`, `DESIGN.md` §13 |
+| 9.26 | An unreadable world rendered as an empty one; `watch` needed no guard, and `cmux.Available()` answered a question nobody asked | `claude/`, `board/`, `view/header.go`, `cmux/cmux.go`, `doctor/`, `DESIGN.md` §14 |
 
 ---
 
@@ -701,3 +702,52 @@ tags, not about `@latest`. `@latest` now resolves to `v0.1.0` and reports it. Th
 measurement was right and its scope was wider than its wording: a probe records the
 state of the repo at probe time, and this one aged the moment a tag existed. Worth
 knowing before treating any other row of a probe table as permanent.
+
+### 9.26 An unreadable world rendered as an empty one (2026-07-31)
+
+`claude.Agents` returned a bare `nil` when the subprocess failed *and* when the JSON did
+not parse. `parseAgents`' own test said so approvingly — "an empty board is honest, a
+half-populated board is not" — and the first half of that is what was wrong. An empty
+board is honest only when it says why it is empty. As written, three different worlds
+produced the same screen: no `claude` installed, a roster whose schema moved under us,
+and a genuinely quiet fleet.
+
+The tell was in the two entry points. `show` tested `cmux.Available()` and printed a
+sentence; `watch` did not test anything and painted a blank dashboard. Two words for one
+fact in one codebase means the fact had no home.
+
+**It is one concept, not four fixes.** `Snapshot` gained `RosterErr` and `NoCmux`,
+`Fleet` gained the phrase derived from them in pure `Build`, and both renderers print
+that one field — the same rule as every count on `Fleet` (§3). `watch` needed **no
+guard**: the right fix was never a second refusal in a second entry point, it was the
+frame reporting what it is showing. `show` lost its cmux test in the same change. The
+header's span slot already answered *what am I looking at*, so the phrase costs no line
+and the fit invariant never came into it.
+
+**Two things only the real binary found.**
+
+- **`doctor` contradicted itself.** It printed `cmux   not found` and then `tabs   0 tabs
+  in 0 workspaces`. `cmux.Available()` was documented as "whether we are running under
+  cmux at all" and returned true for an inherited `CMUX_WORKSPACE_ID` before ever
+  checking the PATH — but every caller is about to *ask cmux something*, which is a
+  question about the binary. board always runs inside a cmux session, so that branch
+  short-circuited to true on every real invocation and the fallback it existed to reach
+  was unreachable. The two answers diverge on exactly one machine — env var present,
+  binary gone — where board reported cmux available, read no tabs, dropped every
+  interactive session for having no tab, and said nothing. `Available()` is now the PATH
+  check alone; being inside a session is a separate fact with its own accessors.
+- The check that exposed it was `env PATH=/usr/bin:/bin ./board doctor`, which is not a
+  fixture and cannot be one. Third time in four changes that running the binary found
+  what the suite could not (§9.23, §9.24) — the pattern is that fixtures test the
+  judgement and only the machine tests the assumptions about the machine.
+
+**What `doctor` must not do.** It never prints `notify_cmd`: the output exists to be
+pasted into a bug report, and that field is a shell command that routinely carries a
+webhook URL or a token. Whether it is set is the diagnostic. It also never writes —
+`hooks.Installed` is separate from `Install` and shares the marker and event list with
+it, because a diagnosis keyed on anything else would report hooks as missing on a machine
+that has them.
+
+**Cost:** five existing golden frames byte-identical, one added on purpose
+(`frame-trouble.txt`) pinning the case where the trouble and a surviving row are both
+true at once.

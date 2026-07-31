@@ -1,6 +1,7 @@
 package board
 
 import (
+	"errors"
 	"path/filepath"
 	"sort"
 	"time"
@@ -21,10 +22,18 @@ type Snapshot struct {
 	Labels    map[string]string    // surface id -> user label
 	Todos     []config.Todo        // work with no session behind it (§12)
 	Threshold time.Duration
+	// RosterErr is why the roster did not arrive, or nil. Without it Build cannot tell
+	// an empty fleet from an unreadable one, which is the whole of EVIDENCE.md §9.26.
+	RosterErr error
+	// NoCmux records that the multiplexer board reports on is absent. A quieter failure
+	// than the roster's: the roster still arrives, and the loop below then drops every
+	// interactive session in it for having no tab.
+	NoCmux bool
 }
 
 func Build(s Snapshot, now time.Time) Fleet {
 	var f Fleet
+	f.Trouble = trouble(s)
 	rows := make([]Row, 0, len(s.Agents))
 	spans := map[string]bool{}
 	for _, a := range s.Agents {
@@ -100,6 +109,30 @@ func Build(s Snapshot, now time.Time) Fleet {
 	f.Rows = rows
 	f.Workspaces = len(spans)
 	return f
+}
+
+// trouble turns an unread world into the one line both renderers print. Each phrase
+// names the fact and then `doctor`, which is where the same failure is enumerated in
+// full — a report that says only "something is wrong" leaves the reader to guess, and
+// the whole point of §9.14 read forwards is that an available route should say so.
+//
+// The roster outranks the tabs: with no roster there are no rows at all, while with no
+// cmux the background agents still arrive. One line has room for the more fundamental
+// fact, and nothing here is the last word — `doctor` lists both.
+func trouble(s Snapshot) string {
+	switch {
+	case errors.Is(s.RosterErr, claude.ErrNotInstalled):
+		return "claude not found · board doctor"
+	case errors.Is(s.RosterErr, claude.ErrUnreadable):
+		return "roster unreadable · board doctor"
+	case s.RosterErr != nil:
+		// Includes ErrQueryFailed and anything a future caller puts here: an unrecognised
+		// failure is still a failure, and defaulting to silence is the bug being fixed.
+		return "roster unavailable · board doctor"
+	case s.NoCmux:
+		return "cmux not found · board doctor"
+	}
+	return ""
 }
 
 // label picks the most specific name available: what the user called it, then what

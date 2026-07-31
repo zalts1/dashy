@@ -18,8 +18,9 @@ func Collect() Fleet {
 	// The two subprocess calls are independent and neither is cheap: claude agents
 	// ~250ms, cmux top ~50ms. Overlapped, a tick costs ~250ms rather than ~300.
 	var agents []claude.Agent
+	var rosterErr error
 	done := make(chan struct{})
-	go func() { agents = claude.Agents(); close(done) }()
+	go func() { agents, rosterErr = claude.Agents(); close(done) }()
 	titles := cmux.TitlesByPid()
 	<-done
 
@@ -46,6 +47,10 @@ func Collect() Fleet {
 		Labels:    st.Labels,
 		Todos:     st.Todos,
 		Threshold: st.Threshold(),
+		RosterErr: rosterErr,
+		// Asked here rather than in the callers, so every entry point learns about a
+		// missing cmux from the same place and cannot word it differently (§9.26).
+		NoCmux: !cmux.Available(),
 	}, time.Now())
 }
 

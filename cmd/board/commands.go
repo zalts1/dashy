@@ -7,23 +7,33 @@ import (
 	"github.com/zalts1/dashy/internal/board"
 	"github.com/zalts1/dashy/internal/cmux"
 	"github.com/zalts1/dashy/internal/config"
+	"github.com/zalts1/dashy/internal/doctor"
 	"github.com/zalts1/dashy/internal/view"
 )
 
 // show is the one-shot table. Not an error to have nothing to report: board is a
 // reporting surface, and "no sessions" is a report.
+//
+// It no longer tests for cmux itself. It used to, and `watch` did not, which is how the
+// two entry points came to disagree — one printed a sentence, the other painted a blank
+// dashboard. Both now read the same phrase off the fleet (EVIDENCE.md §9.26).
 func show() {
-	if !cmux.Available() {
-		fmt.Println("board: cmux not detected (no CMUX_WORKSPACE_ID, no cmux on PATH).")
-		return
-	}
 	st := config.Load()
 	f := board.Collect()
-	if len(f.Rows) == 0 {
+	// Nothing wrong and nothing running is the one case worth a sentence instead of an
+	// empty table. With trouble, the table leads with it and the header rows still say
+	// what board was trying to show.
+	if f.Trouble == "" && len(f.Rows) == 0 {
 		fmt.Println("board: no live agent sessions.")
 		return
 	}
 	fmt.Print(view.Table(f, st.Threshold()))
+}
+
+// diagnose is `board doctor`: the wiring, on a machine that is not the author's. It
+// takes no arguments and cannot fail — every unreadable thing is a row that says so.
+func diagnose() {
+	fmt.Print(doctor.Format(doctor.Gather()))
 }
 
 // label names the session board was invoked from. Labels are keyed on the surface

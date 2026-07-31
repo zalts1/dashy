@@ -37,6 +37,7 @@ grep -n '^#\+ ' DESIGN.md        # § → line, then Read with offset/limit
 | 11 | the pure seams and their fixture shapes | writing any test |
 | 12 | todos: a row with no process, the cap of 10, where capture and removal each live | `config/`, `board/build.go`, the `TODO` band |
 | 13 | `version`: the tag is the release, upstreams reported verbatim, absence never raised | `version/`, `host/probe.go`, releasing |
+| 14 | trouble: an unreadable world is not an empty one, and `doctor` reads without writing | `claude/`, `board/build.go`, `view/header.go`, `doctor/` |
 
 ---
 
@@ -570,6 +571,9 @@ The pure seams exist for this and must stay pure:
 | `AddTodo` / `DeleteTodo` / `FindTodo` | `config` | a `State` literal — the cap, the prefix match, the age |
 | `Format(Info)` | `version` | an `Info` literal — the interesting cases are the missing tools, which no fixture-free test could reach (§13) |
 | `firstLine` | `host` | stdout-shaped byte literals |
+| `trouble(Snapshot)` | `board` | a `Snapshot` with `RosterErr`/`NoCmux` set — an unreadable world is only reachable as a fixture (§14) |
+| `Format(Report)` | `doctor` | a `Report` literal; every row's broken case, including the ones that must not print (§14) |
+| `installedEvents` | `hooks` | settings-shaped literals — must agree with what `Install` writes |
 
 `Collect`, `Agents` and `TitlesByPid` touch `$HOME` and subprocesses —
 keep logic out of them and test the parsers they feed. **Never write a test that
@@ -729,3 +733,60 @@ print an empty field (§8, and §11 for the fixtures that pin it).
 `claude.Version` and `cmux.Version` live beside the other calls to their own binaries,
 so everything that shells out to a tool is greppable in one package; `host.Probe` holds
 the one shared judgement, which line of stdout to believe.
+
+---
+
+## 14. Trouble, and `doctor` — what board could not read
+
+board reads two undocumented surfaces and used to throw away every failure of both.
+`claude.Agents` returned a bare `nil` on any error and on any shape it did not
+recognise; `show` tested for cmux and `watch` did not. So a missing `claude`, a changed
+roster schema, and a genuinely quiet fleet produced **the same screen**, and a
+first `board watch` on a machine without cmux painted an empty dashboard explaining
+nothing. On the author's machine none of this is visible. On anyone else's it is the
+whole support burden (`EVIDENCE.md` §9.26).
+
+**The fix is one concept, not four.** `Fleet.Trouble` is the phrase for what could not
+be read, empty when the world was legible, derived in pure `Build` from a `Snapshot`
+that now carries `RosterErr` and `NoCmux`. Both renderers print that one field, for the
+same reason every count is derived there: two renderers must not invent their own words
+for the same fact (§3).
+
+Consequences, each falling out rather than designed:
+
+- **It takes the header's span slot.** "no sessions" is a claim about the fleet; an
+  unreadable roster is a claim about board, and the span is already the answer to *what
+  am I looking at*. Costs no line, so the fit invariant is untouched (§6). Painted
+  `statusWarning` — the value the ⚠ and the paused clock already use, never bare
+  `statusCritical`, which fails contrast as text (§9.4).
+- **The trouble precedes the count rather than replacing it** when rows did arrive. With
+  no cmux the background agents still come through, and a header reporting only the
+  trouble would trade one silence for another.
+- **`watch` needed no guard after all.** The right fix was never a second refusal in a
+  second entry point; it was the frame reporting what it is showing. `show` lost its
+  cmux test in the same change, so both entry points now read one phrase off one field
+  and cannot disagree. The one-shot table leads with it, because that output is piped.
+- **The roster outranks the tabs.** With no roster there are no rows at all; with no
+  cmux the background agents survive. One line carries the more fundamental fact and
+  names `doctor`, which carries both.
+
+**`doctor` is the escalation, and `version` stays.** They answer different questions —
+`version` is three lines to paste, `doctor` is the diagnosis — so this is not §9.18's
+two entry points for one thing. It embeds `version.Info` and calls `version.Format`, so
+there is exactly one place that knows how to print a version string, and it aligns its
+own four rows to `version.LabelWidth`.
+
+Its rows are the wiring: the three versions, then the roster (a count, or the error's
+own words — the frame's "· board doctor" would be circular here), the tabs (`0 tabs`
+with a healthy roster is the shape of §9.3), the hooks (named individually, because a
+half-install is a hook that never fires), the config path (and whether it exists yet),
+and whether notifications are on.
+
+**It never prints `notify_cmd`.** The output is meant to be pasted into a bug report and
+that field is a shell command routinely carrying a webhook URL or a token. Whether it is
+set is the diagnostic; the command is the user's secret.
+
+**It reads and never writes** — `hooks.Installed` is deliberately separate from
+`Install`, sharing the marker and the event list so a diagnosis cannot disagree with the
+installer. It is also the command that runs on machines where `install-hooks` refuses, so
+an unparseable `settings.json` is a row of its own rather than "not installed" (§8).

@@ -47,6 +47,11 @@ func TestGoldenFrames(t *testing.T) {
 		{"frame-typing.txt", goldenTodoFleet(),
 			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118},
 			UI{Typing: true, Paused: true, Input: "reply to the security questionnaire"}},
+		// A world board could not fully read: the trouble in the span, and the one row that
+		// still arrived counted beside it. This is what a machine with no cmux actually
+		// shows — the background agent has no tab to lose (§9.26).
+		{"frame-trouble.txt", goldenTroubleFleet(),
+			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118}, UI{}},
 	}
 	for _, c := range cases {
 		t.Run(c.file, func(t *testing.T) {
@@ -65,6 +70,24 @@ func TestGoldenFrames(t *testing.T) {
 					c.file, got, string(want))
 			}
 		})
+	}
+}
+
+// goldenTroubleFleet is a partially-read world: cmux is gone, so the interactive
+// sessions were dropped for having no tab and only the background agent survives. The
+// trouble and the count are both true at once, which is the case worth pinning — a
+// header that reported only one of them was the bug.
+func goldenTroubleFleet() board.Fleet {
+	return board.Fleet{
+		Trouble: "cmux not found · board doctor",
+		Rows: []board.Row{
+			{Key: "K-BG", State: "blocked →", Label: "watch CI to green, or leave it here?",
+				Workspace: "background", Idle: 52 * 24 * time.Hour, Rank: board.RankBlocked, Stale: true},
+		},
+		Blocked: 1,
+		Stale:   1,
+		Oldest:  52 * 24 * time.Hour,
+		TodoCap: 10,
 	}
 }
 

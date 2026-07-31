@@ -13,11 +13,14 @@ import (
 
 func output(args ...string) ([]byte, error) { return host.Output("cmux", args...) }
 
-// Available reports whether we are running under cmux at all.
+// Available reports whether cmux can be asked anything — which is a question about the
+// binary, not about the environment. It used to return true for an inherited
+// CMUX_WORKSPACE_ID as well, but board is always launched from inside a session, so that
+// branch answered "am I under cmux" and hid the case it was meant to catch: env var
+// present, binary gone, every tab read empty and nothing said (EVIDENCE.md §9.26).
+//
+// Being inside a session is a separate fact with its own accessors below.
 func Available() bool {
-	if os.Getenv("CMUX_WORKSPACE_ID") != "" {
-		return true
-	}
 	_, err := exec.LookPath("cmux")
 	return err == nil
 }

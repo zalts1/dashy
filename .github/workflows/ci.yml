@@ -75,3 +75,24 @@ jobs:
           # and fails for the other.
           ./board version | grep -qE '^claude +not found$'
           ./board version | grep -qE '^cmux +not found$'
+
+      # This runner is the unreadable world, so it is the one place the degraded reports
+      # can be checked against a real machine rather than a fixture. §9.26 was found by
+      # running the binary with a stripped PATH; this is that check, kept.
+      - name: doctor diagnoses a machine with neither upstream
+        run: |
+          ./board doctor
+          ./board doctor | grep -qE '^roster +claude not found$'
+          ./board doctor | grep -qE '^tabs +cmux not found$'
+          # doctor's output is pasted into bug reports; notify_cmd never appears in it.
+          ./board doctor | grep -qE '^notify +off'
+
+      - name: the board says why it is empty, not just that it is
+        run: |
+          ./board
+          ./board | grep -q 'claude not found · board doctor'
+          # "no sessions" is a claim about the fleet and would be a lie here.
+          if ./board | grep -q 'no live agent sessions'; then
+            echo "::error::board reported an empty fleet on a machine it could not read"
+            exit 1
+          fi
