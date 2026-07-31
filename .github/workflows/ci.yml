@@ -1,0 +1,77 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # macOS because the build is darwin-only: watch/term.go uses TIOCGETA, which is
+    # BSD-only, so a linux runner cannot compile board at all.
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          # No go.sum to key a cache on, because there are no dependencies (§2). Left
+          # on, setup-go warns about the missing file on every single run, and a
+          # permanent warning is one nobody reads.
+          cache: false
+
+      # The runner is the outsider machine — no cmux, no claude — which is what makes
+      # every degraded path below a fact rather than an argument. Asserted, not assumed:
+      # a runner image that started shipping either tool would silently stop being a
+      # test bed, and nothing else here would notice.
+      - name: neither upstream is installed
+        run: |
+          for tool in claude cmux; do
+            if command -v "$tool" >/dev/null 2>&1; then
+              echo "::error::$tool is on PATH; this job is no longer the outsider machine"
+              exit 1
+            fi
+          done
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::unformatted files:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - run: go vet ./...
+
+      # -count=1 defeats the test cache. A cached pass carries the verdict from whatever
+      # machine produced it, and here the machine is the variable under test (EVIDENCE.md
+      # §9.24).
+      - name: go test
+        run: go test -count=1 ./...
+
+      # The suite must mutate nothing: golden frames are re-blessed by hand with a
+      # reason (BLESS=1) or not at all.
+      - name: the tests changed no tracked file
+        run: git diff --exit-code
+
+      - run: go build -o board ./cmd/board
+
+      # version is the one command whose whole job is to work on a broken machine, and
+      # on this runner both upstreams genuinely are missing.
+      - name: version reports both upstreams as absent
+        run: |
+          ./board version
+          # ` +` not ` `: the label is padded to a fixed width, so `cmux` is followed by
+          # three spaces and `claude` by one. A single-space pattern passes for one row
+          # and fails for the other.
+          ./board version | grep -qE '^claude +not found$'
+          ./board version | grep -qE '^cmux +not found$'

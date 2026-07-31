@@ -40,6 +40,7 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.21 | The quiet band folds on `z`, open by default — the fold is the reader's, and a folded row is not a navigation stop | `view/frame.go`, `view/order.go`, `watch/keys.go` |
 | 9.22 | `module board` built for a year and could never be installed — a module path is an address, and "no dependencies" hid it | `go.mod`, every import, `README.md`, `CLAUDE.md` |
 | 9.23 | The toolchain already stamps the version — `-ldflags` was cargo; and fixtures passed while the real output stuttered | `version/`, `host/probe.go`, `DESIGN.md` §13 |
+| 9.24 | The suite passed from cache while the environment was the variable under test — `-count=1` when the machine is the question | `.github/workflows/ci.yml`, `DESIGN.md` §11 |
 
 ---
 
@@ -656,3 +657,27 @@ Two smaller corrections from probing rather than assuming:
   0.64.16`. Nothing in a table of made-up version strings suggests that; it took
   building the binary and looking. The fix is pinned by a test now, but the fixtures did
   not find it — §11's manual verification path is doing work the suite cannot.
+
+### 9.24 The suite passed without running, and the pass meant nothing (2026-07-31)
+
+Setting up CI, the property to establish first was that the tests survive a machine with
+no `cmux` and no `claude` — the runner, and every stranger. Run as
+`env PATH=/opt/homebrew/bin:/usr/bin:/bin go test ./...`, all ten packages reported `ok`
+with the two tools verifiably off the PATH.
+
+**From cache.** Every one of those verdicts had been produced minutes earlier on this
+machine, with both tools installed. Go's test cache is content-addressed over the files
+and environment variables a test actually consults, and these tests consult neither —
+by design, since §11 keeps the subprocess callers out of the suite and tests the parsers
+they feed. So the cache was right and the inference was wrong: the run proved the code
+unchanged, which is not what was being asked.
+
+The rule this settles: **when the environment is the variable under test, the cache must
+be defeated.** `-count=1` is not hygiene-by-default here, it is the difference between a
+verification and a restated earlier one. CI runs `-count=1` for exactly this reason, and
+on a fresh runner it costs nothing.
+
+Of a piece with §9.23's second half, one layer out: there, fixtures passed while the
+real output was wrong; here, the suite passed while the real environment was untested.
+Both are the same shape — **a green result answers only the question it was actually
+given** — and both were caught by running the thing rather than reading it.

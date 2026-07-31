@@ -580,6 +580,15 @@ Manual verification, for layout and colour:
     COLUMNS=118 LINES=44 board watch | cat    # one frame, no terminal needed
     LINES=24 COLUMNS=100 board watch          # exercise collapse and narrow widths
 
+CI (`.github/workflows/ci.yml`) runs `gofmt -l`, `go vet`, `go test -count=1`, a build
+and a `board version` smoke test on `macos-latest` — macOS because the build is
+darwin-only (`watch/term.go` uses `TIOCGETA`). **The runner is the outsider machine: it
+has neither `cmux` nor `claude`**, which is what makes every degraded path a fact rather
+than an argument. Their absence is asserted, not assumed, because a runner image that
+began shipping either tool would silently stop being a test bed. `-count=1` is
+deliberate (§9.24), and `git diff --exit-code` after the tests proves the suite mutates
+nothing — goldens are re-blessed by hand, with a reason, or not at all.
+
 ---
 
 ## 12. Todos — a row with no process
