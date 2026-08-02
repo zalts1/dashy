@@ -467,8 +467,15 @@ interaction model bolted on; it is the same select-then-act pair, reached differ
   that restores termios — a terminal left reporting presses swallows selection in the shell
   board hands back, with nothing on screen to explain it.
 
-*Not built, and why:* the wheel is dropped rather than bound, because the frame always fits
-and there is nothing under the bottom line to scroll to. Hover needs motion tracking
+- **The wheel steps the selection**, up and down. That is not a feature the mouse added; it
+  is one asking for reports took away. On the alternate screen there is no scrollback, so a
+  terminal translates notches into `↑`/`↓` — and it stops the moment an application says it
+  wants the events itself. The binding puts back exactly what was there (§9.32). A notch
+  carries no row deliberately: it is a direction, so it steps from the caret rather than
+  from wherever the pointer is resting. The horizontal wheel stays unbound; the list has one
+  axis.
+
+*Not built, and why:* hover needs motion tracking
 (`?1002`/`?1003`), which redraws on every twitch to highlight a row that a click already
 reaches — and it would put work on a path that currently does none unless something is due.
 Clickable band headings and legend hints are targets a keyboard already covers with one

@@ -92,13 +92,15 @@ Off by default. Set `"mouse": true` in `~/.board.json` and restart `board watch`
 
     click a row     selects it, exactly as ↑/↓ would
     click it again  focuses its cmux tab, exactly as Enter would
+    wheel up/down   steps the selection, exactly as ↑/↓ would
 
 **Two clicks, not one**, and that is the point rather than an omission: the first click
 pauses the refresh, and only a frame that has stopped moving can be clicked at
 accurately. Clicking anywhere that is not a row — the header, a band heading, the legend
-— does nothing at all, so a near miss costs nothing. Everything else stays on the
-keyboard: no drag, no wheel (the frame always fits, so there is nothing to scroll to),
-no right-click menu.
+— does nothing at all, so a near miss costs nothing. The wheel moves the caret rather
+than the frame, which is what it already did before the setting existed: nothing here
+scrolls, so a notch has only ever been a step. Everything else stays on the keyboard: no
+drag, no right-click menu.
 
 **What it costs you:** while `board watch` is running, dragging to select text goes to
 board instead of the terminal, so copying a label or a workspace name needs `Shift`

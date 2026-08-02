@@ -23,7 +23,16 @@ func TestDecodeMouse(t *testing.T) {
 		{"the right button does nothing here", "\x1b[<2;12;9M", nil},
 		{"the middle button does nothing here", "\x1b[<1;12;9M", nil},
 		{"a drag is motion, not a press", "\x1b[<32;12;9M", nil},
-		{"the wheel has nothing to scroll: the frame always fits", "\x1b[<64;12;9M", nil},
+		// The wheel steps the selection, which is what it did before board asked for mouse
+		// reports at all: on the alternate screen the terminal was translating notches into
+		// arrow keys, and turning reporting on took that away (EVIDENCE.md §9.32). It carries
+		// no row — a notch is a direction, and treating it as a position would let it act on
+		// whatever the pointer happened to be resting over.
+		{"the wheel steps up", "\x1b[<64;12;9M", []event{{k: keyUp}}},
+		{"the wheel steps down", "\x1b[<65;12;9M", []event{{k: keyDown}}},
+		{"a shifted wheel still steps", "\x1b[<69;12;9M", []event{{k: keyDown}}},
+		{"the horizontal wheel does nothing: the list has one axis", "\x1b[<66;12;9M", nil},
+		{"a notch is a direction, not a place", "\x1b[<64;12;40M", []event{{k: keyUp}}},
 		{"a click types nothing, whatever mode is on", "\x1b[<0;5;5M", []event{{k: keyClick, row: 4}}},
 		// The trap the arrow keys already taught: the tail of a sequence is printable, so a
 		// click that is not consumed whole types "<0;12;9M" into a todo — and the `0` and `M`

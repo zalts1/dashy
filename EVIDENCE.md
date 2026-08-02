@@ -48,6 +48,7 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.29 | Two elements disagreed about where the right edge was, and neither spent the surplus — the header follows the frame, the row fills the width | `view/layout.go`, `view/header.go`, `view/frame.go`, `view/scale.go` |
 | 9.30 | `notify` never failed the agent and blocked it instead — the invariant covered errors, not latency | `hooks/notify.go`, `DESIGN.md` §8 |
 | 9.31 | `-h` was not missing, it was a todo: the absent flag wrote to the one file board owns | `cmd/board/usage.go`, `cmd/board/main.go` |
+| 9.32 | Asking for mouse reports silently removed the wheel — the terminal had been navigating for board all along | `watch/mouse.go`, `DESIGN.md` §7 |
 
 ---
 
@@ -972,3 +973,36 @@ argument only for the bare word `help` — because a todo may legitimately be ab
 (`board todo "help sam with the migration"` must stay a todo). Usage goes to stdout with
 exit 0; an unrecognised command still fails on stderr with exit 2, because being asked a
 question and being given a wrong one are different events and only one is an error.
+
+### 9.32 Asking for the mouse silently removed the wheel (2026-08-02)
+
+**Believed:** binding the wheel was a feature board did not need, and `DESIGN.md` §7 said
+so in as many words — the frame always fits, so there is nothing under the bottom line to
+scroll to. On that reasoning the new `sgrMouse` dropped every report with bit 6 set, and
+the omission was recorded as a decision rather than a loss.
+
+**Reported:** "mouse wheel used to work great, now it's a bit messed up." It did work, and
+nothing in board had ever implemented it. `board watch` runs on the alternate screen, which
+has no scrollback, so the terminal was translating notches into `↑`/`↓` — alternate-scroll,
+on by default in Ghostty — and the decoder was reading them as ordinary arrow keys. **The
+wheel was navigating, and board never knew it was involved.** Turning on `?1000` suppressed
+the translation, because a terminal stops substituting keys the moment an application says
+it wants the events itself.
+
+**What that shows:** the question "what does the wheel do here?" was answered from the
+frame's own model — nothing scrolls, so nothing to bind — when the behaviour that existed
+lived one layer down, in a terminal default nobody had written down. A capability arriving
+from outside the program is invisible to any argument made only about the program, and the
+regression is not that the reasoning was wrong so much as that it was addressed to the
+wrong surface. §9.26 and §9.22 are the same shape: what board can see is not what is there.
+
+**Shipped:** wheel up and down decode to `keyUp`/`keyDown`, restoring exactly what
+alternate-scroll had been doing, and the horizontal wheel stays unbound because the list
+has one axis. A notch carries no row, deliberately — it is a direction, and reading its
+coordinates would step the selection to wherever the pointer happened to be resting rather
+than from where the caret is. Verified in a pty with the pointer parked over the KPI strip:
+two notches down move the caret two rows, from the top of the list.
+
+**The general rule this leaves:** enabling a terminal mode takes things away as well as
+adding them. Before asking for one, ask what the terminal was already doing on board's
+behalf in that mode — it is not in board's code, so nothing in board's tests will miss it.

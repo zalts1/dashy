@@ -14,6 +14,12 @@ import (
 // a frame that has nothing to hover. ?1006 is the SGR encoding, and it is not optional:
 // the original form packs each coordinate into one byte and stops reporting past column
 // 223, which on a wide monitor is the right-hand half of the table.
+//
+// Asking for reports also takes the wheel away. On the alternate screen a terminal has no
+// scrollback to move, so it translates notches into arrow keys — and that is suppressed
+// the moment an application says it wants mouse events. The wheel is bound back to the
+// same two keys here, which is not a new feature but the one board silently removed
+// (EVIDENCE.md §9.32).
 const (
 	mouseOn  = "\033[?1000h\033[?1006h"
 	mouseOff = "\033[?1006l\033[?1000l"
@@ -35,11 +41,24 @@ func sgrMouse(params string, final rune) (event, bool) {
 	if _, err2 := strconv.Atoi(f[1]); err1 != nil || err2 != nil || err3 != nil {
 		return event{}, false
 	}
-	// Bit 5 is motion and bit 6 is the wheel; the low two bits name the button. The wheel
-	// is dropped rather than bound because the frame always fits — there is nothing under
-	// the bottom line to scroll to.
-	if b&0b1100011 != 0 {
+	// Bit 5 is motion, bit 6 is the wheel, and the low two bits name the button or the
+	// direction. Everything above that is a modifier, which changes neither.
+	if b&0b100000 != 0 {
 		return event{}, false
+	}
+	if b&0b1000000 != 0 {
+		// A notch carries no row deliberately: it is a direction, and reading it as a
+		// position would step the selection to wherever the pointer was resting instead.
+		switch b & 0b11 {
+		case 0:
+			return event{k: keyUp}, true
+		case 1:
+			return event{k: keyDown}, true
+		}
+		return event{}, false // the horizontal wheel: the list has one axis
+	}
+	if b&0b11 != 0 {
+		return event{}, false // the middle and right buttons are bound to nothing
 	}
 	// Terminals count from one. A zero is not a row to clamp to the top, it is a report
 	// board did not understand.
