@@ -283,14 +283,35 @@ the terminal wraps, and a wrapped line makes the frame occupy more screen rows t
 header goes first (§9.10). Width is therefore not a cosmetic question; it is the same
 invariant as height. It was broken for the whole life of the tool (§9.12).
 
-- **Chrome is derived, never guessed.** `rowChrome` is built from the pieces it is made
-  of — lead, gutter, bar, warn mark, IDLE, gaps — so it cannot drift out of step with
-  the layout the way the fixed reserve of `46` did.
+- **Chrome is derived, never guessed.** `rowChrome(barW)` is built from the pieces it is
+  made of — lead, gutter, bar, warn mark, IDLE, gaps — so it cannot drift out of step with
+  the layout the way the fixed reserve of `46` did. It takes the bar's width rather than
+  assuming it: the bar is elastic, and a constant that quietly disagreed with it would be
+  §9.12 again.
 - **Two elastic columns, sized to content**: the label, and the tail (workspace on a
   row, `HH:MM where` in ASKED). The tail was previously unbounded, which is what
   overflowed: workspace names are user data. Squeeze order is meaning first — the label
   shrinks to its floor, then the tail truncates. A resize moves those two and leaves
   every other column where it was.
+- **Three elastic columns, and the order is meaning first in both directions.** Squeezing:
+  the label gives way to its floor, then the tail truncates. Spending: the label is filled
+  out whole first, and the bar takes whatever is left, so the row ends on the frame's right
+  edge instead of stopping short of it. The bar is the right place for surplus because the
+  gap it closes is the one between a label and its bar — and it is the last to be paid,
+  because a wider bar is a bonus and a label is the row's meaning (§9.29).
+- **The label column is the whole label while the row can hold it, and the p90 once it
+  cannot.** Bars encode one absolute scale, so they have to start on a shared column —
+  which meant a single long title pushed every other row's bar across a corridor of
+  padding to reach it. p90 is the fallback under pressure, not a policy: truncating on a
+  window with columns to spare is choosing to lose text it could have shown (§9.29).
+- **The frame has one right edge, and it is the frame's, not the terminal's.** The header
+  is written last and sized to the widest line below it, bounded by the terminal and
+  floored by what it has to say unshed. Now that the bars spend the surplus the two
+  usually meet at the terminal's edge — but they meet because the header follows the
+  frame, not because both are measured against the same terminal, which is what was wrong
+  before: the header spanned the terminal unconditionally, agreed with the table only at
+  the width the goldens were captured at, and put the clock 100 columns from anything it
+  described on a real monitor (§9.29).
 - **A cut bar is worse than no bar**: the same glyph run reporting a smaller number, on
   a scale that is supposed to be absolute. Below `rowChrome + minLabelW` the bar column
   is dropped whole (`rowChromeBare`), which also buys back the 13 columns that make the
@@ -323,8 +344,14 @@ half-second, which is why the reading "lead with `3 NEED YOU`" was rejected.
   derived quantity, so it lives on `Fleet`, not in the renderer.
 - **Two blocks, pinned to opposite edges.** Clumped left, the line read as a dim
   footnote that happened to be at the top of the screen; split, it reads as a bar, and
-  mode changes land where the eye already goes to check freshness. The right block
-  stops `headMargin` short of the last column, mirroring the left indent.
+  mode changes land where the eye already goes to check freshness. The right block lands
+  on the frame's right edge — `headMargin` short of the last column while the bands below
+  reach that far, and short of *that* when they do not (§6 Width, §9.29).
+- **`headGap` is what keeps them two blocks.** Five columns, the KPI strip's inter-cell
+  gap, and the header sheds rather than closing below it. One space was the floor while
+  the header always spanned the terminal, because only a terminal narrow enough to be
+  shedding could reach it; sized to the frame it is reachable at any width, and
+  `35 sessions in 5 workspaces cmux focus refused` is one sentence, not two blocks.
 - **The clock keeps seconds.** At a 10s cadence a minute-precision clock cannot be
   told apart from a frozen one, which is the only thing that element is there to prove.
   Paused **replaces** the clock rather than sitting beside it: the data has stopped

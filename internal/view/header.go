@@ -22,23 +22,30 @@ import (
 // stops short of the last column so no terminal can be tempted to wrap it.
 const headMargin = 2
 
-func header(f board.Fleet, s Screen, u UI) string {
-	room := s.Cols - 2*headMargin
+// headGap is the least space that still reads as two blocks rather than one sentence,
+// and it is the KPI strip's inter-cell gap for the same reason. One space was the floor
+// while the header always spanned the terminal, because only a terminal narrow enough
+// to be shedding could ever reach it. Sized to the frame it can be reached at any
+// width, and "35 sessions in 5 workspaces cmux focus refused" is one string (§9.29).
+const headGap = 5
+
+// edge is the column the right block lands on. It is the frame's right edge rather
+// than the terminal's: every band below is sized to its content, so a header pinned to
+// the last column of a wide monitor put the clock a hundred columns from anything it
+// described (EVIDENCE.md §9.29). frameEdge is what computes it.
+func header(f board.Fleet, s Screen, u UI, edge int) string {
+	room := edge - headMargin
 	if room < 6 {
 		return ""
 	}
 	span, notice, mode := spanText(f, true), u.Notice, modeText(s, u, true)
 
-	left := func() string { return strings.TrimRight("BOARD  "+span, " ") }
-	right := func() string {
-		if notice == "" {
-			return mode
-		}
-		return notice + "   " + mode
-	}
-	// One space between the blocks is the floor; anything less and they read as one
-	// string. over is measured against that floor, so a positive value is real overflow.
-	over := func() int { return runes(left()) + 1 + runes(right()) - room }
+	left := func() string { l, _ := headerBlocks(span, notice, mode); return l }
+	right := func() string { _, r := headerBlocks(span, notice, mode); return r }
+	// over is measured against headGap, so a positive value is a header that cannot keep
+	// its blocks apart — shedding is what it does about it, and closing the gap is only
+	// the last resort below, once there is nothing left to shed.
+	over := func() int { return runes(left()) + headGap + runes(right()) - room }
 
 	// Shed in order of expendability, re-measuring each time. The interval is static
 	// config; the workspace span is context; the count and the clock are the point.
@@ -79,6 +86,25 @@ func header(f board.Fleet, s Screen, u UI) string {
 	}
 	return strings.Repeat(" ", headMargin) + leftPainted +
 		strings.Repeat(" ", max(gap, 1)) + rightPainted
+}
+
+// headerBlocks assembles the two blocks from whatever fidelity their parts are at, so
+// the shedding loop above and the width below cannot disagree about what a header is.
+func headerBlocks(span, notice, mode string) (left, right string) {
+	left = strings.TrimRight("BOARD  "+span, " ")
+	right = mode
+	if notice != "" {
+		right = notice + "   " + mode
+	}
+	return left, right
+}
+
+// headerEdge is the column the header needs with nothing shed — the floor the frame's
+// own width may not squeeze it below, since narrowing a header to a small fleet is only
+// worth doing while it still costs the reader nothing.
+func headerEdge(f board.Fleet, s Screen, u UI) int {
+	l, r := headerBlocks(spanText(f, true), u.Notice, modeText(s, u, true))
+	return headMargin + runes(l) + headGap + runes(r)
 }
 
 // spanText says how much work there is and how far it is spread. The workspace count

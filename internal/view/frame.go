@@ -99,16 +99,15 @@ func Frame(f board.Fleet, s Screen, u UI) string {
 
 func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
 	var b bytes.Buffer
-	labelW, tailW, bars := columns(f, s.Cols)
+	labelW, tailW, barW := columns(f, s.Cols)
+	bars := barW > 0
 	// The columns between a label and its duration: the bar, the warn mark, and the
 	// gaps around them.
 	midCols := 3
 	if bars {
-		midCols = barCells + 4
+		midCols = barW + 4
 	}
 	blocked, working, _, _ := f.Bands()
-
-	b.WriteString("\n" + header(f, s, u) + "\n\n")
 
 	b.WriteString(kpiStrip(f, s, len(blocked), len(working)) + "\n")
 
@@ -133,9 +132,9 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
 		if bars {
 			// An empty cell, not a missing one: a working row has no bar but still has
 			// to line its duration up with everything else.
-			barCell := strings.Repeat(" ", barCells)
+			barCell := strings.Repeat(" ", barW)
 			if showBar {
-				barCell = bar(r.Idle)
+				barCell = bar(r.Idle, barW)
 			}
 			mid = " " + barCell + " " + warn + " "
 		}
@@ -229,8 +228,12 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
 	// so the legend goes wherever the bars went.
 	b.WriteString("\n  " + bottom(f, u, bars) + "\n")
 
+	// The header is written last and measured against everything below it, so the frame
+	// has one right edge instead of two that agree only at 118 columns (§9.29).
+	frame := "\n" + header(f, s, u, frameEdge(b.String(), s.Cols, headerEdge(f, s, u))) + "\n\n" + b.String()
+
 	// Belt to the arithmetic's braces: nothing may wrap, whatever the width.
-	lines := strings.Split(b.String(), "\n")
+	lines := strings.Split(frame, "\n")
 	for i, l := range lines {
 		lines[i] = clampLine(l, s.Cols)
 	}

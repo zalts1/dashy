@@ -56,7 +56,7 @@ func TestIdleScale(t *testing.T) {
 
 func TestBar(t *testing.T) {
 	for _, d := range []time.Duration{0, time.Minute, 5 * time.Hour, 200 * 24 * time.Hour} {
-		got := bar(d)
+		got := bar(d, barCells)
 		// Every bar occupies the same cells, or the IDLE column stops lining up.
 		if n := visibleWidth(got); n != barCells {
 			t.Errorf("bar(%v) occupies %d cells, want %d", d, n, barCells)
@@ -65,11 +65,11 @@ func TestBar(t *testing.T) {
 			t.Errorf("bar(%v) has no filled cell; a zero-length bar reads as missing data", d)
 		}
 	}
-	if filled(bar(0)) >= filled(bar(50*time.Hour)) {
+	if filled(bar(0, barCells)) >= filled(bar(50*time.Hour, barCells)) {
 		t.Error("bar length does not grow with idle time")
 	}
-	if filled(bar(168*time.Hour)) != barCells {
-		t.Errorf("a week fills %d of %d cells, want full", filled(bar(168*time.Hour)), barCells)
+	if filled(bar(168*time.Hour, barCells)) != barCells {
+		t.Errorf("a week fills %d of %d cells, want full", filled(bar(168*time.Hour, barCells)), barCells)
 	}
 }
 

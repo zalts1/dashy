@@ -45,6 +45,7 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.26 | An unreadable world rendered as an empty one; `watch` needed no guard, and `cmux.Available()` answered a question nobody asked | `claude/`, `board/`, `view/header.go`, `cmux/cmux.go`, `doctor/`, `DESIGN.md` §14 |
 | 9.27 | The config write truncated before writing, and `os.WriteFile`'s mode applies only at creation — the `0600` was aspirational | `config/config.go`, `DESIGN.md` §10.9 |
 | 9.28 | The atomic write would have tightened a file board does not own, and a same-second backup overwrote the pristine copy | `hooks/settings.go`, `DESIGN.md` §15 |
+| 9.29 | Two elements disagreed about where the right edge was, and neither spent the surplus — the header follows the frame, the row fills the width | `view/layout.go`, `view/header.go`, `view/frame.go`, `view/scale.go` |
 
 ---
 
@@ -828,3 +829,91 @@ Fourth change in five where running the binary found what the suite could not (�
 §9.24, §9.26). The pattern is specific enough to name: **the suite tests the judgement, and
 the machine tests what board assumed about the world it runs in** — modes, clocks, PATH,
 and the shape of other people's files.
+
+### 9.29 Two elements disagreed about where the right edge was (2026-08-02)
+
+Reported from a monitor rather than a laptop: the frame "looks a bit weird" — content
+in the top-left corner of a large window, the clock alone at the far right. Measured at
+three widths on the same fleet, in printed columns:
+
+    cols=118   header=116   widest row=103
+    cols=206   header=204   widest row=103
+    cols=300   header=298   widest row=103
+
+**The table saturates and the header does not.** `columns()` was one-way arithmetic: it
+measured the content, then only ever *subtracted*, so past the width where everything
+fits, surplus columns are not spent by anything. `header()` had no such notion — it read
+`s.Cols` unconditionally. Two elements, two definitions of "the right edge", agreeing
+only at the width the goldens were captured at. Every golden frame carried the
+divergence (116 against 83–99) and pinned it as correct for a year.
+
+**The fix is an ordering, not a constant.** The header is composed last and sized to the
+widest line below it — bounded by the terminal, because a wrapped header is still the
+frame-scrolling bug of §9.10, and floored by `headerEdge`, what the header occupies with
+nothing shed, because narrowing a header to a small fleet is only worth doing while it
+costs the reader nothing. Measuring the rendered body beats re-deriving its width from
+the arithmetic that produced it: that is two places to get one number wrong, which is
+the shape of both §9.10 and §9.12.
+
+**The one-space gap was a floor nobody could reach.** With the header spanning the
+terminal, blocks a single space apart only happened on a terminal narrow enough to be
+shedding anyway. Sized to the frame it became reachable at any width, and the first
+blessed frame read `35 sessions in 5 workspaces cmux focus refused   paused · esc to
+resume` — one sentence, and the notice-to-mode separator inside the right block was
+*wider* than the gap between the two blocks. `headGap` is now 5, the KPI strip's
+inter-cell gap, and the header sheds rather than closing below it.
+
+**The label column was the longest label in the fleet**, which is a statistic one row
+can set for every other. Bars share a column by necessity — they encode one absolute
+scale — so a 55-character title in a fleet of short ones meant `PT8` crossed 52 columns
+of padding to reach its bar. Sized to the p90 instead, on a real 20-row fleet: the
+column went 55 → 39, two rows took an ellipsis, and the corridor lost 16 columns.
+
+**The cost, stated rather than discovered later.** p90 is outlier resistance and nothing
+more: a fleet whose labels are *all* long gets a column that holds them (pinned), but a
+fleet dominated by short repeated labels drives the column to `minLabelW` and ellipsizes
+the rest. Two existing tests matched on label text long enough to be cut — 40 of 46 rows
+"filler" in one fixture, 30 of 35 in the other — and both now match on a prefix, because
+what they are about is whether a row survives the trim, not how wide it prints.
+
+**What this does not fix: the vertical.** The same monitor draws 38 lines into 57, and
+the fit loop only ever shrinks. Nothing is being withheld at that size — every quiet row
+and every todo is already on screen — so there is no data to spend the space on, and a
+report that ends where its content ends is not a bug. Stretching one would be.
+
+**Nor, it turned out, the horizontal.** Shown the above in a *shrunk* window, the report
+was that it still did not fit: at 149 columns the frame used 93, and making the header
+follow the frame had turned two ragged edges into one solid right margin. Aligning the
+edges was the correct half of the fix and not the whole one — the surplus still went
+nowhere, because `columns()` was still arithmetic that only subtracts.
+
+**So the row spends what it is given, in the order it values.** The label is filled out
+whole first, which demotes the p90 above from a policy to a fallback: a column that
+truncates on a window with columns to spare is choosing to lose text it could have shown,
+and the outlier it guards against only costs anything when space is scarce. Then the bar
+takes the remainder, because the gap it closes is the one between a label and its bar, and
+because a wider bar is a bonus while a label is the row's meaning. The frame now ends on
+`cols - headMargin` at every width from 60 up.
+
+**Which required the bar to stop being a constant.** `rowChrome` and `rowChromeBare` were
+consts derived from `barCells`, so an elastic bar meant deriving the chrome from the width
+in hand instead — `rowChrome(barW)`, with `barW == 0` as the narrow-tab case that has no
+bar at all. This is the arithmetic §9.12 was about, so it is pinned from both ends: a tab
+too narrow for a whole bar still gets none rather than a cut one, and every row either
+consumes exactly `cols - headMargin` or has its bar at the cap below — three fleets across
+six widths, so unspent width cannot come back silently.
+
+**Uncapped, the fix overshot, and the report was "screaming, eyes burning".** A
+149-column window gave the bar 49 cells and the QUIET band became the loudest thing on
+screen — the one thing §6 does not allow, since exactly one element shouts and it is
+BLOCKED. Worth recording as a *measurement* rather than a taste: the scale was unharmed
+throughout (five rungs, `frac` is the quantity, width is only how finely it is drawn), so
+what was wrong was weight, not accuracy, and nothing about the arithmetic would have
+revealed it. Only rendering it did.
+
+**`barMaxCells` is twice the base**, which is finer quantization on a five-rung ramp
+without the bar outweighing the label beside it. The price is the margin returning on a
+wide window — 27 columns at 149, 84 at 206 — and that price is not avoidable by tuning:
+a left-aligned tail cannot put ink on the right edge, so past the cap the bar is the only
+column that could have spent the surplus. Filling the window and keeping the bar
+recessive are not both available; the cap is the choice of which one to lose.

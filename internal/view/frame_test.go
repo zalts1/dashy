@@ -105,11 +105,15 @@ func TestCollapseLineOffersNothingItCannotDo(t *testing.T) {
 // keep them out of the navigation order entirely.
 func TestATabLessRowInTheTailCanBeBroughtIntoView(t *testing.T) {
 	f := collapsing()
-	if out := Frame(f, screen(20, 130), UI{}); strings.Contains(out, "background agent, no tab") {
+	// Matched on a prefix, because whether the label prints whole is the label column's
+	// business and not this test's: 40 of these 46 rows are "filler", so the p90 column
+	// sits at its floor and this row draws as "background agent,…" (§9.29).
+	const tabless = "background agent"
+	if out := Frame(f, screen(20, 130), UI{}); strings.Contains(out, tabless) {
 		t.Fatal("fixture is not exercising the collapse; the tab-less row is already visible")
 	}
 	sel := Frame(f, screen(20, 130), UI{Sel: "K-BGQ", Paused: true})
-	if !strings.Contains(sel, "background agent, no tab") {
+	if !strings.Contains(sel, tabless) {
 		t.Error("a tab-less row in the hidden tail cannot be brought on screen at all")
 	}
 }
@@ -145,7 +149,9 @@ func TestColumnWidths(t *testing.T) {
 	wide := board.Fleet{Rows: []board.Row{{Label: strings.Repeat("x", 200), Workspace: "APP"}}}
 	// avail is what the elastic columns share once the fixed chrome and the right
 	// margin are paid for.
-	avail := func(cols int) int { return cols - headMargin - rowChrome }
+	// Measured against a base-width bar: these are the cases where the label is what the
+	// terminal is short of, so there is no surplus for the bar to have taken.
+	avail := func(cols int) int { return cols - headMargin - rowChrome(barCells) }
 	cases := []struct {
 		name string
 		f    board.Fleet

@@ -13,6 +13,13 @@ import (
 const (
 	sevenDays = 168.0 // hours, the top of the scale
 	barCells  = 12
+	// barMaxCells is where the bar stops taking the row's surplus (§9.29). Uncapped it
+	// reached 49 cells on a 149-column window and the QUIET band became the loudest thing
+	// on screen, which is the one thing §6 does not allow: exactly one element shouts, and
+	// it is BLOCKED. Twice the base is finer quantization on a scale of five rungs without
+	// the bar outweighing the label beside it — past that it is decoration, since frac is
+	// the quantity and width is only how finely it can be drawn.
+	barMaxCells = 2 * barCells
 )
 
 // idleScale maps a duration onto the scale: a 0..1 fraction plus a ramp index.
@@ -32,10 +39,13 @@ func idleScale(d time.Duration) (float64, int) {
 	return frac, step
 }
 
-func bar(d time.Duration) string {
+// bar draws the idle scale across w cells. The width is passed rather than fixed
+// because the row spends its surplus here (§9.29); the scale itself is unchanged by it,
+// since frac is the quantity and w is only how finely it can be drawn.
+func bar(d time.Duration, w int) string {
 	frac, step := idleScale(d)
-	n := 1 + int(math.Round(frac*float64(barCells-1)))
-	return fg(idleRamp[step], strings.Repeat("▇", n)) + strings.Repeat(" ", barCells-n)
+	n := 1 + int(math.Round(frac*float64(w-1)))
+	return fg(idleRamp[step], strings.Repeat("▇", n)) + strings.Repeat(" ", w-n)
 }
 
 // scaleLegend is the key for the ramp. A value scale without a legend is

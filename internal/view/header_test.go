@@ -40,7 +40,7 @@ func TestHeaderStatesTheSpan(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := plain(header(c.f, screen(44, 118), UI{}))
+			got := plain(header(c.f, screen(44, 118), UI{}, 118-headMargin))
 			if !strings.Contains(got, c.want) {
 				t.Errorf("header = %q, want it to state %q", got, c.want)
 			}
@@ -55,7 +55,7 @@ func TestHeaderStatesTheSpan(t *testing.T) {
 // make the line read as a title bar instead of a sentence trailing off into dead space.
 func TestHeaderFreshnessIsRightAligned(t *testing.T) {
 	for _, cols := range []int{90, 118, 200} {
-		got := header(spanFleet(31, 6), screen(44, cols), UI{})
+		got := header(spanFleet(31, 6), screen(44, cols), UI{}, cols-headMargin)
 		if w := plainW(got); w != cols-2 {
 			t.Errorf("cols=%d: header width %d, want %d (2-column right margin)", cols, w, cols-2)
 		}
@@ -70,7 +70,7 @@ func TestHeaderFreshnessIsRightAligned(t *testing.T) {
 func TestHeaderNeverWraps(t *testing.T) {
 	for _, cols := range []int{20, 34, 46, 58, 70, 90, 118, 300} {
 		for _, u := range []UI{{}, {Paused: true}, {Notice: "cmux focus refused"}} {
-			got := header(spanFleet(31, 6), screen(44, cols), u)
+			got := header(spanFleet(31, 6), screen(44, cols), u, cols-headMargin)
 			if strings.Contains(got, "\n") {
 				t.Fatalf("cols=%d: header is more than one line", cols)
 			}
@@ -81,7 +81,7 @@ func TestHeaderNeverWraps(t *testing.T) {
 	}
 	// Order of sacrifice: the interval is config, the span is context, the count is the
 	// point. A narrow tab keeps the count.
-	narrow := plain(header(spanFleet(31, 6), screen(44, 46), UI{}))
+	narrow := plain(header(spanFleet(31, 6), screen(44, 46), UI{}, 46-headMargin))
 	if strings.Contains(narrow, "every") {
 		t.Errorf("narrow header kept the refresh interval over the span: %q", narrow)
 	}
@@ -93,7 +93,7 @@ func TestHeaderNeverWraps(t *testing.T) {
 // While a selection is live the data stops refreshing, so a clock would be stating a
 // time that is no longer true. The mode takes the clock's place, not a slot beside it.
 func TestHeaderPausedReplacesTheClock(t *testing.T) {
-	got := plain(header(spanFleet(31, 6), screen(44, 118), UI{Paused: true}))
+	got := plain(header(spanFleet(31, 6), screen(44, 118), UI{Paused: true}, 118-headMargin))
 	if strings.Contains(got, "14:30:00") {
 		t.Errorf("paused header still shows a clock: %q", got)
 	}
@@ -106,7 +106,7 @@ func TestHeaderPausedReplacesTheClock(t *testing.T) {
 // the frame — and legible. Bare #d03b3b measures 2.91 and is reserved for the badge
 // fill (EVIDENCE.md §9.4).
 func TestHeaderNoticeIsLegible(t *testing.T) {
-	got := header(spanFleet(31, 6), screen(44, 118), UI{Notice: "cmux focus refused", Paused: true})
+	got := header(spanFleet(31, 6), screen(44, 118), UI{Notice: "cmux focus refused", Paused: true}, 118-headMargin)
 	if !strings.Contains(plain(got), "cmux focus refused") {
 		t.Error("notice missing from the header")
 	}
@@ -116,7 +116,7 @@ func TestHeaderNoticeIsLegible(t *testing.T) {
 }
 
 func TestHeaderTitleStaysTheAnchor(t *testing.T) {
-	got := header(spanFleet(31, 6), screen(44, 118), UI{})
+	got := header(spanFleet(31, 6), screen(44, 118), UI{}, 118-headMargin)
 	if !strings.HasPrefix(plain(got), "  BOARD") {
 		t.Errorf("header does not lead with the title: %q", plain(got))
 	}
