@@ -157,14 +157,20 @@ Requires macOS, [cmux](https://github.com/manaflow-ai/cmux), and Claude Code —
 reads the roster from `claude agents --json` and the tabs from cmux, so it has nothing
 to report without both.
 
-No dependencies, no daemon, no port. `board watch` in a dedicated tab is the whole
-runtime.
+**Verified against Claude Code 2.1.220 and cmux 0.64.16** — the versions this release was
+cut against. Neither surface is a documented contract, so a patch release on either side
+can move what board reads; `board doctor` reports what is on your machine, and a mismatch
+is the first thing to check.
 
-Substitute a tag for `@latest` to pin one — `@v0.1.0`. Either way the binary knows what
+No dependencies, no daemon, no port, no telemetry, and no network of its own — the only
+request board can make is a `notify_cmd` you wrote yourself. `board watch` in a dedicated
+tab is the whole runtime.
+
+Substitute a tag for `@latest` to pin one — `@v0.2.0`. Either way the binary knows what
 it is, with no build flags, and reports what it depends on beside it:
 
     $ board version
-    board  v0.1.0
+    board  v0.2.0
     claude 2.1.220 (Claude Code)
     cmux   0.64.16 (96) [5321becb6]
 
@@ -176,7 +182,7 @@ outside a git tree reads `(devel)`, which says how it was built rather than hidi
 ## When the board looks wrong — `board doctor`
 
     $ board doctor
-    board  v0.1.0
+    board  v0.2.0
     claude 2.1.220 (Claude Code)
     cmux   0.64.16 (96) [5321becb6]
     roster 16 sessions
