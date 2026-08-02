@@ -478,9 +478,9 @@ interaction model bolted on; it is the same select-then-act pair, reached differ
   the arrows and the wheel alike. This is not a mouse rule and it is not new behaviour being
   tamed: with reporting off the terminal turns notches into `↑`/`↓` itself, so a flick has
   always arrived as nine presses and always moved the caret nine rows. Measured on both
-  encodings, a flick lands inside one millisecond and macOS's fastest key repeat is 15ms;
-  the window sits in that gap, so a gesture becomes one step and a finger is untouched
-  (§9.32). The rule is deliberately blind to where a step came from — asking that question
+  encodings, a flick lands inside one millisecond; the fastest key repeat is 15ms on macOS
+  and 10ms on X11, and the window is sized against that floor rather than this machine's, so
+  a gesture becomes one step and a finger is untouched anywhere board is built (§9.32). The rule is deliberately blind to where a step came from — asking that question
   is what got it fixed twice in the wrong place.
 
 *Not built, and why:* hover needs motion tracking

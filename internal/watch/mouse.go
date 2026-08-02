@@ -77,10 +77,17 @@ func sgrMouse(params string, final rune) (event, bool) {
 // not a mouse rule: with reporting off the terminal translates notches into `↑`/`↓` itself,
 // and board has been taking all nine since long before it knew the mouse existed.
 //
-// The number sits in the gap the measurement found. A gesture spans under a millisecond;
-// macOS's fastest key repeat is 15ms. Anything between collapses the flick and cannot touch
-// a finger — the margin on both sides is the point, not the value.
-const burstWindow = 10 * time.Millisecond
+// The number sits in the gap the measurement found, and it is sized for the slowest
+// assumption rather than this machine's. A gesture spans under a millisecond. The fastest
+// key repeat is 15ms on macOS — but X11 will take `xset r rate 100`, which is 10ms, and
+// board ships as source, so 10ms is the floor that has to survive. 5ms leaves a factor of
+// two under it and five times the widest burst yet seen.
+//
+// The two failure modes are not symmetric, which is what decides the bias. Too small and a
+// flick moves a few rows instead of one — the behaviour board had for its whole life, mild
+// and self-evident. Too large and a held arrow key silently drops repeats, which reads as a
+// broken tool and gives the reader nothing to go on. When in doubt, shrink it.
+const burstWindow = 5 * time.Millisecond
 
 // stepClock collapses a burst of caret steps into one. It is deliberately blind to where a
 // step came from: the whole finding is that the wheel and the arrow keys are the same

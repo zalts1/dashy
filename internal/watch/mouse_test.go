@@ -99,18 +99,45 @@ func TestOneGestureIsOneStep(t *testing.T) {
 		}
 	})
 
+	// The window's upper bound is the only part of this that is not measured, so it is
+	// pinned against the fastest key repeat any supported machine can produce rather than
+	// against the one it was written on. macOS bottoms out at 15ms; X11 will take
+	// `xset r rate 100`, which is 10ms; board is going out as source, so 10ms is the number
+	// that has to survive, not 15 (§9.32).
 	t.Run("a held key is untouched", func(t *testing.T) {
+		// Jittered, because a repeat arrives when the scheduler gets to it: an exact-interval
+		// fixture would sit on the boundary and pass on a window with no margin at all.
+		jitter := []int{0, -1, +1, -2, +2, -1, 0, +1}
+		for _, repeat := range []int{10, 15, 25, 33, 50} {
+			var c stepClock
+			steps, sent := 0, 0
+			for i, ms := 0, 0; ms < 1000; i, ms = i+1, ms+repeat {
+				at := ms*1000 + jitter[i%len(jitter)]*100 // µs
+				sent++
+				if c.allow(t0.Add(time.Duration(at) * time.Microsecond)) {
+					steps++
+				}
+			}
+			if steps != sent {
+				t.Errorf("at a %dms key repeat, %d of %d presses moved the caret — the ration is for gestures, not fingers",
+					repeat, steps, sent)
+			}
+		}
+	})
+
+	// The other side of the same margin: a terminal that spreads a burst wider than
+	// Ghostty does must still collapse it. Nothing measured comes near 4ms, but the
+	// failure here is mild (a flick moves a few rows) where the failure above is not.
+	t.Run("a burst spread wider than measured still collapses", func(t *testing.T) {
 		var c stepClock
-		steps, sent := 0, 0
-		// macOS at its fastest repeat setting: one event every 15ms, for a second.
-		for ms := 0; ms < 1000; ms += 15 {
-			sent++
-			if c.allow(t0.Add(time.Duration(ms) * time.Millisecond)) {
+		steps := 0
+		for i := range 9 {
+			if c.allow(t0.Add(time.Duration(i) * 400 * time.Microsecond)) {
 				steps++
 			}
 		}
-		if want := sent; steps != want {
-			t.Errorf("a held arrow key moved %d rows in a second, want all %d — the ration is for gestures, not fingers", steps, want)
+		if steps != 1 {
+			t.Errorf("a burst spread over 3.6ms moved %d rows, want 1", steps)
 		}
 	})
 

@@ -981,13 +981,26 @@ so in as many words — the frame always fits, so there is nothing under the bot
 scroll to. On that reasoning the new `sgrMouse` dropped every report with bit 6 set, and
 the omission was recorded as a decision rather than a loss.
 
-**Reported:** "mouse wheel used to work great, now it's a bit messed up." It did work, and
-nothing in board had ever implemented it. `board watch` runs on the alternate screen, which
-has no scrollback, so the terminal was translating notches into `↑`/`↓` — alternate-scroll,
-on by default in Ghostty — and the decoder was reading them as ordinary arrow keys. **The
-wheel was navigating, and board never knew it was involved.** Turning on `?1000` suppressed
-the translation, because a terminal stops substituting keys the moment an application says
-it wants the events itself.
+**Reported:** "mouse wheel used to work great, now it's a bit messed up." The mechanism was
+found immediately and it was real: `board watch` runs on the alternate screen, which has no
+scrollback, so the terminal was translating notches into `↑`/`↓` — alternate-scroll, on by
+default in Ghostty — and the decoder was reading them as ordinary arrow keys. **The wheel
+was navigating, and board never knew it was involved.** Turning on `?1000` suppressed the
+translation, because a terminal stops substituting keys the moment an application says it
+wants the events itself, and the branch's first commit then discarded the reports. So with
+`"mouse": true` the wheel went dead, and that part is a regression this work caused.
+
+**But "it did work" was written down as established, and it never was.** The half-sentence
+is the whole failure: the report was accepted as a fact about the prior state, and every
+step after it inherited that. Measured later on `main`, one flick moves the caret **nine
+rows** — proportional travel, not one-row precision. Nothing outside board had changed
+either: no Ghostty config file at all, cmux's config three months old. Nor is there a board
+change that could have done it — the decoder before 2026-07-29 matched a whole read against
+`"\x1b[B"` exactly, and the nine arrows arrive as nine separate three-byte reads, so it
+scored the same nine steps. **There is no earlier state in which this behaved differently.**
+What "worked great" described was never pinned down, and the honest entry is that it stayed
+unexplained; asking the reader directly settled the design question in one message, which
+is what should have happened before the first fix rather than after the third.
 
 **What that shows:** the question "what does the wheel do here?" was answered from the
 frame's own model — nothing scrolls, so nothing to bind — when the behaviour that existed
@@ -1034,12 +1047,20 @@ this machine's Hebrew layout emits `/` and so could not be pressed at all — a 
 cannot observe the thing is worse than no probe: it produces output, and output reads as
 evidence.**
 
-**Shipped:** `stepClock`, one step per 10ms, over *all four* step keys — arrows and wheel
-alike, deliberately blind to which. The number sits in the gap the measurement found: a
-gesture spans under a millisecond, macOS's fastest key repeat is 15ms, and anything between
-collapses the flick while leaving a finger untouched. The margin is the point, not the
-value. Verified in a pty with both encodings: nine events in one burst move one row, four
-bursts 300ms apart move four, and 67 events at a 15ms repeat all step.
+**Shipped:** `stepClock`, one step per 5ms, over *all four* step keys — arrows and wheel
+alike, deliberately blind to which. The window sits in the gap the measurement found: a
+gesture spans under a millisecond, and the fastest key repeat is 15ms on macOS but 10ms on
+X11 at `xset r rate 100`. **Sized against the floor board might meet, not the one it was
+written on** — the first cut was 10ms, which is the X11 rate exactly, and a jittered fixture
+at that rate showed 62 of 100 presses surviving. An exact-interval fixture had passed it:
+the boundary case needs jitter or it tests nothing.
+
+The bias is set by the failure modes being unequal. Too small and a flick moves a few rows
+instead of one — what board did for its whole life, mild and self-evident. Too large and a
+held key silently drops repeats, which reads as a broken tool. When in doubt, shrink it.
+
+Verified in a pty with both encodings: nine events in one burst move one row, four bursts
+300ms apart move four, and repeats at 10/15/25/33/50ms all step in full.
 
 **The general rule this leaves:** enabling a terminal mode takes things away as well as
 adding them, and what it was doing for board is not only *what* but *how much*. Before
