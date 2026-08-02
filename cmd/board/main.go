@@ -16,14 +16,17 @@ import (
 	"github.com/zalts1/dashy/internal/watch"
 )
 
-const usage = `usage: board | board watch [interval] | board jump <substring> | board label "<text>"
-       board todo | board todo "<text>" | board todo done <text or id>
-       board install-hooks | board uninstall-hooks | board version | board doctor`
-
 func main() {
 	args := os.Args[1:]
 	if len(args) == 0 {
 		show()
+		return
+	}
+	// Asked what it is, board answers on stdout and exits 0. An unrecognised command
+	// still fails on stderr — being asked a question and being given a wrong one are
+	// different events, and only one of them is an error.
+	if helpRequested(args) {
+		fmt.Println(usage)
 		return
 	}
 	var err error
