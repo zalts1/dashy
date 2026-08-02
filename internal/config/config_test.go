@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -31,6 +32,21 @@ func TestConfiguredValuesWin(t *testing.T) {
 	s.Config.PollSeconds = -1
 	if got := s.Poll(); got != defaultPoll {
 		t.Errorf("negative poll = %v, want the default", got)
+	}
+}
+
+// Mouse reporting is opt-in, and the default matters more than the key: enabling it
+// costs drag-to-select, so a file that does not mention it must leave it off.
+func TestMouseIsOffUnlessTheFileSaysOtherwise(t *testing.T) {
+	s := &State{}
+	if s.Config.Mouse {
+		t.Error("mouse defaults on; drag-to-select would break for a reader who never asked")
+	}
+	if err := json.Unmarshal([]byte(`{"config":{"mouse":true}}`), s); err != nil {
+		t.Fatal(err)
+	}
+	if !s.Config.Mouse {
+		t.Error(`"mouse": true did not parse; the key in README.md is the contract`)
 	}
 }
 

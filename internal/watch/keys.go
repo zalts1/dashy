@@ -19,6 +19,12 @@ const (
 	keyList
 	keyFold
 	keyBackspace
+	keyClick
+	// The wheel moves the caret exactly as keyUp and keyDown do, and is a separate key only
+	// so the loop can ration it: one flick of a trackpad is many reports, and a keystroke
+	// is one keystroke (§9.32).
+	keyScrollUp
+	keyScrollDown
 )
 
 // event carries both readings of one keystroke: the command it names, and the text it
@@ -28,6 +34,10 @@ const (
 type event struct {
 	k    key
 	text string // the printable rune, when there is one
+	// row is the screen line a keyClick landed on, counted from zero. It is the one thing
+	// no keystroke carries, and the only position anywhere in this UI — the loop turns it
+	// into a session key against the frame on screen and never keeps it (§7).
+	row int
 }
 
 // readKeys decodes the keys this UI uses, plus text for the one mode it has.
@@ -74,6 +84,18 @@ func decode(s string) []event {
 					out = append(out, event{k: keyUp})
 				case 'B':
 					out = append(out, event{k: keyDown})
+				case 'M', 'm':
+					// The pre-SGR mouse encoding is `ESC [ M` with no parameters and three
+					// coordinate bytes after the final one. board never asks for it, but a
+					// terminal that declined ?1006 sends it anyway — and those three bytes are
+					// printable, so leaving them types them, and one of them can be `q`.
+					if j == i+2 {
+						i = min(j+4, len(r))
+						continue
+					}
+					if ev, ok := sgrMouse(string(r[i+2:j]), r[j]); ok {
+						out = append(out, ev)
+					}
 				}
 				i = j + 1
 				continue

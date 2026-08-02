@@ -48,6 +48,7 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.29 | Two elements disagreed about where the right edge was, and neither spent the surplus — the header follows the frame, the row fills the width | `view/layout.go`, `view/header.go`, `view/frame.go`, `view/scale.go` |
 | 9.30 | `notify` never failed the agent and blocked it instead — the invariant covered errors, not latency | `hooks/notify.go`, `DESIGN.md` §8 |
 | 9.31 | `-h` was not missing, it was a todo: the absent flag wrote to the one file board owns | `cmd/board/usage.go`, `cmd/board/main.go` |
+| 9.32 | The terminal had been navigating for board all along, and one flick is nine events in one millisecond — fixed twice from the symptom before anything was measured | `watch/mouse.go`, `watch/watch.go`, `DESIGN.md` §7 |
 
 ---
 
@@ -972,3 +973,97 @@ argument only for the bare word `help` — because a todo may legitimately be ab
 (`board todo "help sam with the migration"` must stay a todo). Usage goes to stdout with
 exit 0; an unrecognised command still fails on stderr with exit 2, because being asked a
 question and being given a wrong one are different events and only one is an error.
+
+### 9.32 Asking for the mouse silently removed the wheel (2026-08-02)
+
+**Believed:** binding the wheel was a feature board did not need, and `DESIGN.md` §7 said
+so in as many words — the frame always fits, so there is nothing under the bottom line to
+scroll to. On that reasoning the new `sgrMouse` dropped every report with bit 6 set, and
+the omission was recorded as a decision rather than a loss.
+
+**Reported:** "mouse wheel used to work great, now it's a bit messed up." The mechanism was
+found immediately and it was real: `board watch` runs on the alternate screen, which has no
+scrollback, so the terminal was translating notches into `↑`/`↓` — alternate-scroll, on by
+default in Ghostty — and the decoder was reading them as ordinary arrow keys. **The wheel
+was navigating, and board never knew it was involved.** Turning on `?1000` suppressed the
+translation, because a terminal stops substituting keys the moment an application says it
+wants the events itself, and the branch's first commit then discarded the reports. So with
+`"mouse": true` the wheel went dead, and that part is a regression this work caused.
+
+**But "it did work" was written down as established, and it never was.** The half-sentence
+is the whole failure: the report was accepted as a fact about the prior state, and every
+step after it inherited that. Measured later on `main`, one flick moves the caret **nine
+rows** — proportional travel, not one-row precision. Nothing outside board had changed
+either: no Ghostty config file at all, cmux's config three months old. Nor is there a board
+change that could have done it — the decoder before 2026-07-29 matched a whole read against
+`"\x1b[B"` exactly, and the nine arrows arrive as nine separate three-byte reads, so it
+scored the same nine steps. **There is no earlier state in which this behaved differently.**
+What "worked great" described was never pinned down, and the honest entry is that it stayed
+unexplained; asking the reader directly settled the design question in one message, which
+is what should have happened before the first fix rather than after the third.
+
+**What that shows:** the question "what does the wheel do here?" was answered from the
+frame's own model — nothing scrolls, so nothing to bind — when the behaviour that existed
+lived one layer down, in a terminal default nobody had written down. A capability arriving
+from outside the program is invisible to any argument made only about the program, and the
+regression is not that the reasoning was wrong so much as that it was addressed to the
+wrong surface. §9.26 and §9.22 are the same shape: what board can see is not what is there.
+
+**Shipped:** wheel up and down decode to `keyUp`/`keyDown`, restoring exactly what
+alternate-scroll had been doing, and the horizontal wheel stays unbound because the list
+has one axis. A notch carries no row, deliberately — it is a direction, and reading its
+coordinates would step the selection to wherever the pointer happened to be resting rather
+than from where the caret is. Verified in a pty with the pointer parked over the KPI strip:
+two notches down move the caret two rows, from the top of the list.
+
+**Then reported again, and the second reading was wrong too:** one flick moved the caret
+**nine rows**. It was fixed as a mouse problem — a 200ms ration on wheel reports — on the
+reasoning that a trackpad emits a report per scroll line. Reverting to `main` did not help,
+which should have ended that theory immediately: `main` has no mouse code at all.
+
+**Measured, finally.** A probe on the alternate screen, printing one line per `read()`:
+
+    mouse off   9 reads, 9 sequences, over 0ms   ESC[B  ESC[B  ESC[B …
+    mouse on    9 reads, 9 sequences, over 0ms   ESC[<65;65;18M …
+
+**One flick is nine events either way, and they land inside the same millisecond.** With
+reporting off the terminal turns notches into `↑`/`↓`, so board had been taking all nine
+since long before it knew the mouse existed — the nine-row jump predates every line of this
+work. The 200ms ration was real and correctly built, and it fixed the wheel in the one
+configuration nobody runs, because mouse reporting is opt-in and off by default.
+
+Two false starts, and both had the same shape: **the symptom was attributed to the change
+that was in flight.** "It used to work great" was taken as evidence about the diff rather
+than as a claim to test, and a fix was shipped twice before anything was measured. The
+revert was the free experiment that would have settled it in one step, and it was offered
+and then not believed.
+
+Getting the measurement took three tries, which is its own record: the probe read
+`os.Stdin` (EOF under a harness that redirects it), then left `VMIN` to whatever the shell
+had set, then ran on the **normal screen** — where alternate-scroll does not exist, so the
+wheel never reaches the application and it recorded nothing. Its quit key was `q`, which on
+this machine's Hebrew layout emits `/` and so could not be pressed at all — a case
+`DESIGN.md` §7 documents for board and the diagnostic did not inherit. **A probe that
+cannot observe the thing is worse than no probe: it produces output, and output reads as
+evidence.**
+
+**Shipped:** `stepClock`, one step per 5ms, over *all four* step keys — arrows and wheel
+alike, deliberately blind to which. The window sits in the gap the measurement found: a
+gesture spans under a millisecond, and the fastest key repeat is 15ms on macOS but 10ms on
+X11 at `xset r rate 100`. **Sized against the floor board might meet, not the one it was
+written on** — the first cut was 10ms, which is the X11 rate exactly, and a jittered fixture
+at that rate showed 62 of 100 presses surviving. An exact-interval fixture had passed it:
+the boundary case needs jitter or it tests nothing.
+
+The bias is set by the failure modes being unequal. Too small and a flick moves a few rows
+instead of one — what board did for its whole life, mild and self-evident. Too large and a
+held key silently drops repeats, which reads as a broken tool. When in doubt, shrink it.
+
+Verified in a pty with both encodings: nine events in one burst move one row, four bursts
+300ms apart move four, and repeats at 10/15/25/33/50ms all step in full.
+
+**The general rule this leaves:** enabling a terminal mode takes things away as well as
+adding them, and what it was doing for board is not only *what* but *how much*. Before
+asking for one, ask what the terminal was already doing on board's behalf in that mode — it
+is not in board's code, so nothing in board's tests will miss it. And when a revert does not
+move the symptom, the symptom was never the diff: stop fixing and start measuring.
