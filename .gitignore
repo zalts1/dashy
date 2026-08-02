@@ -2,3 +2,4 @@
 *.board-bak-*
 .DS_Store
 /OPPORTUNITIES.md
+/demo/bin/

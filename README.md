@@ -2,16 +2,36 @@
 
 One screen showing every live Claude Code session running under cmux.
 
+![board watch: a session comes back with a question, a todo is captured, the quiet band folds away](docs/board.gif)
+
+That is `board watch`. A session comes back asking something and lifts out of the quiet
+tail, a todo is captured without leaving the tab, and `z` folds the backlog away.
+
+The same fleet once, in plain text, for a pipe or a bug report:
+
 ```
 $ board
-STATE        LABEL                                        WORKSPACE           IDLE
-blocked → ⚠  merge app#1497 before branching              APP                3h00m
-blocked →    migrate auth handlers to v2                  AUTH                  9m
-done ⚠       Review pipeline PR #541                      REVIEWS            2h48m
-running      build board: cmux fleet status CLI           INFRA                 0m
+STATE        LABEL                                        WORKSPACE            IDLE
+blocked → ⚠  merge app#1497 before branching              APP                 3h00m
+done ⚠       rotate the staging credentials               OPS                 3d02h
+done ⚠       answer the ACME security questionnaire       DOCS                1d04h
+done ⚠       backfill the events table                    DATA                7h20m
+done ⚠       hunt the flaky payment test                  background          5h00m
+done ⚠       fold the quiet band                          TOOLS               4h05m
+done ⚠       Review pipeline PR #541                      REVIEWS             2h48m
+done ⚠       ship the pricing page copy                   WEB                   55m
+done         bump the staging image                       INFRA                 26m
+done         migrate auth handlers to v2                  AUTH                   9m
+running      build the csv export endpoint                API                    0m
+todo         reply to the ACME csv export request                           12d ago
+todo         book the quarterly review                                       1d ago
 
-22 sessions · 2 blocked · 1 running · 20 quiet >45m
+11 sessions · 1 blocked · 1 running · 8 quiet >45m · 2 todo
 ```
+
+Both are a fixture, not a real fleet: every row on a real board is somebody's work, so
+the demo builds a synthetic world and renders it through the same code (`demo/record.sh`,
+`DESIGN.md` §16).
 
 ## Commands
 
