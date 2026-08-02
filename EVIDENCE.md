@@ -48,7 +48,7 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.29 | Two elements disagreed about where the right edge was, and neither spent the surplus — the header follows the frame, the row fills the width | `view/layout.go`, `view/header.go`, `view/frame.go`, `view/scale.go` |
 | 9.30 | `notify` never failed the agent and blocked it instead — the invariant covered errors, not latency | `hooks/notify.go`, `DESIGN.md` §8 |
 | 9.31 | `-h` was not missing, it was a todo: the absent flag wrote to the one file board owns | `cmd/board/usage.go`, `cmd/board/main.go` |
-| 9.32 | Asking for mouse reports silently removed the wheel — the terminal had been navigating for board all along | `watch/mouse.go`, `DESIGN.md` §7 |
+| 9.32 | The terminal had been navigating for board all along, and one flick is nine events in one millisecond — fixed twice from the symptom before anything was measured | `watch/mouse.go`, `watch/watch.go`, `DESIGN.md` §7 |
 
 ---
 
@@ -1003,22 +1003,46 @@ coordinates would step the selection to wherever the pointer happened to be rest
 than from where the caret is. Verified in a pty with the pointer parked over the KPI strip:
 two notches down move the caret two rows, from the top of the list.
 
-**Then measured, and the restoration was still wrong:** with the binding in, one trackpad
-flick moved the caret **nine rows** — out of WORKING, through the whole quiet band, past
-everything the reader was reaching for. The report is per scroll *line*, not per gesture,
-and a swipe is worth about nine of them. Alternate-scroll had been hiding that too: the
-terminal quantised the same deltas before turning them into keys, so board had never seen
-the raw rate. Restoring a behaviour meant restoring the terminal's arithmetic as well as
-its intent, and only the intent had been visible.
+**Then reported again, and the second reading was wrong too:** one flick moved the caret
+**nine rows**. It was fixed as a mouse problem — a 200ms ration on wheel reports — on the
+reasoning that a trackpad emits a report per scroll line. Reverting to `main` did not help,
+which should have ended that theory immediately: `main` has no mouse code at all.
 
-**Shipped for that:** `wheelClock`, one step per 200ms, on the wheel alone. The wire cannot
-say whether nine reports were one intent or nine, so the rate is the only thing that can
-separate them: everything inside a flick is one step, a held scroll still moves at about
-five rows a second, and a keypress is never rationed because its rate is already a finger.
-The first notch always steps — a wheel whose opening event is swallowed reads as broken.
-Verified in a pty: nine reports back to back move one row, three 400ms apart move three.
+**Measured, finally.** A probe on the alternate screen, printing one line per `read()`:
+
+    mouse off   9 reads, 9 sequences, over 0ms   ESC[B  ESC[B  ESC[B …
+    mouse on    9 reads, 9 sequences, over 0ms   ESC[<65;65;18M …
+
+**One flick is nine events either way, and they land inside the same millisecond.** With
+reporting off the terminal turns notches into `↑`/`↓`, so board had been taking all nine
+since long before it knew the mouse existed — the nine-row jump predates every line of this
+work. The 200ms ration was real and correctly built, and it fixed the wheel in the one
+configuration nobody runs, because mouse reporting is opt-in and off by default.
+
+Two false starts, and both had the same shape: **the symptom was attributed to the change
+that was in flight.** "It used to work great" was taken as evidence about the diff rather
+than as a claim to test, and a fix was shipped twice before anything was measured. The
+revert was the free experiment that would have settled it in one step, and it was offered
+and then not believed.
+
+Getting the measurement took three tries, which is its own record: the probe read
+`os.Stdin` (EOF under a harness that redirects it), then left `VMIN` to whatever the shell
+had set, then ran on the **normal screen** — where alternate-scroll does not exist, so the
+wheel never reaches the application and it recorded nothing. Its quit key was `q`, which on
+this machine's Hebrew layout emits `/` and so could not be pressed at all — a case
+`DESIGN.md` §7 documents for board and the diagnostic did not inherit. **A probe that
+cannot observe the thing is worse than no probe: it produces output, and output reads as
+evidence.**
+
+**Shipped:** `stepClock`, one step per 10ms, over *all four* step keys — arrows and wheel
+alike, deliberately blind to which. The number sits in the gap the measurement found: a
+gesture spans under a millisecond, macOS's fastest key repeat is 15ms, and anything between
+collapses the flick while leaving a finger untouched. The margin is the point, not the
+value. Verified in a pty with both encodings: nine events in one burst move one row, four
+bursts 300ms apart move four, and 67 events at a 15ms repeat all step.
 
 **The general rule this leaves:** enabling a terminal mode takes things away as well as
 adding them, and what it was doing for board is not only *what* but *how much*. Before
 asking for one, ask what the terminal was already doing on board's behalf in that mode — it
-is not in board's code, so nothing in board's tests will miss it.
+is not in board's code, so nothing in board's tests will miss it. And when a revert does not
+move the symptom, the symptom was never the diff: stop fixing and start measuring.

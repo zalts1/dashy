@@ -69,28 +69,31 @@ func sgrMouse(params string, final rune) (event, bool) {
 	return event{k: keyClick, row: y - 1}, true
 }
 
-// wheelInterval is the least time between two caret steps the wheel is allowed to make.
+// burstWindow is how close together two caret steps have to be to be one gesture.
 //
-// **A gesture is not a notch.** A trackpad flick reports a step per scroll line — nine of
-// them from one swipe, which carried the caret across a whole band and past the row the
-// reader was aiming at (§9.32). The mouse cannot say how many of its reports were one
-// intent, so the rate is what separates them: everything inside a flick is one step, and a
-// scroll held down still moves at about five rows a second, which is a list being read
-// rather than a list being fired past.
-const wheelInterval = 200 * time.Millisecond
+// **Measured, not chosen.** Probing Ghostty on the alternate screen, one flick of the wheel
+// produced nine steps in nine separate reads, all inside the same millisecond — and it did
+// so identically whether they arrived as arrow keys or as SGR reports (§9.32). So this is
+// not a mouse rule: with reporting off the terminal translates notches into `↑`/`↓` itself,
+// and board has been taking all nine since long before it knew the mouse existed.
+//
+// The number sits in the gap the measurement found. A gesture spans under a millisecond;
+// macOS's fastest key repeat is 15ms. Anything between collapses the flick and cannot touch
+// a finger — the margin on both sides is the point, not the value.
+const burstWindow = 10 * time.Millisecond
 
-// wheelClock rations the wheel and nothing else. A held arrow key must still repeat at
-// whatever rate the terminal sends it: that rate is the reader's finger, and it is already
-// the right one.
-type wheelClock struct{ last time.Time }
+// stepClock collapses a burst of caret steps into one. It is deliberately blind to where a
+// step came from: the whole finding is that the wheel and the arrow keys are the same
+// events, so a rule that asked which would be answering the question that misled twice.
+type stepClock struct{ last time.Time }
 
-// allow reports whether this notch may move the caret, and is why the first one always
-// does — a wheel whose opening event is swallowed reads as a wheel that does not work.
-func (w *wheelClock) allow(now time.Time) bool {
-	if now.Sub(w.last) < wheelInterval {
+// allow reports whether this step may move the caret. The first one always may — a wheel
+// whose opening event is swallowed reads as a wheel that does not work.
+func (c *stepClock) allow(now time.Time) bool {
+	if !c.last.IsZero() && now.Sub(c.last) < burstWindow {
 		return false
 	}
-	w.last = now
+	c.last = now
 	return true
 }
 

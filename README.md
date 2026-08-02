@@ -86,6 +86,12 @@ as idle time grows, so a live refresh would slide the list out from under the
 cursor. The selection is tracked by session, not by screen line, and clears itself
 after 10s of no keypress so the tab always returns to being ambient.
 
+**One flick of the wheel is one row.** Your terminal turns a scroll into nine `↑`/`↓`
+presses, all in the same millisecond, so board collapses steps that arrive that close
+together into one. Holding a key is nowhere near that fast and is unaffected. This applies
+whether or not the mouse setting below is on — with it off, the wheel reaches board as
+arrow keys and always has.
+
 ### The mouse, if you want it
 
 Off by default. Set `"mouse": true` in `~/.board.json` and restart `board watch`:
@@ -99,10 +105,7 @@ pauses the refresh, and only a frame that has stopped moving can be clicked at
 accurately. Clicking anywhere that is not a row — the header, a band heading, the legend
 — does nothing at all, so a near miss costs nothing. The wheel moves the caret rather
 than the frame, which is what it already did before the setting existed: nothing here
-scrolls, so a notch has only ever been a step. **One flick is about one row** — a trackpad
-reports a step per scroll line, and taking them all would carry the caret across a whole
-band, so the wheel moves at most one row per 200ms. Hold the scroll and it keeps going, at
-roughly five rows a second. Everything else stays on the keyboard: no
+scrolls, so a notch has only ever been a step. Everything else stays on the keyboard: no
 drag, no right-click menu.
 
 **What it costs you:** while `board watch` is running, dragging to select text goes to

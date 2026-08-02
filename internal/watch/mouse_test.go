@@ -74,37 +74,70 @@ func TestDecodeMouse(t *testing.T) {
 	}
 }
 
-// One flick of a trackpad is not one notch: the terminal reports a step per scroll line,
-// and nine of them arrived from a single gesture — the caret crossed a whole band (§9.32).
-// The wheel is therefore rationed to one step per interval, and the ration is on the wheel
-// alone: a held arrow key must still repeat at whatever rate the terminal sends it.
-func TestWheelIsRationedButKeysAreNot(t *testing.T) {
+// One gesture is nine events. Measured, not guessed: probing Ghostty on the alternate
+// screen, a single flick produced nine steps in nine separate reads **inside the same
+// millisecond** — identically whether they arrived as arrow keys or as SGR reports, which
+// is why this rule is not about the mouse (§9.32).
+//
+// A burst spanning under a millisecond is what separates a gesture from a finger. macOS's
+// fastest key repeat is 15ms, so a window well under that collapses the flick and cannot
+// touch a held key — the margin, not the number, is the point.
+func TestOneGestureIsOneStep(t *testing.T) {
 	t0 := time.Date(2026, 8, 2, 17, 16, 0, 0, time.UTC)
-	var w wheelClock
 
-	if !w.allow(t0) {
-		t.Fatal("the first notch of a gesture was swallowed; a wheel that ignores the first event is a dead wheel")
-	}
-	// The rest of that flick, arriving every 16ms as the trackpad decelerates.
-	for i := 1; i < 9; i++ {
-		if w.allow(t0.Add(time.Duration(i) * 16 * time.Millisecond)) {
-			t.Fatalf("notch %d of one gesture stepped the caret; that is the nine-row jump", i)
+	t.Run("the measured flick", func(t *testing.T) {
+		var c stepClock
+		steps := 0
+		// Nine events, all within the same millisecond, as the probe recorded them.
+		for i := range 9 {
+			if c.allow(t0.Add(time.Duration(i) * 100 * time.Microsecond)) {
+				steps++
+			}
 		}
-	}
-	// A deliberate second scroll, well after the first has stopped.
-	if !w.allow(t0.Add(400 * time.Millisecond)) {
-		t.Error("a second gesture was swallowed; the ration must not outlast the flick")
-	}
-	// Sustained scrolling still moves, just at a readable rate rather than the wire's.
-	steps := 0
-	for ms := 400; ms <= 1400; ms += 16 {
-		if w.allow(t0.Add(time.Duration(ms) * time.Millisecond)) {
-			steps++
+		if steps != 1 {
+			t.Errorf("one flick moved %d rows, want 1 — nine rows is the bug this is here for", steps)
 		}
-	}
-	if steps < 3 || steps > 8 {
-		t.Errorf("a second of continuous scrolling moved %d rows; want a handful, not the 62 events sent", steps)
-	}
+	})
+
+	t.Run("a held key is untouched", func(t *testing.T) {
+		var c stepClock
+		steps, sent := 0, 0
+		// macOS at its fastest repeat setting: one event every 15ms, for a second.
+		for ms := 0; ms < 1000; ms += 15 {
+			sent++
+			if c.allow(t0.Add(time.Duration(ms) * time.Millisecond)) {
+				steps++
+			}
+		}
+		if want := sent; steps != want {
+			t.Errorf("a held arrow key moved %d rows in a second, want all %d — the ration is for gestures, not fingers", steps, want)
+		}
+	})
+
+	t.Run("the first event always steps", func(t *testing.T) {
+		var c stepClock
+		if !c.allow(t0) {
+			t.Fatal("the opening event was swallowed; a wheel that ignores the first notch reads as broken")
+		}
+	})
+
+	t.Run("flicks in a row each count", func(t *testing.T) {
+		var c stepClock
+		steps := 0
+		// Three deliberate flicks, 300ms apart, nine events each.
+		for flick := range 3 {
+			for i := range 9 {
+				at := t0.Add(time.Duration(flick)*300*time.Millisecond +
+					time.Duration(i)*100*time.Microsecond)
+				if c.allow(at) {
+					steps++
+				}
+			}
+		}
+		if steps != 3 {
+			t.Errorf("three flicks moved %d rows, want 3", steps)
+		}
+	})
 }
 
 // The hit map comes from the frame that is on the screen, so a click below the last line

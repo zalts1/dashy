@@ -87,9 +87,9 @@ func Run(interval time.Duration) {
 	// persisted: a fold is about this sitting at the tab, not a preference (§9.21).
 	var folded bool
 	var lastKey, lastFetch time.Time
-	// The wheel's own clock. It is not the selection timeout's: that one measures the
+	// The caret's own clock. It is not the selection timeout's: that one measures the
 	// reader going quiet, this one measures one gesture ending.
-	var wheel wheelClock
+	var step stepClock
 
 	// One UI value for both the frame and the navigation order, because the order has to
 	// follow the screen — building it twice is how the two would come to disagree about
@@ -204,21 +204,18 @@ func Run(interval time.Duration) {
 				if r, ok := f.ByKey(sel); folded && ok && r.Rank == board.RankQuiet {
 					sel = ""
 				}
-			case keyUp:
-				sel = view.Step(view.DisplayOrder(f, ui()), sel, -1)
-			case keyDown:
-				sel = view.Step(view.DisplayOrder(f, ui()), sel, +1)
-			case keyScrollUp, keyScrollDown:
-				// The same two steps, rationed. One flick reports a step per scroll line, so
-				// unrationed it crosses a band and lands past whatever the reader was reaching
-				// for (§9.32). Rate is the only thing that separates one gesture from nine
-				// notches: the wire does not say which it was.
-				if !wheel.allow(lastKey) {
+			case keyUp, keyDown, keyScrollUp, keyScrollDown:
+				// One rule for all four, because they are the same events: with mouse reporting
+				// off the terminal turns wheel notches into arrow keys, so a flick has always
+				// arrived here as nine presses inside one millisecond and moved the caret nine
+				// rows. Collapsing the burst is what makes a gesture one step; a finger is never
+				// that fast, so nothing a reader types is affected (§9.32).
+				if !step.allow(lastKey) {
 					continue
 				}
-				delta := -1
-				if ev.k == keyScrollDown {
-					delta = +1
+				delta := +1
+				if ev.k == keyUp || ev.k == keyScrollUp {
+					delta = -1
 				}
 				sel = view.Step(view.DisplayOrder(f, ui()), sel, delta)
 			case keyDone:
