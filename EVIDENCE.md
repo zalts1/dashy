@@ -44,6 +44,7 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.25 | `@v0.1.0` reports `v0.1.0`, settling §9.23's unprobed row — and one row of that table was true only until a tag existed | `version/`, `DESIGN.md` §13 |
 | 9.26 | An unreadable world rendered as an empty one; `watch` needed no guard, and `cmux.Available()` answered a question nobody asked | `claude/`, `board/`, `view/header.go`, `cmux/cmux.go`, `doctor/`, `DESIGN.md` §14 |
 | 9.27 | The config write truncated before writing, and `os.WriteFile`'s mode applies only at creation — the `0600` was aspirational | `config/config.go`, `DESIGN.md` §10.9 |
+| 9.28 | The atomic write would have tightened a file board does not own, and a same-second backup overwrote the pristine copy | `hooks/settings.go`, `DESIGN.md` §15 |
 | 9.29 | Two elements disagreed about where the right edge was, and neither spent the surplus — the header follows the frame, the row fills the width | `view/layout.go`, `view/header.go`, `view/frame.go`, `view/scale.go` |
 
 ---
@@ -796,6 +797,38 @@ expensive-and-effective is the one worth recording.
 
 **What it does not fix:** two writers can still each read ten todos and each write eleven.
 Atomic is not exclusive, and the fix for that is not a lock — see `DESIGN.md` §10.9.
+
+### 9.28 Fixing the torn write would have changed the file's permissions (2026-08-02)
+
+`uninstall-hooks` needed the same atomic write §9.27 gave `config.Save`, and for a
+stronger reason: a torn `~/.board.json` costs a todo list, a torn `~/.claude/settings.json`
+breaks Claude Code. The port looked mechanical. It was not.
+
+**§9.27's own finding runs the other way here.** `os.WriteFile`'s mode argument applies
+only when it *creates* the file — which is why board's `0600` on `~/.board.json` was
+aspirational rather than real. On `settings.json` that same accident was doing something
+useful: rewriting an existing file left its permissions exactly as they were, so a file the
+user or another tool had created at `0644` stayed `0644`. `CreateTemp` opens at `0600` and
+rename carries the temp file's mode, so **the atomic write would have silently tightened a
+file board does not own.** The defect and its fix had opposite signs on the two files.
+
+Confirmed by deleting the `f.Chmod(mode)` line and running the test: `mode = 600, want
+644`. The guard is load-bearing, not decoration. `~/.board.json` still wants the opposite
+treatment — board owns it, so tightening a loosened copy is a fix — and the two files now
+say so in their own comments.
+
+**A second thing the real binary found, which no fixture would have.** Running install and
+uninstall back to back printed two identical backup paths: the name is
+`.board-bak-<second>`, and both changes landed inside the same second. The later copy
+overwrote the earlier one — and the earlier one is the pristine file, taken before board
+had touched anything, which is precisely the copy somebody restoring wants. A backup that a
+later state can silently replace is not a backup. `backup` now refuses to overwrite an
+existing file and says `kept earlier backup:` instead.
+
+Fourth change in five where running the binary found what the suite could not (§9.23,
+§9.24, §9.26). The pattern is specific enough to name: **the suite tests the judgement, and
+the machine tests what board assumed about the world it runs in** — modes, clocks, PATH,
+and the shape of other people's files.
 
 ### 9.29 Two elements disagreed about where the right edge was (2026-08-02)
 

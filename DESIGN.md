@@ -38,6 +38,7 @@ grep -n '^#\+ ' DESIGN.md        # § → line, then Read with offset/limit
 | 12 | todos: a row with no process, the cap of 10, where capture and removal each live | `config/`, `board/build.go`, the `TODO` band |
 | 13 | `version`: the tag is the release, upstreams reported verbatim, absence never raised | `version/`, `host/probe.go`, releasing |
 | 14 | trouble: an unreadable world is not an empty one, and `doctor` reads without writing | `claude/`, `board/build.go`, `view/header.go`, `doctor/` |
+| 15 | `uninstall-hooks`: defined as install's inverse, and what it must not touch on the way | `hooks/`, anything editing `~/.claude/settings.json` |
 
 ---
 
@@ -472,9 +473,11 @@ Four more, each with a test or a documented refusal:
 
 - **`notify` must never fail the agent.** It runs inside the agent's own hook chain,
   so every error path is a silent success — including a broken `notify_cmd`.
-- **`install-hooks` refuses to rewrite an unparseable `~/.claude/settings.json`** and
-  writes a timestamped `.board-bak-*` before its first change. It is idempotent via
-  the `<binary> notify` command marker.
+- **`install-hooks` and `uninstall-hooks` refuse to rewrite an unparseable
+  `~/.claude/settings.json`** and write a timestamped `.board-bak-*` before their first
+  change, never overwriting an earlier backup. Both are idempotent via the
+  `<binary> notify` command marker. **Neither may change anything it did not write** —
+  not another tool's hooks, not an unrelated key, and not the file's permissions (§15).
 - **cmux env vars are always stripped from child processes.** cmux treats
   `CMUX_SURFACE_ID`/`CMUX_WORKSPACE_ID` as the implicit target of every command, so a
   stale inherited value makes even a global query fail (§9.8).
@@ -847,3 +850,41 @@ set is the diagnostic; the command is the user's secret.
 `Install`, sharing the marker and the event list so a diagnosis cannot disagree with the
 installer. It is also the command that runs on machines where `install-hooks` refuses, so
 an unparseable `settings.json` is a row of its own rather than "not installed" (§8).
+
+---
+
+## 15. `uninstall-hooks` — leaving no trace in a file board does not own
+
+The README used to end by asking the reader to open `~/.claude/settings.json` and delete
+two entries by eye. That is a fine instruction for the person who wrote the format and an
+unreasonable one for anybody else: **install being safe while uninstall is manual is not a
+tool you can ask a colleague to try.** So uninstall holds every line install holds (§8) —
+the refusal on an unparseable file, the backup before the first change, idempotence
+through the same `<binary> notify` marker.
+
+**It is defined as install's inverse, and that is the test.** Install into a settings file,
+uninstall, and what comes back must be the file that went in. Anything weaker permits a
+command that removes the hooks and leaves the file subtly not what it was.
+
+Three things follow from that definition, and each is a way the obvious implementation
+gets it wrong:
+
+- **The entry is the unit of removal, not the group.** board writes one command per group,
+  so dropping whole groups looks equivalent — until a group holds board's command beside
+  another tool's, which this file being the user's makes possible. A group is dropped only
+  once board's own removal has emptied it; a group that arrived empty is left, because
+  board did not empty it.
+- **An emptied container goes.** `"Stop": []` and no `Stop` key are the same instruction to
+  Claude Code, so removing it cannot change what runs — and it is the only choice under
+  which an install/uninstall cycle does not accrete scaffolding that outlives the tool.
+- **The file's mode is preserved explicitly**, which the atomic write made necessary rather
+  than optional (§9.28).
+
+`hooks/settings.go` is the whole of board's access to this file — read, back up, write —
+and both commands go through it, so care taken on one path cannot go missing from the
+other. The write is the same temp-and-rename as `config.Save` (§9.27), for a stronger
+reason: a torn `~/.board.json` costs a todo list, a torn `settings.json` breaks Claude
+Code.
+
+`doctor` still only reads (§14). Diagnosing this file and changing it stay separate
+commands.

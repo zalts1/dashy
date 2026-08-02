@@ -18,7 +18,7 @@ import (
 
 const usage = `usage: board | board watch [interval] | board jump <substring> | board label "<text>"
        board todo | board todo "<text>" | board todo done <text or id>
-       board install-hooks | board version | board doctor`
+       board install-hooks | board uninstall-hooks | board version | board doctor`
 
 func main() {
 	args := os.Args[1:]
@@ -43,6 +43,8 @@ func main() {
 		err = todo(args[1:])
 	case "install-hooks":
 		err = hooks.Install()
+	case "uninstall-hooks":
+		err = hooks.Uninstall()
 	case "doctor":
 		diagnose()
 	case "version":
