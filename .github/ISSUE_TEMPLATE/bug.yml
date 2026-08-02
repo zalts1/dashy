@@ -20,7 +20,7 @@ body:
         command that often carries a webhook URL.
       render: text
       placeholder: |
-        board  v0.1.0
+        board  v0.2.0
         claude 2.1.220 (Claude Code)
         cmux   0.64.16 (96) [5321becb6]
         roster 16 sessions
