@@ -39,6 +39,7 @@ grep -n '^#\+ ' DESIGN.md        # § → line, then Read with offset/limit
 | 13 | `version`: the tag is the release, upstreams reported verbatim, absence never raised | `version/`, `host/probe.go`, releasing |
 | 14 | trouble: an unreadable world is not an empty one, and `doctor` reads without writing | `claude/`, `board/build.go`, `view/header.go`, `doctor/` |
 | 15 | `uninstall-hooks`: defined as install's inverse, and what it must not touch on the way | `hooks/`, anything editing `~/.claude/settings.json` |
+| 16 | the demo: a fixture fleet through the real join, recorded by hand | `internal/demo/`, `demo/`, the top of the README |
 
 ---
 
@@ -888,3 +889,38 @@ Code.
 
 `doctor` still only reads (§14). Diagnosing this file and changing it stay separate
 commands.
+
+## 16. The demo — a fleet nobody has to protect
+
+A terminal tool with no picture at the top gets scrolled past, and board's picture is
+the whole argument for it: the bands, the ⚠ waterline, a session lifting out of the
+quiet tail. So the README leads with a recording of `board watch`.
+
+**What cannot be recorded is board being used.** Every row on a real board is work — a
+label, a workspace name, a customer in a todo — and the README is the one file in the
+repo that is read by people the fleet is not theirs to see. The GIF therefore comes from
+a synthetic *world*, not a synthetic *screen*: `internal/demo` builds a `board.Snapshot`
+of agents, tabs and todos and hands it to the same `board.Build` production calls.
+
+That choice is what makes the picture trustworthy. A hand-drawn frame — the shape the
+README's static block used to be — is a claim about the renderer that nothing checks; it
+drifts the moment a column moves, and it can show a fleet the join could never produce.
+Going through the pure seam (§3) means the recording is board rendering, and the only
+fiction is the fleet. It is the same property a golden file uses (§11), pointed at a
+GIF instead of a test.
+
+Three constraints hold it in place:
+
+- **It is a `main` under `internal/`, and that is deliberate.** `internal/` is what stops
+  `go install .../demo` from existing. board gains commands by §1, not by whatever
+  happened to need a binary.
+- **The recording is a human step, not a CI step.** `vhs` pulls in `ttyd` and `ffmpeg`,
+  and a project with no dependencies (§2) should not acquire three of them in CI for an
+  image that changes a few times a year. The cost is that the GIF can go stale while the
+  suite stays green; `CONTRIBUTING.md` carries the reminder, which is the honest place
+  for a check no machine performs.
+- **It records on `#282c34`, the lighter of the two backgrounds every colour was
+  validated against (§6), and on at least 32 rows.** A theme nobody validated would put
+  an unchecked contrast claim at the top of the README. Below 32 rows the fit loop starts
+  trimming the quiet band to `+N quiet` (§9.21) — correct behaviour, and the wrong thing
+  to lead with.

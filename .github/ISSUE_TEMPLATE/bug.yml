@@ -1,0 +1,72 @@
+name: Bug report
+description: board reported something wrongly, or refused to report at all
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        board reads its roster from `claude agents --json` and its tabs from cmux.
+        Neither is a documented contract, so **the upstream versions are usually the
+        answer** — `board doctor` carries them along with what board could and could
+        not read on your machine.
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: '`board doctor`'
+      description: >
+        Paste the whole thing. It reads and never writes, so it works even where
+        install-hooks refuses, and it never prints `notify_cmd` — that field is a shell
+        command that often carries a webhook URL.
+      render: text
+      placeholder: |
+        board  v0.1.0
+        claude 2.1.220 (Claude Code)
+        cmux   0.64.16 (96) [5321becb6]
+        roster 16 sessions
+        tabs   22 tabs in 7 workspaces
+        hooks  Stop, Notification
+        config /Users/you/.board.json
+        notify off — set notify_cmd to push
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what the board showed instead
+      description: >
+        The gap is the bug. `16 sessions` with `0 tabs` is the common one — board joins
+        the two on pid and drops any interactive session with no tab, so a fleet that
+        looks too small usually means the tabs did not arrive.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to get there
+      description: The command you ran, and anything about the fleet that seems relevant.
+    validations:
+      required: true
+
+  - type: textarea
+    id: frame
+    attributes:
+      label: The frame itself (optional)
+      description: >
+        Capture it without a terminal to drive — `COLUMNS=118 LINES=44 board watch | cat`.
+        Unlike `board doctor` this carries your labels and workspace names, so scrub
+        anything private first.
+      render: text
+    validations:
+      required: false
+
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal and size (optional)
+      description: Only matters for a layout or colour report.
+      placeholder: cmux tab, 118x44
+    validations:
+      required: false

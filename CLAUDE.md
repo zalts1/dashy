@@ -14,6 +14,7 @@ one `§` away, in the section where a change to it gets recorded.
 | `README.md` | the user contract | commands, states, config keys |
 | `DESIGN.md` | the settled record: §1–§8, §10–§11, with a `§` index at the top | why anything is the shape it is |
 | `EVIDENCE.md` | §9.x, append-only, with a `§` index at the top | what was believed, what falsified it |
+| `CONTRIBUTING.md` | the outside contributor's process | how a PR is opened, tested, and declined |
 | package docs | `go doc ./...` | what each package's job is |
 
 Both documents are section-addressable: read the `§` index, then that one section —
@@ -33,6 +34,7 @@ go vet ./... && go test ./...
 go test ./internal/view -run TestGolden        # frame is pinned byte-for-byte
 COLUMNS=118 LINES=44 ./board watch | cat       # non-TTY: one frame, then exit
 ./board version                                # board's, claude's and cmux's
+./demo/record.sh                               # re-record docs/board.gif (needs vhs)
 
 git tag -a vX.Y.Z && git push origin vX.Y.Z     # releasing: the tag IS the version
 ```
@@ -59,7 +61,11 @@ Routing only; `DESIGN.md` §3 is why the tree is this shape.
       board/         Fleet/Row; Build = pure join, Collect = impure gather
       view/          PURE: Frame, header, layout arithmetic, Table, palette, scale
       watch/         IMPURE: alternate screen, termios, signals, ticker
-      hooks/         notify, install-hooks
+      hooks/         notify, install-hooks, uninstall-hooks
+      doctor/        what board could and could not read here
+      demo/          the fixture fleet the GIF renders — a main, but never a command
+    demo/            board.tape + record.sh: the recording, run by hand (§16)
+    docs/            board.gif, and nothing else
 
 In `view`, rendering lives in `frame.go`/`header.go` and the fit and column arithmetic
 in `layout.go` — that seam is where every fit bug has been.
