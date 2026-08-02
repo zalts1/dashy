@@ -472,8 +472,11 @@ Four more, each with a test or a documented refusal:
   surface it cannot locate in a pane, and the selection is confirmed against the tree
   afterwards.
 
-- **`notify` must never fail the agent.** It runs inside the agent's own hook chain,
-  so every error path is a silent success — including a broken `notify_cmd`.
+- **`notify` must never fail the agent, and must never make it wait.** It runs inside
+  the agent's own hook chain, so every error path is a silent success — including a
+  broken `notify_cmd` — and the sink gets a 3s budget rather than the agent's patience.
+  Discarding the error covered a sink that answers wrongly and did nothing for one that
+  does not answer at all; a hook that blocks has failed slowly (§9.30).
 - **`install-hooks` and `uninstall-hooks` refuse to rewrite an unparseable
   `~/.claude/settings.json`** and write a timestamped `.board-bak-*` before their first
   change, never overwriting an earlier backup. Both are idempotent via the

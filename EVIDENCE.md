@@ -46,6 +46,8 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.27 | The config write truncated before writing, and `os.WriteFile`'s mode applies only at creation — the `0600` was aspirational | `config/config.go`, `DESIGN.md` §10.9 |
 | 9.28 | The atomic write would have tightened a file board does not own, and a same-second backup overwrote the pristine copy | `hooks/settings.go`, `DESIGN.md` §15 |
 | 9.29 | Two elements disagreed about where the right edge was, and neither spent the surplus — the header follows the frame, the row fills the width | `view/layout.go`, `view/header.go`, `view/frame.go`, `view/scale.go` |
+| 9.30 | `notify` never failed the agent and blocked it instead — the invariant covered errors, not latency | `hooks/notify.go`, `DESIGN.md` §8 |
+| 9.31 | `-h` was not missing, it was a todo: the absent flag wrote to the one file board owns | `cmd/board/usage.go`, `cmd/board/main.go` |
 
 ---
 
@@ -917,3 +919,56 @@ wide window — 27 columns at 149, 84 at 206 — and that price is not avoidable
 a left-aligned tail cannot put ink on the right edge, so past the cap the bar is the only
 column that could have spent the surplus. Filling the window and keeping the bar
 recessive are not both available; the cap is the choice of which one to lose.
+
+### 9.30 `notify` never failed the agent, and blocked it instead (2026-08-02)
+
+**Believed:** §8's "`notify` must never fail the agent" was satisfied, and had been for
+the life of the hook. The error from `c.Run()` is discarded, so a broken `notify_cmd`
+cannot surface as a hook failure — every error path is a silent success, and that part
+was true.
+
+**Measured:** with `notify_cmd` set to `sleep 30`, `Notify()` did not return inside five
+seconds. The test asserting it returns fails at exactly that bound before the fix and
+passes in 0.12s after it. The wait is paid by the agent's own `Stop` hook, on every turn,
+and it ends when Claude Code's hook timeout fires — so nothing in board's output ever
+says why the turns got slower.
+
+**What that shows:** discarding an error handles a sink that answers *wrongly*. It does
+nothing for a sink that does not answer at all. **A hook that blocks has failed slowly**,
+and latency was the half of the invariant nobody had written down. The shape of the bug is
+the point: on the author's machine, with a working ntfy topic, the call is ~30ms and the
+gap is invisible. It takes a stale webhook on somebody else's machine to appear at all —
+the same class as §9.22 and §9.26, found only by asking what a stranger's machine does.
+
+**Shipped:** `exec.CommandContext` with a 3s budget. A push that arrives after you have
+already looked is not a push, so the number is a ceiling on what the agent pays, not a
+target for the sink. The deadline bounds what board waits for and not what the sink does:
+killing `sh` leaves a `curl` it spawned to finish on its own, which is harmless precisely
+because nothing here reads the result.
+
+The seam is deliberate and small. `notifyTimeout` is a var so the test can prove the
+mechanism in 100ms instead of paying the real budget, with a second test asserting the
+shipped default stays under five seconds — a seam a test can widen is one a change can
+widen, so the default is pinned separately from the mechanism.
+
+### 9.31 `-h` was not missing, it was a todo (2026-08-02)
+
+**Believed:** the absent `-h` was cosmetic. The usage text existed; it just went to stderr
+with exit 2, and only for an unrecognised command. A published tool should answer the
+reflex, but nothing was at risk.
+
+**Found while writing the test:** `todo` joins its arguments into the todo's text, so on
+`main` at `1074013`, in an isolated `$HOME`:
+
+    $ board todo -h
+    todo: -h  (1 of 10)
+    exit=0
+
+The missing flag did not print an error. **It wrote to the one file board owns**, spent a
+tenth of a cap that refuses rather than trims (§12), and exited 0 while doing it.
+
+**Shipped:** `helpRequested` scans every argument for `-h`/`--help`, and the first
+argument only for the bare word `help` — because a todo may legitimately be about help
+(`board todo "help sam with the migration"` must stay a todo). Usage goes to stdout with
+exit 0; an unrecognised command still fails on stderr with exit 2, because being asked a
+question and being given a wrong one are different events and only one is an error.

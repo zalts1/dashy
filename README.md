@@ -46,6 +46,7 @@ the demo builds a synthetic world and renders it through the same code (`demo/re
     board uninstall-hooks     take them back out, leaving every other hook alone
     board version             board's version, and claude's and cmux's
     board doctor              what board can and cannot read on this machine
+    board -h                  this list, from the tool itself (`--help`, `help`)
 
 `board watch` is meant to live in its own cmux tab. It needs no daemon and opens no
 port — the tab is the process. Piped or redirected it prints one frame and exits,
@@ -233,7 +234,9 @@ this JSON on stdin. Empty (the default) means notifications are off.
 ```
 
 Use `.text` for a ready-made one-liner; it always carries the label and workspace
-name. Sink failures are swallowed so a broken webhook never blocks an agent.
+name. Sink failures are swallowed and the sink gets **3 seconds**, so neither a broken
+webhook nor a hanging one blocks an agent: `notify` runs inside the agent's own hook
+chain, where a command that waits costs the same as a command that fails.
 
 ## Uninstall
 

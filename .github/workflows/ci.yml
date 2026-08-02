@@ -76,6 +76,25 @@ jobs:
           ./board version | grep -qE '^claude +not found$'
           ./board version | grep -qE '^cmux +not found$'
 
+      # -h is the first thing a stranger types, and it is asserted here rather than only in
+      # a unit test because the stream and the exit code are the part that reads as broken.
+      - name: -h answers on stdout and exits 0
+        run: |
+          for form in -h --help help; do
+            ./board $form | grep -q '^usage: board'
+          done
+          # Nothing may go to stderr when board was asked a question, not given a wrong one.
+          test -z "$(./board -h 2>&1 >/dev/null)"
+          # The trap §9.31 closed: todo joins its arguments into text, so this used to
+          # write a todo called "-h" and exit 0.
+          ./board todo -h | grep -q '^usage: board'
+          test ! -e "$HOME/.board.json"
+          # An unrecognised command stays an error, on stderr, with a non-zero status.
+          if ./board bogus 2>/dev/null; then
+            echo "::error::an unrecognised command exited 0"
+            exit 1
+          fi
+
       # This runner is the unreadable world, so it is the one place the degraded reports
       # can be checked against a real machine rather than a fixture. §9.26 was found by
       # running the binary with a stripped PATH; this is that check, kept.
