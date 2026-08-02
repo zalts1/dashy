@@ -23,6 +23,7 @@ running      build board: cmux fleet status CLI           INFRA                 
     board todo "<text>"       add one (max 10)
     board todo done <text|id> finish one, matched like jump
     board install-hooks       merge Stop + Notification hooks into ~/.claude/settings.json
+    board uninstall-hooks     take them back out, leaving every other hook alone
     board version             board's version, and claude's and cmux's
     board doctor              what board can and cannot read on this machine
 
@@ -216,7 +217,14 @@ name. Sink failures are swallowed so a broken webhook never blocks an agent.
 
 ## Uninstall
 
-Remove the two `board notify` entries from `~/.claude/settings.json` (a timestamped
-`.board-bak-*` copy is written before the first change), then delete `~/.board.json`
-and the binary. Labels and todos live only in `~/.board.json`, so copy anything on the
-list out first; nothing else is written.
+    board uninstall-hooks
+
+Removes board's `Stop` and `Notification` entries from `~/.claude/settings.json` and
+nothing else — other tools' hooks, other settings, and the file's permissions all
+survive. A timestamped `.board-bak-*` copy is written first, an existing backup is never
+overwritten, and running it twice is a report rather than an error. It refuses a
+settings file it cannot parse, exactly as `install-hooks` does: board cannot safely edit
+what it cannot read.
+
+Then delete `~/.board.json` and the binary. **Labels and todos live only in
+`~/.board.json`**, so copy anything on the list out first; nothing else is written.

@@ -1,15 +1,12 @@
 package hooks
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/zalts1/dashy/internal/config"
-	"github.com/zalts1/dashy/internal/host"
 )
 
 // hookEvents are the two lifecycle points notify answers to. Shared with Installed so
@@ -36,14 +33,10 @@ func Install() error {
 	if err != nil {
 		return err
 	}
-	path := host.Home(".claude", "settings.json")
-	settings := map[string]any{}
-	var original []byte
-	if b, err := os.ReadFile(path); err == nil {
-		if err := json.Unmarshal(b, &settings); err != nil {
-			return fmt.Errorf("refusing to rewrite unparseable %s: %w", path, err)
-		}
-		original = b
+	path := settingsPath()
+	settings, original, mode, err := readSettings(path)
+	if err != nil {
+		return err
 	}
 	hooks, _ := settings["hooks"].(map[string]any)
 	if hooks == nil {
@@ -68,22 +61,11 @@ func Install() error {
 		fmt.Println("hooks already installed — nothing to do")
 		return nil
 	}
-	if original != nil {
-		bak := fmt.Sprintf("%s.board-bak-%s", path, time.Now().Format("20060102-150405"))
-		if err := os.WriteFile(bak, original, 0o600); err != nil {
-			return err
-		}
-		fmt.Println("backed up:", bak)
+	if err := backup(path, original, mode); err != nil {
+		return err
 	}
 	settings["hooks"] = hooks
-	b, err := json.MarshalIndent(settings, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	if err := os.WriteFile(path, append(b, '\n'), 0o600); err != nil {
+	if err := writeSettings(path, settings, mode); err != nil {
 		return err
 	}
 	fmt.Printf("installed hooks: %s\n", strings.Join(added, ", "))
