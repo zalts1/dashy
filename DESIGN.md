@@ -474,6 +474,11 @@ interaction model bolted on; it is the same select-then-act pair, reached differ
   carries no row deliberately: it is a direction, so it steps from the caret rather than
   from wherever the pointer is resting. The horizontal wheel stays unbound; the list has one
   axis.
+- **A gesture is not a notch, so the wheel is rationed** — one step per 200ms, and only the
+  wheel. A flick reports a step per scroll line, and unrationed it moved the caret nine rows
+  in one swipe. The wire cannot say whether nine reports were one intent, so the rate is the
+  only thing that can separate them. A keypress is never rationed: its rate is a finger, and
+  that rate is already right.
 
 *Not built, and why:* hover needs motion tracking
 (`?1002`/`?1003`), which redraws on every twitch to highlight a row that a click already

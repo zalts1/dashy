@@ -20,6 +20,11 @@ const (
 	keyFold
 	keyBackspace
 	keyClick
+	// The wheel moves the caret exactly as keyUp and keyDown do, and is a separate key only
+	// so the loop can ration it: one flick of a trackpad is many reports, and a keystroke
+	// is one keystroke (§9.32).
+	keyScrollUp
+	keyScrollDown
 )
 
 // event carries both readings of one keystroke: the command it names, and the text it

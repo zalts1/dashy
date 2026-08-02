@@ -3,6 +3,7 @@ package watch
 import (
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Mouse reporting is off unless ~/.board.json turns it on, because turning it on costs
@@ -51,9 +52,9 @@ func sgrMouse(params string, final rune) (event, bool) {
 		// position would step the selection to wherever the pointer was resting instead.
 		switch b & 0b11 {
 		case 0:
-			return event{k: keyUp}, true
+			return event{k: keyScrollUp}, true
 		case 1:
-			return event{k: keyDown}, true
+			return event{k: keyScrollDown}, true
 		}
 		return event{}, false // the horizontal wheel: the list has one axis
 	}
@@ -66,6 +67,31 @@ func sgrMouse(params string, final rune) (event, bool) {
 		return event{}, false
 	}
 	return event{k: keyClick, row: y - 1}, true
+}
+
+// wheelInterval is the least time between two caret steps the wheel is allowed to make.
+//
+// **A gesture is not a notch.** A trackpad flick reports a step per scroll line — nine of
+// them from one swipe, which carried the caret across a whole band and past the row the
+// reader was aiming at (§9.32). The mouse cannot say how many of its reports were one
+// intent, so the rate is what separates them: everything inside a flick is one step, and a
+// scroll held down still moves at about five rows a second, which is a list being read
+// rather than a list being fired past.
+const wheelInterval = 200 * time.Millisecond
+
+// wheelClock rations the wheel and nothing else. A held arrow key must still repeat at
+// whatever rate the terminal sends it: that rate is the reader's finger, and it is already
+// the right one.
+type wheelClock struct{ last time.Time }
+
+// allow reports whether this notch may move the caret, and is why the first one always
+// does — a wheel whose opening event is swallowed reads as a wheel that does not work.
+func (w *wheelClock) allow(now time.Time) bool {
+	if now.Sub(w.last) < wheelInterval {
+		return false
+	}
+	w.last = now
+	return true
 }
 
 // hitAt resolves a click against the frame that is on the screen. Out of range and

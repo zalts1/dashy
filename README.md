@@ -99,7 +99,10 @@ pauses the refresh, and only a frame that has stopped moving can be clicked at
 accurately. Clicking anywhere that is not a row — the header, a band heading, the legend
 — does nothing at all, so a near miss costs nothing. The wheel moves the caret rather
 than the frame, which is what it already did before the setting existed: nothing here
-scrolls, so a notch has only ever been a step. Everything else stays on the keyboard: no
+scrolls, so a notch has only ever been a step. **One flick is about one row** — a trackpad
+reports a step per scroll line, and taking them all would carry the caret across a whole
+band, so the wheel moves at most one row per 200ms. Hold the scroll and it keeps going, at
+roughly five rows a second. Everything else stays on the keyboard: no
 drag, no right-click menu.
 
 **What it costs you:** while `board watch` is running, dragging to select text goes to

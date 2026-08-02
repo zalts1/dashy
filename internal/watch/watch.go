@@ -87,6 +87,9 @@ func Run(interval time.Duration) {
 	// persisted: a fold is about this sitting at the tab, not a preference (§9.21).
 	var folded bool
 	var lastKey, lastFetch time.Time
+	// The wheel's own clock. It is not the selection timeout's: that one measures the
+	// reader going quiet, this one measures one gesture ending.
+	var wheel wheelClock
 
 	// One UI value for both the frame and the navigation order, because the order has to
 	// follow the screen — building it twice is how the two would come to disagree about
@@ -161,8 +164,8 @@ func Run(interval time.Duration) {
 					if r := []rune(input); len(r) > 0 {
 						input = string(r[:len(r)-1])
 					}
-				case keyClick:
-					// Capture owns every input while it is on, and a click carries no text, so
+				case keyClick, keyScrollUp, keyScrollDown:
+					// Capture owns every input while it is on, and the mouse carries no text, so
 					// the default branch would type nothing while looking like it did something.
 					// There is no row to point at: the mode is the frame's bottom line.
 				default:
@@ -205,6 +208,19 @@ func Run(interval time.Duration) {
 				sel = view.Step(view.DisplayOrder(f, ui()), sel, -1)
 			case keyDown:
 				sel = view.Step(view.DisplayOrder(f, ui()), sel, +1)
+			case keyScrollUp, keyScrollDown:
+				// The same two steps, rationed. One flick reports a step per scroll line, so
+				// unrationed it crosses a band and lands past whatever the reader was reaching
+				// for (§9.32). Rate is the only thing that separates one gesture from nine
+				// notches: the wire does not say which it was.
+				if !wheel.allow(lastKey) {
+					continue
+				}
+				delta := -1
+				if ev.k == keyScrollDown {
+					delta = +1
+				}
+				sel = view.Step(view.DisplayOrder(f, ui()), sel, delta)
 			case keyDone:
 				// The only write this loop makes, and the only destructive key in the
 				// frame. It is gated on the row being a todo — nothing here can end a

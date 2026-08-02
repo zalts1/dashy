@@ -1003,6 +1003,22 @@ coordinates would step the selection to wherever the pointer happened to be rest
 than from where the caret is. Verified in a pty with the pointer parked over the KPI strip:
 two notches down move the caret two rows, from the top of the list.
 
+**Then measured, and the restoration was still wrong:** with the binding in, one trackpad
+flick moved the caret **nine rows** — out of WORKING, through the whole quiet band, past
+everything the reader was reaching for. The report is per scroll *line*, not per gesture,
+and a swipe is worth about nine of them. Alternate-scroll had been hiding that too: the
+terminal quantised the same deltas before turning them into keys, so board had never seen
+the raw rate. Restoring a behaviour meant restoring the terminal's arithmetic as well as
+its intent, and only the intent had been visible.
+
+**Shipped for that:** `wheelClock`, one step per 200ms, on the wheel alone. The wire cannot
+say whether nine reports were one intent or nine, so the rate is the only thing that can
+separate them: everything inside a flick is one step, a held scroll still moves at about
+five rows a second, and a keypress is never rationed because its rate is already a finger.
+The first notch always steps — a wheel whose opening event is swallowed reads as broken.
+Verified in a pty: nine reports back to back move one row, three 400ms apart move three.
+
 **The general rule this leaves:** enabling a terminal mode takes things away as well as
-adding them. Before asking for one, ask what the terminal was already doing on board's
-behalf in that mode — it is not in board's code, so nothing in board's tests will miss it.
+adding them, and what it was doing for board is not only *what* but *how much*. Before
+asking for one, ask what the terminal was already doing on board's behalf in that mode — it
+is not in board's code, so nothing in board's tests will miss it.
