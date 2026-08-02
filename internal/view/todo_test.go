@@ -173,7 +173,10 @@ func TestTodosSurviveTheCollapse(t *testing.T) {
 	if !strings.Contains(out, "+") || !strings.Contains(out, "quiet") {
 		t.Fatal("the fleet did not collapse; this test is not exercising the trim")
 	}
-	for _, want := range []string{"reply to the questionnaire", "ACME csv export"} {
+	// "reply to the" rather than the whole label: 30 of these 35 rows are "filler", so
+	// the p90 label column sits at its floor and the todo draws ellipsized (§9.29). What
+	// this test is about is whether the row survives the trim, not how wide it prints.
+	for _, want := range []string{"reply to the", "ACME csv export"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("collapse dropped the todo %q — the reminder vanished when the screen got busy", want)
 		}

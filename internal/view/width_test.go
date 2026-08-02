@@ -66,24 +66,24 @@ func TestNoLineExceedsTheTerminalWidth(t *testing.T) {
 func TestResizeKeepsTheColumnsAligned(t *testing.T) {
 	f := wideFleet()
 	for _, cols := range []int{72, 90, 118, 200} {
-		labelW, tailW, _ := columns(f, cols)
+		labelW, tailW, barW := columns(f, cols)
 		if labelW < minLabelW {
 			t.Errorf("cols=%d: label column %d is under the floor %d", cols, labelW, minLabelW)
 		}
 		// The whole line has to fit by construction, not by the clamp catching it:
 		// the clamp is a backstop for absurd widths, not part of the layout.
-		if w := rowChrome + labelW + tailW; w > cols {
+		if w := rowChrome(barW) + labelW + tailW; w > cols {
 			t.Errorf("cols=%d: widest row is %d by arithmetic, %d too many", cols, w, w-cols)
 		}
 	}
 	// A tail long enough to squeeze the label takes the truncation itself once the
 	// label is at its floor — the label is the meaning, the workspace is context.
-	labelW, tailW, _ := columns(f, 64)
+	labelW, tailW, barW := columns(f, 64)
 	if labelW != minLabelW {
 		t.Errorf("label column = %d at 64 cols, want the floor %d", labelW, minLabelW)
 	}
-	if rowChrome+labelW+tailW > 64 {
-		t.Errorf("tail did not give way: %d + %d + %d > 64", rowChrome, labelW, tailW)
+	if rowChrome(barW)+labelW+tailW > 64 {
+		t.Errorf("tail did not give way: %d + %d + %d > 64", rowChrome(barW), labelW, tailW)
 	}
 }
 
@@ -144,7 +144,8 @@ func TestNarrowLayoutDropsTheBarRatherThanCutIt(t *testing.T) {
 					cols, i+1, plain(line))
 			}
 		}
-		_, _, bars := columns(wideFleet(), cols)
+		_, _, barW := columns(wideFleet(), cols)
+		bars := barW > 0
 		if bars != strings.Contains(out, "▇") {
 			t.Errorf("cols=%d: bars=%v but the frame %s bar glyphs", cols, bars,
 				map[bool]string{true: "has", false: "has no"}[strings.Contains(out, "▇")])

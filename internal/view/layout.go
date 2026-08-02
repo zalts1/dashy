@@ -7,6 +7,8 @@ package view
 // looked correct in the rendering code.
 
 import (
+	"math"
+	"slices"
 	"strings"
 
 	"github.com/zalts1/dashy/internal/board"
@@ -18,15 +20,12 @@ const (
 	idleW     = 7  // the IDLE column, widest at "52d06h"
 	maxLabelW = 80
 	minLabelW = 18
-	// rowChrome is every column a row spends outside the label and the tail: the lead,
-	// the state gutter, the bar, the warn mark, the IDLE column, and the gaps between
+	// rowChromeBare is every column a row spends outside the label, the tail and the bar:
+	// the lead, the state gutter, the warn mark, the IDLE column, and the gaps between
 	// them. Derived from the pieces rather than guessed — the fixed reserve of 46 it
 	// replaces was short by the whole tail, so any long workspace name wrapped the row
 	// (EVIDENCE.md §9.12).
-	rowChrome = 3 + gutter + 1 + barCells + 1 + 1 + 1 + idleW + 2
-	// rowChromeBare is the same row without the bar column, for terminals too narrow to
-	// hold one whole. A cut bar is worse than no bar: same glyph run, smaller number.
-	rowChromeBare = rowChrome - barCells - 1
+	rowChromeBare = 3 + gutter + 3 + idleW + 2
 	wsHeader      = "WORKSPACE" // also the tail column's floor: a column keeps room for its label
 	// The quiet tail never shrinks below this: a QUIET band of one row reads as a
 	// quiet fleet, which is the opposite of the truth.
@@ -36,6 +35,16 @@ const (
 	// reminding (§12).
 	minTodoRows = 2
 )
+
+// rowChrome is rowChromeBare plus a bar of barW cells and the space before it. A barW
+// of 0 is the bare row a tab too narrow for a whole bar gets: a cut bar is worse than
+// no bar, the same glyph run reporting a smaller number on an absolute scale.
+func rowChrome(barW int) int {
+	if barW == 0 {
+		return rowChromeBare
+	}
+	return rowChromeBare + barW + 1
+}
 
 // height is how many terminal lines this frame occupies once written. The watch loop
 // splits on newlines and writes each line with a trailing one, so the final newline
@@ -87,35 +96,84 @@ func clip(frame string, rows int) string {
 	return strings.Join(lines[:rows-1], "\n")
 }
 
-// columns sizes the two elastic columns to the content actually present: the label,
-// so bars sit next to the text instead of across a gap of padding, and the tail — the
-// workspace — which is unbounded in the data and was therefore the thing that
-// overflowed.
+// columns sizes the row's three elastic columns: the label, the tail — the workspace,
+// unbounded in the data and therefore the thing that used to overflow — and the bar.
 //
-// Sizing order is meaning first: the label takes the squeeze down to its floor, and
-// only then does the tail give way. Both are measured, so a resize changes the label
-// column and leaves every other column where it was.
-func columns(f board.Fleet, cols int) (labelW, tailW int, bars bool) {
+// Order is meaning first, in both directions. Squeezing, the label gives way to its
+// floor and only then does the tail truncate. Spending, the label is filled out whole
+// before anything else, and the bar takes what is left over — which is where the surplus
+// belongs, because the gap it closes is the one between a label and its bar (§9.29).
+func columns(f board.Fleet, cols int) (labelW, tailW, barW int) {
+	whole := 0
 	for _, r := range f.Rows {
-		labelW = max(labelW, runes(r.Label))
+		whole = max(whole, runes(r.Label))
 		tailW = max(tailW, runes(r.Workspace))
 	}
-	labelW = min(labelW, maxLabelW)
+	whole = min(whole, maxLabelW)
 	tailW = max(tailW, runes(wsHeader))
 
-	// headMargin keeps the same right-hand margin the header keeps, so the table's
-	// ragged right edge stops where the clock does.
-	bars = cols-headMargin >= rowChrome+minLabelW
-	chrome := rowChromeBare
-	if bars {
-		chrome = rowChrome
+	// A bar at its base width is what decides whether there is a bar at all — a wider one
+	// is a bonus and may not be what keeps a narrow tab from having one. headMargin keeps
+	// the same right-hand margin the header keeps, so the table's right edge and the
+	// header's are the same column.
+	barW = barCells
+	if cols-headMargin < rowChrome(barW)+minLabelW {
+		barW = 0
 	}
-	avail := cols - headMargin - chrome
+	avail := cols - headMargin - rowChrome(barW)
+
+	// The whole label while the row can hold it, the p90 once it cannot: a column that
+	// truncates on a window with columns to spare is choosing to lose text it could have
+	// shown, and the outlier it is guarding against only costs anything when space is
+	// scarce (§9.29).
+	labelW = whole
+	if labelW+tailW > avail {
+		labelW = min(labelColumn(f.Rows), maxLabelW)
+	}
 	if over := labelW + tailW - avail; over > 0 {
 		labelW = max(minLabelW, labelW-over)
 	}
 	if over := labelW + tailW - avail; over > 0 {
 		tailW = max(0, tailW-over)
 	}
-	return max(labelW, minLabelW), tailW, bars
+	labelW = max(labelW, minLabelW)
+
+	// Whatever the two of them left goes to the bar, so the row ends on the frame's right
+	// edge instead of stopping short of it — up to barMaxCells, past which a wider bar
+	// stops being more readable and starts being the row's loudest mark. Beyond that the
+	// surplus is margin: a left-aligned tail cannot put ink on the right edge, so the bar
+	// is the only column that could have spent it.
+	if barW > 0 {
+		barW = min(barMaxCells, barW+max(0, avail-labelW-tailW))
+	}
+	return labelW, tailW, barW
+}
+
+// labelColumn is the width the labels ask for: the p90 of those present, not the
+// longest. The bar column is shared — bars encode one absolute scale, so they have to
+// start on one column — which meant a single long title pushed every other row's bar
+// across a corridor of padding to reach it. p90 keeps a fleet of uniformly long labels
+// whole and spends the ellipsis only on the tail that is out of step with the rest.
+func labelColumn(rows []board.Row) int {
+	if len(rows) == 0 {
+		return 0
+	}
+	w := make([]int, len(rows))
+	for i, r := range rows {
+		w[i] = runes(r.Label)
+	}
+	slices.Sort(w)
+	return w[int(math.Round(0.9*float64(len(w)-1)))]
+}
+
+// frameEdge is the column the header's right block lands on: the frame's own right
+// edge, not the terminal's. Bounded by the terminal because a wrapped header scrolls
+// the whole frame away (EVIDENCE.md §9.10), and floored by what the header itself has
+// to say, so a fleet too small to fill the line never costs the reader the clock.
+func frameEdge(body string, cols, floor int) int {
+	w := 0
+	for l := range strings.SplitSeq(body, "\n") {
+		w = max(w, printed(l))
+	}
+	return min(cols-headMargin, max(w, floor))
 }

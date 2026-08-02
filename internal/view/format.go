@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // pad truncates with an ellipsis rather than wrapping: a row must stay one line,
@@ -73,6 +74,28 @@ func clampLine(s string, w int) string {
 
 // runes is the printed width of unpainted text.
 func runes(s string) int { return len([]rune(s)) }
+
+// printed is the same measurement for a line that has already been painted: the width
+// clampLine would count. Measuring a rendered line beats re-deriving its width from the
+// arithmetic that produced it — that is two places to get one number wrong.
+func printed(s string) int {
+	n := 0
+	for i := 0; i < len(s); {
+		if s[i] == '\033' {
+			for i < len(s) && s[i] != 'm' {
+				i++
+			}
+			if i < len(s) {
+				i++
+			}
+			continue
+		}
+		_, w := utf8.DecodeRuneInString(s[i:])
+		i += w
+		n++
+	}
+	return n
+}
 
 // humanize is the table's duration format: fixed width per magnitude so the IDLE
 // column stays aligned.
