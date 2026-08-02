@@ -30,7 +30,7 @@ grep -n '^#\+ ' DESIGN.md        # § → line, then Read with offset/limit
 | 4 | state model: `blocked`/`running`/`done`, staleness, label precedence | `board/build.go`, `claude/` |
 | 5 | why the `ASKED` ledger was removed and cannot come back | proposing any new band |
 | 6 | rendering: form, validated colour, encoding, width, header, behaviour | all of `view/` |
-| 7 | interaction: jump, keymap, identity-not-position, the explicit pause | `watch/`, `view/order.go`, `cmux/focus.go` |
+| 7 | interaction: jump, keymap, identity-not-position, the explicit pause, the opt-in mouse | `watch/`, `view/order.go`, `view/hit.go`, `cmux/focus.go` |
 | 8 | safety invariants — nothing ends a session | any write action |
 | 9 | **evidence log — in `EVIDENCE.md`** | the finding that constrains the code you are touching |
 | 10 | deferred ideas, each with the trigger that would revive it | before building one of them, and §10.8 before touching the keymap |
@@ -391,6 +391,7 @@ half-second, which is why the reading "lead with `3 NEED YOU`" was rejected.
 
     board jump <substring>     from any tab, matches label or workspace
     ↑/↓ or k/j then Enter      from inside board watch
+    click then click again     the same two steps, with the mouse — off by default
     z folds QUIET to its count · Esc clears · q or ctrl-c exits
 
 **Why this is not redundant with `claude agents`.** Agent View covers a lot of this
@@ -437,6 +438,41 @@ under the cursor and Enter jumps to the wrong session.
 **Jumping does not end the session.** Enter focuses the target, clears the selection
 and keeps looping in the now-hidden tab (§9.7). Because the board tab is no longer
 visible once a jump lands, focus errors render **in the frame header**, not on stderr.
+
+### The mouse — a second route to the same two steps, off by default (2026-08-02)
+
+A click is the one input in this UI that is a **position**, and every other thing here is
+an identity, for the reason the whole section above gives. So the mouse is not a third
+interaction model bolted on; it is the same select-then-act pair, reached differently.
+
+- **Two clicks, not one.** The first selects — which pauses the refresh — and only then is
+  the frame still enough for the second to mean what it looks like. One-click-to-jump is
+  the refresh-versus-cursor problem with no defence left: keyboard selection survives a
+  re-sort because it is keyed on the session, and a coordinate cannot be. The second click
+  is checked against the selected key, so it either jumps to the row the caret is on or it
+  does nothing.
+- **The hit map comes out of the drawing pass.** `view.FrameHits` returns the frame and,
+  per line, the key drawn there. Deriving it beside the renderer would be a second copy of
+  the layout, and the first band to move would leave the two disagreeing with nothing to
+  notice it — the same argument that keeps `DisplayOrder` on the same `UI` value the frame
+  gets (§3). The click is resolved against the map from the frame **on the screen**, never
+  a freshly computed one.
+- **A miss does nothing.** Chrome — the header, a band heading, the legend, the space below
+  the frame — resolves to no key, and no key means no action. Moving the caret to whichever
+  row was nearest would make a near miss worse than no mouse at all.
+- **Off unless `~/.board.json` says otherwise.** Mouse reporting costs drag-to-select: with
+  the terminal forwarding presses, copying a workspace name out of the frame takes a
+  modifier. On a tab left open all day that is a real loss, and it is the reader's trade to
+  make. `?1000` (presses, not motion) plus `?1006` (SGR), disabled in the same `once` block
+  that restores termios — a terminal left reporting presses swallows selection in the shell
+  board hands back, with nothing on screen to explain it.
+
+*Not built, and why:* the wheel is dropped rather than bound, because the frame always fits
+and there is nothing under the bottom line to scroll to. Hover needs motion tracking
+(`?1002`/`?1003`), which redraws on every twitch to highlight a row that a click already
+reaches — and it would put work on a path that currently does none unless something is due.
+Clickable band headings and legend hints are targets a keyboard already covers with one
+key each; the row is the thing worth pointing at.
 
 ---
 
@@ -621,7 +657,9 @@ The pure seams exist for this and must stay pure:
 |---|---|---|
 | `Build(Snapshot, now)` | `board` | a `Snapshot` literal — roster, rank, label, staleness, sort, todos |
 | `Frame(fleet, screen, ui)` | `view` | a `Fleet` literal; golden files pin the whole screen |
+| `FrameHits(fleet, screen, ui)` | `view` | same `Fleet` literal, asserted against the frame it returns: every mapped line must draw that row's label, at every trim and fold. A hit map cannot be pinned by a golden file — it is only correct *relative to* the frame beside it |
 | `Table(fleet, threshold)` | `view` | same |
+| `sgrMouse(params, final)` / `hitAt(hits, row)` | `watch` | escape-sequence and `[]string` literals — the decoder is where a release, a drag or a wheel tick becomes a second click |
 | `idleScale` / `bar` / `humanize` / `short` / `pad` | `view` | values |
 | `parseTop` / `parseHookClock` / `StripSpinner` | `cmux` | JSON literals |
 | `findSlot(top, surface)` | `cmux` | a `top`-shaped literal — placement is what would reorder somebody's tabs (§9.15) |

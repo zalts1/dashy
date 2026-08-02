@@ -56,7 +56,8 @@ Inside `board watch`: `↑`/`↓` (or `k`/`j`) select a row, `Enter` focuses tha
 session's cmux tab **and leaves board running**, `a` adds a todo, `t` jumps to the top
 of the list, `d` finishes the selected one, `z` folds the quiet band to its count,
 `Esc` clears, `q` or `Ctrl-C` exits. That is the whole keymap — no
-sorting, no filtering.
+sorting, no filtering. The mouse does the first two of those and nothing else, once you
+turn it on.
 
 `z` is the one thing that changes what the frame shows rather than where the cursor is.
 QUIET starts **open**; folded, it keeps its header and its count — `QUIET · 13 ·
@@ -84,6 +85,25 @@ says there is nowhere to jump.
 as idle time grows, so a live refresh would slide the list out from under the
 cursor. The selection is tracked by session, not by screen line, and clears itself
 after 10s of no keypress so the tab always returns to being ambient.
+
+### The mouse, if you want it
+
+Off by default. Set `"mouse": true` in `~/.board.json` and restart `board watch`:
+
+    click a row     selects it, exactly as ↑/↓ would
+    click it again  focuses its cmux tab, exactly as Enter would
+
+**Two clicks, not one**, and that is the point rather than an omission: the first click
+pauses the refresh, and only a frame that has stopped moving can be clicked at
+accurately. Clicking anywhere that is not a row — the header, a band heading, the legend
+— does nothing at all, so a near miss costs nothing. Everything else stays on the
+keyboard: no drag, no wheel (the frame always fits, so there is nothing to scroll to),
+no right-click menu.
+
+**What it costs you:** while `board watch` is running, dragging to select text goes to
+board instead of the terminal, so copying a label or a workspace name needs `Shift`
+held. That is the whole reason the key exists rather than the behaviour just being on.
+It is switched off again when board exits, including on a crash.
 
 ## States
 
@@ -214,7 +234,8 @@ place of the session count. `no sessions` means board looked and the fleet is qu
   "config": {
     "idle_threshold_minutes": 45,
     "poll_seconds": 10,
-    "notify_cmd": "curl -sS -d @- https://ntfy.sh/my-topic"
+    "notify_cmd": "curl -sS -d @- https://ntfy.sh/my-topic",
+    "mouse": false
   },
   "labels": { "<cmux surface id>": "<label>" },
   "todos": [
@@ -222,6 +243,9 @@ place of the session count. `no sessions` means board looked and the fleet is qu
   ]
 }
 ```
+
+`mouse` turns on click-to-select in `board watch`, at the cost of drag-to-select in that
+tab — see above. It is read once at startup.
 
 `notify_cmd` runs via `sh -c` on every `Stop` and `Notification` hook and receives
 this JSON on stdin. Empty (the default) means notifications are off.

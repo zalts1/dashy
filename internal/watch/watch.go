@@ -49,11 +49,23 @@ func Run(interval time.Duration) {
 	// Alternate screen so exiting restores the shell untouched.
 	fmt.Fprint(out, "\033[?1049h\033[?25l")
 	restoreTerm, _ := rawMode(os.Stdin)
+	// Read once at startup, not per draw: a tab that started reporting mouse events would
+	// have to stop reporting them too, and a mode that turns itself on mid-session is a
+	// mode nobody asked for.
+	mouse := config.Load().Config.Mouse
+	if mouse {
+		fmt.Fprint(out, mouseOn)
+	}
 	var once sync.Once
 	restore := func() {
 		once.Do(func() {
 			if restoreTerm != nil {
 				restoreTerm()
+			}
+			// Before the alternate screen goes: a terminal left reporting presses swallows
+			// drag-to-select in the shell board hands back, with nothing on screen to explain it.
+			if mouse {
+				fmt.Fprint(out, mouseOff)
 			}
 			fmt.Fprint(out, "\033[?25h\033[?1049l")
 		})
@@ -84,18 +96,39 @@ func Run(interval time.Duration) {
 			Typing: typing, Input: input, QuietCollapsed: folded}
 	}
 
+	// hits is the frame currently on the screen, line by line. A click is the only input
+	// here that is a position rather than an identity, so it is resolved against the frame
+	// the reader actually clicked on and never against a freshly computed one (§7).
+	var hits []string
 	draw := func() {
 		rows, cols := termSize()
-		s := view.Frame(f, view.Screen{
+		s, h := view.FrameHits(f, view.Screen{
 			Now:       lastFetch,
 			Interval:  interval,
 			Threshold: config.Load().Threshold(),
 			Rows:      rows,
 			Cols:      cols,
 		}, ui())
+		hits = h
 		render(out, s)
 	}
 	refresh := func() { f, lastFetch = board.Collect(), time.Now(); draw() }
+
+	// jump focuses a row's tab and keeps looping. cmux switches the visible tab; board
+	// stays alive in its own, so it is still here on return (§9.7).
+	jump := func(r board.Row) {
+		sel, notice = "", ""
+		if !r.Jumpable() {
+			// Selectable but not jumpable: a background agent is a row so its blocked state
+			// is visible, and it has no tab to bring forward.
+			notice = "no tab to jump to"
+		} else if err := cmux.Focus(r.Surface); err != nil {
+			// Reported in the frame, not on stderr: once the jump lands, this tab is not
+			// the visible one.
+			notice = err.Error()
+		}
+		refresh()
+	}
 
 	refresh()
 	// One-second cadence drives both the data interval and the selection timeout; no
@@ -128,6 +161,10 @@ func Run(interval time.Duration) {
 					if r := []rune(input); len(r) > 0 {
 						input = string(r[:len(r)-1])
 					}
+				case keyClick:
+					// Capture owns every input while it is on, and a click carries no text, so
+					// the default branch would type nothing while looking like it did something.
+					// There is no row to point at: the mode is the frame's bottom line.
 				default:
 					input += ev.text
 				}
@@ -183,21 +220,29 @@ func Run(interval time.Duration) {
 				}
 			case keyEnter:
 				if r, ok := f.ByKey(sel); ok {
-					// Focus the target and keep running. cmux switches the visible tab;
-					// board stays alive in its own, so it is still here on return.
-					sel, notice = "", ""
-					if !r.Jumpable() {
-						// Selectable but not jumpable: a background agent is a row so its
-						// blocked state is visible, and it has no tab to bring forward.
-						notice = "no tab to jump to"
-					} else if err := cmux.Focus(r.Surface); err != nil {
-						// Reported in the frame, not on stderr: once the jump lands, this
-						// tab is not the visible one.
-						notice = err.Error()
-					}
-					refresh()
+					jump(r)
 					continue
 				}
+			case keyClick:
+				// Two clicks, not one: the first selects, which pauses the refresh, and only
+				// then is the frame still enough for the second to mean what it looks like.
+				// One-click-to-jump would be the §7 cursor problem with no defence — selection
+				// survives a re-sort because it is keyed on the session, and a position cannot
+				// be. The second click is checked against the key, so it jumps to the row the
+				// caret is on or it does nothing.
+				k := hitAt(hits, ev.row)
+				if k == "" {
+					// A miss — the header, a band heading, the legend, the space below the
+					// frame. It must not move the caret to whatever row was nearest.
+					continue
+				}
+				if k == sel {
+					if r, ok := f.ByKey(k); ok {
+						jump(r)
+						continue
+					}
+				}
+				sel, notice = k, ""
 			}
 			draw()
 		case <-tick.C:
@@ -226,6 +271,10 @@ func Run(interval time.Duration) {
 // render writes one frame as a single buffer: cursor home, overwrite line by line,
 // then clear below. A full-screen clear each tick would flash — the previous frame
 // must stay until its pixels are replaced.
+//
+// Cursor home is also what makes a click resolvable: the frame starts at the top row, so
+// its line index and the terminal's row are the same number, and the hit map can be
+// indexed by a mouse coordinate directly.
 func render(out *os.File, s string) {
 	var b bytes.Buffer
 	b.WriteString("\033[H")

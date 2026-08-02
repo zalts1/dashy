@@ -12,6 +12,8 @@
 //     elastic column is, and what gives way first. Asserted directly rather than
 //     inferred from rendered output.
 //   - order.go — navigation, which follows the screen rather than the data
+//   - hit.go — the click map, produced by the drawing pass because a position is the
+//     one thing this package cannot derive after the fact
 //   - palette.go, scale.go, format.go — colour, the idle scale, and cell padding
 //
 // The frame fits the terminal in both directions. A line wider than the screen

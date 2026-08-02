@@ -10,7 +10,6 @@ package view
 // allowed to shout, and it is BLOCKED.
 
 import (
-	"bytes"
 	"fmt"
 	"strings"
 	"time"
@@ -51,6 +50,16 @@ type UI struct {
 // the first thing written — was the first thing lost. Rendering and measuring is
 // cheap, and it cannot drift out of step with the layout the way a constant did.
 func Frame(f board.Fleet, s Screen, u UI) string {
+	out, _ := FrameHits(f, s, u)
+	return out
+}
+
+// FrameHits is Frame plus the hit map: one entry per screen line, holding the key of
+// the row drawn there and empty for every line of chrome. It exists so a click can be
+// resolved to a session, and it comes out of the drawing pass rather than being derived
+// beside it — a hit map computed separately is a second copy of the layout, and it
+// drifts the first time a band moves (§3, §7).
+func FrameHits(f board.Fleet, s Screen, u UI) (string, []string) {
 	_, _, todo, quiet := f.Bands()
 	keepQuiet, keepTodo := len(quiet), len(todo)
 	// A folded band draws no rows, so trimming its tail would shed nothing and the stages
@@ -58,7 +67,7 @@ func Frame(f board.Fleet, s Screen, u UI) string {
 	if u.QuietCollapsed {
 		keepQuiet = 0
 	}
-	out := ""
+	out, hits := "", []string(nil)
 	// Absorbers in order of expendability, each cutting by the exact overflow so a stage
 	// converges in one pass: the quiet tail to its floor, then the list to its own, then
 	// either of them to nothing. **A band collapsed to its count still reports** — "QUIET
@@ -75,10 +84,10 @@ func Frame(f board.Fleet, s Screen, u UI) string {
 		{&keepQuiet, minQuietRows}, {&keepTodo, minTodoRows}, {&keepQuiet, 0}, {&keepTodo, 0},
 	}
 	for range 10 {
-		out = compose(f, s, u, pick(quiet, keepQuiet, u.Sel), pick(todo, keepTodo, u.Sel))
+		out, hits = compose(f, s, u, pick(quiet, keepQuiet, u.Sel), pick(todo, keepTodo, u.Sel))
 		over := height(out) - s.Rows
 		if over <= 0 {
-			return out
+			return out, hits
 		}
 		shrunk := false
 		for _, st := range stages {
@@ -91,14 +100,15 @@ func Frame(f board.Fleet, s Screen, u UI) string {
 			// A tab too short even for two count lines. Cut the bottom rather than let the
 			// terminal cut the top: losing the legend costs a key, losing the header costs
 			// the clock and the blocked count.
-			return clip(out, s.Rows)
+			return clip(out, s.Rows), clipHits(hits, s.Rows-1)
 		}
 	}
-	return clip(out, s.Rows)
+	return clip(out, s.Rows), clipHits(hits, s.Rows-1)
 }
 
-func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
-	var b bytes.Buffer
+func compose(f board.Fleet, s Screen, u UI, quiet, todo band) (string, []string) {
+	p := &painter{}
+	b := &p.b
 	labelW, tailW, barW := columns(f, s.Cols)
 	bars := barW > 0
 	// The columns between a label and its duration: the bar, the warn mark, and the
@@ -109,7 +119,7 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
 	}
 	blocked, working, _, _ := f.Bands()
 
-	b.WriteString(kpiStrip(f, s, len(blocked), len(working)) + "\n")
+	p.put(kpiStrip(f, s, len(blocked), len(working)) + "\n")
 
 	// The state mark is right-aligned inside the gutter so it hugs the label
 	// instead of leaving a gap. Width is passed in because a badge's printed width
@@ -117,7 +127,7 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
 	mark := func(s string, width int) string {
 		return strings.Repeat(" ", gutter-width-1) + s + " "
 	}
-	b.WriteString("\n   " + dim(strings.Repeat(" ", gutter)+pad("LABEL", labelW)+
+	p.put("\n   " + dim(strings.Repeat(" ", gutter)+pad("LABEL", labelW)+
 		strings.Repeat(" ", midCols)+fmt.Sprintf("%*s", idleW, "IDLE")+"  "+
 		cut(wsHeader, tailW)) + "\n")
 
@@ -152,21 +162,21 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
 	}
 
 	if len(blocked) > 0 {
-		b.WriteString("\n  " + fg(statusCritical, "NEEDS YOU") + "\n")
+		p.put("\n  " + fg(statusCritical, "NEEDS YOU") + "\n")
 		for _, r := range blocked {
 			// Blocked rows carry the bar too: the same quantity on the same absolute
 			// scale, so "waiting 3h" is comparable to anything in QUIET.
-			b.WriteString(row(mark(badge(inkPrimary, statusCritical, " BLOCKED "), 9), r.Label, true, r))
+			p.row(r.Key, row(mark(badge(inkPrimary, statusCritical, " BLOCKED "), 9), r.Label, true, r))
 		}
 	} else {
-		b.WriteString("\n  " + dim("NEEDS YOU") + "   " + dim("nothing blocked") + "\n")
+		p.put("\n  " + dim("NEEDS YOU") + "   " + dim("nothing blocked") + "\n")
 	}
 
 	if len(working) > 0 {
-		b.WriteString("\n  " + fg(statusGood, "WORKING") + " " + dim(fmt.Sprintf("· %d", len(working))) + "\n")
+		p.put("\n  " + fg(statusGood, "WORKING") + " " + dim(fmt.Sprintf("· %d", len(working))) + "\n")
 		for _, r := range working {
 			// No bar: for a working agent elapsed time is progress, not rot.
-			b.WriteString(row(mark(fg(statusGood, "◐"), 1), r.Label, false, r))
+			p.row(r.Key, row(mark(fg(statusGood, "◐"), 1), r.Label, false, r))
 		}
 	}
 
@@ -176,11 +186,11 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
 		// separates the two ways rows can be missing: this one the reader chose, the trim
 		// below is the terminal's height. Neither may be silent (§9.14).
 		if u.QuietCollapsed {
-			b.WriteString(head + dim(" · collapsed") + "\n")
+			p.put(head + dim(" · collapsed") + "\n")
 		} else {
-			b.WriteString(head + "\n")
+			p.put(head + "\n")
 			for _, r := range quiet.rows {
-				b.WriteString(row(mark(dim("○"), 1), r.Label, true, r))
+				p.row(r.Key, row(mark(dim("○"), 1), r.Label, true, r))
 			}
 		}
 		// The count stays visible so the backlog can never hide by being collapsed. It is
@@ -190,7 +200,7 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
 		//
 		// Folded, this line would restate the header's own count as "+13 quiet".
 		if quiet.hidden > 0 && !u.QuietCollapsed {
-			b.WriteString("   " + strings.Repeat(" ", gutter) + dim(fmt.Sprintf("+%d quiet", quiet.hidden)) + "\n")
+			p.put("   " + strings.Repeat(" ", gutter) + dim(fmt.Sprintf("+%d quiet", quiet.hidden)) + "\n")
 		}
 	}
 
@@ -204,40 +214,45 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
 	// nobody discovers, and the empty form is how you learn the list exists. NEEDS YOU
 	// carries the same line for a different reason (§12).
 	if total == 0 {
-		b.WriteString("\n  " + dim("TODO") + "        " + dim("nothing on your list") + "\n")
+		p.put("\n  " + dim("TODO") + "        " + dim("nothing on your list") + "\n")
 	}
 	if total > 0 {
 		cap := ""
 		if f.TodoCap > 0 {
 			cap = fmt.Sprintf(" of %d", f.TodoCap)
 		}
-		b.WriteString("\n  " + fg(inkSecondary, "TODO") + " " +
+		p.put("\n  " + fg(inkSecondary, "TODO") + " " +
 			dim(fmt.Sprintf("· %d%s", total, cap)) + "\n")
 		for _, r := range todo.rows {
 			// No bar, and no workspace: a bar means rot on the idle scale, and a todo's age
 			// is a lifetime that only grows rather than a gap that resets. The mark is an
 			// empty box — nothing is running, and nothing has been done.
-			b.WriteString(line(mark(fg(inkSecondary, "▫"), 1), r.Label, false, r, since(r.Idle), ""))
+			p.row(r.Key, line(mark(fg(inkSecondary, "▫"), 1), r.Label, false, r, since(r.Idle), ""))
 		}
 		if todo.hidden > 0 {
-			b.WriteString("   " + strings.Repeat(" ", gutter) + dim(fmt.Sprintf("+%d todo", todo.hidden)) + "\n")
+			p.put("   " + strings.Repeat(" ", gutter) + dim(fmt.Sprintf("+%d todo", todo.hidden)) + "\n")
 		}
 	}
 
 	// A value scale without a key is decoration — and a key without its scale is noise,
 	// so the legend goes wherever the bars went.
-	b.WriteString("\n  " + bottom(f, u, bars) + "\n")
+	p.put("\n  " + bottom(f, u, bars) + "\n")
 
 	// The header is written last and measured against everything below it, so the frame
 	// has one right edge instead of two that agree only at 118 columns (§9.29).
-	frame := "\n" + header(f, s, u, frameEdge(b.String(), s.Cols, headerEdge(f, s, u))) + "\n\n" + b.String()
+	head := "\n" + header(f, s, u, frameEdge(b.String(), s.Cols, headerEdge(f, s, u))) + "\n\n"
+	frame := head + b.String()
 
 	// Belt to the arithmetic's braces: nothing may wrap, whatever the width.
 	lines := strings.Split(frame, "\n")
 	for i, l := range lines {
 		lines[i] = clampLine(l, s.Cols)
 	}
-	return strings.Join(lines, "\n")
+	// The body's hits shift down by whatever the header prefix occupies — counted from
+	// the prefix itself, so a header that ever grows a line cannot silently offset every
+	// click by one row.
+	return strings.Join(lines, "\n"),
+		append(make([]string, strings.Count(head, "\n")), p.hits...)
 }
 
 // bottom is the frame's last line, and it is one line in every state: the scale legend

@@ -27,6 +27,10 @@ type State struct {
 		IdleThresholdMinutes int    `json:"idle_threshold_minutes"`
 		PollSeconds          int    `json:"poll_seconds"`
 		NotifyCmd            string `json:"notify_cmd"`
+		// Mouse is off by default because turning it on costs drag-to-select: the terminal
+		// forwards the press instead of starting a selection. That is the reader's trade,
+		// not board's (DESIGN.md §7).
+		Mouse bool `json:"mouse"`
 	} `json:"config"`
 	Labels map[string]string `json:"labels"`
 	// Todos are the one thing here that cannot be derived from the fleet: work with no

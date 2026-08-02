@@ -70,12 +70,12 @@ func TestDecodeSplitsACoalescedRead(t *testing.T) {
 		in   string
 		want []event
 	}{
-		{"typed fast", "hel", []event{{keyNone, "h"}, {keyNone, "e"}, {keyNone, "l"}}},
-		{"two backspaces", "\x7f\x7f", []event{{keyBackspace, ""}, {keyBackspace, ""}}},
-		{"a key then its text", "ax", []event{{keyAdd, "a"}, {keyNone, "x"}}},
-		{"text then enter", "hi\r", []event{{keyNone, "h"}, {keyNone, "i"}, {keyEnter, ""}}},
-		{"typed over an arrow key", "\x1b[Ax", []event{{keyUp, ""}, {keyNone, "x"}}},
-		{"a tab is neither text nor a command", "a\tb", []event{{keyAdd, "a"}, {keyNone, "b"}}},
+		{"typed fast", "hel", []event{{k: keyNone, text: "h"}, {k: keyNone, text: "e"}, {k: keyNone, text: "l"}}},
+		{"two backspaces", "\x7f\x7f", []event{{k: keyBackspace}, {k: keyBackspace}}},
+		{"a key then its text", "ax", []event{{k: keyAdd, text: "a"}, {k: keyNone, text: "x"}}},
+		{"text then enter", "hi\r", []event{{k: keyNone, text: "h"}, {k: keyNone, text: "i"}, {k: keyEnter}}},
+		{"typed over an arrow key", "\x1b[Ax", []event{{k: keyUp}, {k: keyNone, text: "x"}}},
+		{"a tab is neither text nor a command", "a\tb", []event{{k: keyAdd, text: "a"}, {k: keyNone, text: "b"}}},
 		{"a truncated sequence types nothing", "\x1b[", nil},
 	}
 	for _, c := range cases {
