@@ -9,6 +9,10 @@ import (
 	"github.com/zalts1/dashy/internal/board"
 )
 
+// The scheme every golden renders with. Fixed, like the clock: which editor is installed on
+// the machine running the suite must not change the pinned frame (§18).
+const goldenScheme = "vscode"
+
 // The golden files were captured from the pre-package-split renderer. They pin the
 // whole frame — layout, escape codes, bar lengths, collapse behaviour — so any
 // change to rendering has to be an intentional one that re-blesses them.
@@ -25,39 +29,39 @@ func TestGoldenFrames(t *testing.T) {
 		u    UI
 	}{
 		{"frame-wide.txt", goldenFleet(),
-			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118}, UI{}},
+			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118, goldenScheme}, UI{}},
 		{"frame-narrow.txt", goldenFleet(),
-			Screen{now, 30 * time.Second, 4 * time.Hour, 24, 90}, UI{}},
+			Screen{now, 30 * time.Second, 4 * time.Hour, 24, 90, goldenScheme}, UI{}},
 		{"frame-sel.txt", goldenFleet(),
-			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118},
+			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118, goldenScheme},
 			UI{Sel: "K-OLD", Paused: true, Notice: "cmux focus refused"}},
 		{"frame-empty.txt", board.Fleet{},
-			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118}, UI{}},
+			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118, goldenScheme}, UI{}},
 		// The todo band, pinned with a selection on one of its rows: the caret and the
 		// pause are what make `d` safe to press (DESIGN.md §12).
 		{"frame-todo.txt", goldenTodoFleet(),
-			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118},
+			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118, goldenScheme},
 			UI{Sel: "todo:t1", Paused: true}},
 		// The quiet band folded, on the fleet whose tail is long enough for it to matter:
 		// 32 rows to one line, and the rows the fold buys back go to the list (§9.21).
 		{"frame-folded.txt", goldenTodoFleet(),
-			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118},
+			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118, goldenScheme},
 			UI{QuietCollapsed: true}},
 		// The capture mode, pinned in the slot the legend occupies when ambient.
 		{"frame-typing.txt", goldenTodoFleet(),
-			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118},
+			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118, goldenScheme},
 			UI{Typing: true, Paused: true, Input: "reply to the security questionnaire"}},
 		// A world board could not fully read: the trouble in the span, and the one row that
 		// still arrived counted beside it. This is what a machine with no cmux actually
 		// shows — the background agent has no tab to lose (§9.26).
 		{"frame-trouble.txt", goldenTroubleFleet(),
-			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118}, UI{}},
+			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118, goldenScheme}, UI{}},
 		// The link cell, pinned with the escapes in it: one row pointing at both a preview
 		// and a folder, one at only a folder, one at neither, and a todo — which has no
 		// process and so no directory. Nothing else in the suite would catch a hyperlink
 		// that stopped being closed (§18, §9.34).
 		{"frame-links.txt", goldenLinkFleet(),
-			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118}, UI{}},
+			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118, goldenScheme}, UI{}},
 	}
 	for _, c := range cases {
 		t.Run(c.file, func(t *testing.T) {

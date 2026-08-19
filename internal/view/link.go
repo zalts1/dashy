@@ -33,21 +33,23 @@ func link(url, text string) string {
 	return linkOpen + url + st + text + linkClose
 }
 
-// editorURL is the folder link's destination. `vscode://file/<path>` is a URL rather than
-// a command, which is the whole reason the editor half works the same way the preview half
-// does — the terminal hands it to the OS, and board runs nothing.
+// editorURL is the folder link's destination: `<scheme>://file<abs path>`. A URL rather
+// than a command, which is the whole reason the editor half works the same way the preview
+// half does — the terminal hands it to the OS, and board runs nothing.
 //
-// The scheme is fixed rather than configurable. Growing the config surface is a trade §2
-// argues against, and this is the one editor the request was for; §10.10 records what
-// would revive it.
-func editorURL(folder string) string {
-	if folder == "" {
+// One template covers every editor board supports, because all three read the path as
+// whatever follows `<scheme>://file`: VS Code documents it, Cursor is a VS Code fork, and
+// Zed's open_listener strips exactly that prefix. Which scheme is `internal/editor`'s
+// answer and arrives on Screen; an empty one means no editor was found, and then there is
+// no link and no glyph — a glyph that opens nothing is worse than an absent one (§18).
+func editorURL(scheme, folder string) string {
+	if scheme == "" || folder == "" {
 		return ""
 	}
 	// Path components are escaped, not the separators: a directory with a space in it is
 	// ordinary on macOS and an unescaped one truncates the URL at the space.
 	var b strings.Builder
-	b.WriteString("vscode://file")
+	b.WriteString(scheme + "://file")
 	for _, part := range strings.Split(folder, "/") {
 		if part == "" {
 			continue
@@ -85,7 +87,7 @@ func escapePath(s string) string {
 // is a glyph whose width board guessed wrong, and the frame's fit is a hard rule (§6).
 const (
 	previewGlyph = "↗"
-	folderGlyph  = "▤"
+	folderGlyph  = "⧉"
 )
 
 // actionCell is the row's trailing links: the preview first, then the folder, each on its
@@ -96,12 +98,12 @@ const (
 // exactly one element in the frame is allowed to shout (§6). Under cmux the terminal
 // underlines them on hover, which is what makes them findable without a legend line
 // promising a click the reader cannot see (§18).
-func actionCell(r board.Row) string {
+func actionCell(r board.Row, scheme string) string {
 	preview, folder := " ", " "
 	if r.Preview != "" {
 		preview = link(r.Preview, fg(inkSecondary, previewGlyph))
 	}
-	if url := editorURL(r.Folder); url != "" {
+	if url := editorURL(scheme, r.Folder); url != "" {
 		folder = link(url, fg(inkSecondary, folderGlyph))
 	}
 	// Right-trimmed because nothing follows it on the line: a row with a preview and no

@@ -30,6 +30,35 @@ func healthy() Report {
 		MakiHooked:   true,
 		Previews:     1,
 		PreviewsSeen: 1,
+		Editor:       "cursor",
+		EditorFound:  true,
+	}
+}
+
+// The `links` row carries both halves of "can a row point anywhere": the preview read, and
+// the editor the folder half opens. Two halves on one row for the same reason `roster` has
+// two — one concern, two sources that fail independently (§14, §18).
+func TestFormatReportsTheEditor(t *testing.T) {
+	cases := []struct {
+		name string
+		r    Report
+		want string
+	}{
+		{"found", healthy(), "cursor"},
+		// The state that explains a missing glyph on every row at once.
+		{"none", func() Report { r := healthy(); r.Editor, r.EditorFound = "", false; return r }(),
+			"no editor"},
+		// Configured, honoured, and board cannot find the bundle: the glyph is drawn and the
+		// click may reach nothing, which is worth one clause.
+		{"configured but absent", func() Report { r := healthy(); r.Editor, r.EditorFound = "zed", false; return r }(),
+			"zed, not installed here"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := Format(c.r); !strings.Contains(got, c.want) {
+				t.Errorf("links row does not say %q:\n%s", c.want, got)
+			}
+		})
 	}
 }
 

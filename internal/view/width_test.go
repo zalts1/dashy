@@ -66,7 +66,7 @@ func TestNoLineExceedsTheTerminalWidth(t *testing.T) {
 func TestResizeKeepsTheColumnsAligned(t *testing.T) {
 	f := wideFleet()
 	for _, cols := range []int{72, 90, 118, 200} {
-		labelW, tailW, barW := columns(f, cols)
+		labelW, tailW, barW := columns(f, cols, true)
 		if labelW < minLabelW {
 			t.Errorf("cols=%d: label column %d is under the floor %d", cols, labelW, minLabelW)
 		}
@@ -78,7 +78,7 @@ func TestResizeKeepsTheColumnsAligned(t *testing.T) {
 	}
 	// A tail long enough to squeeze the label takes the truncation itself once the
 	// label is at its floor — the label is the meaning, the workspace is context.
-	labelW, tailW, barW := columns(f, 64)
+	labelW, tailW, barW := columns(f, 64, true)
 	if labelW != minLabelW {
 		t.Errorf("label column = %d at 64 cols, want the floor %d", labelW, minLabelW)
 	}
@@ -120,7 +120,7 @@ func TestClampLine(t *testing.T) {
 // The tail is a labelled column, so it never sizes below its own header: an empty fleet
 // that drops the word WORKSPACE reads as a column that is missing, not one that is empty.
 func TestTailKeepsRoomForItsOwnHeader(t *testing.T) {
-	if _, tailW, _ := columns(board.Fleet{}, 118); tailW < runes(wsHeader) {
+	if _, tailW, _ := columns(board.Fleet{}, 118, true); tailW < runes(wsHeader) {
 		t.Errorf("tail column = %d on an empty fleet, want at least %d", tailW, runes(wsHeader))
 	}
 	if !strings.Contains(Frame(board.Fleet{}, screen(44, 118), UI{}), wsHeader) {
@@ -144,7 +144,7 @@ func TestNarrowLayoutDropsTheBarRatherThanCutIt(t *testing.T) {
 					cols, i+1, plain(line))
 			}
 		}
-		_, _, barW := columns(wideFleet(), cols)
+		_, _, barW := columns(wideFleet(), cols, true)
 		bars := barW > 0
 		if bars != strings.Contains(out, "▇") {
 			t.Errorf("cols=%d: bars=%v but the frame %s bar glyphs", cols, bars,

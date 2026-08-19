@@ -41,7 +41,7 @@ grep -n '^#\+ ' DESIGN.md        # § → line, then Read with offset/limit
 | 15 | `uninstall-hooks`: defined as install's inverse, and what it must not touch on the way | `hooks/`, anything editing `~/.claude/settings.json` or a maki `init.lua` |
 | 16 | the demo: a fixture fleet through the real join, recorded by hand | `internal/demo/`, `demo/`, the top of the README |
 | 17 | maki as the second agent: no roster command, so board installs one; two reads settle liveness | `maki/`, `hooks/maki.go`, `board/build.go` |
-| 18 | links: the two things a row points at besides its tab, joined on the worktree and opened by the terminal | `preview/`, `host/worktree.go`, `view/link.go`, `board/build.go` |
+| 18 | links: the two things a row points at besides its tab, joined on the worktree, opened by the terminal, and which editor answers | `preview/`, `editor/`, `host/worktree.go`, `view/link.go`, `board/build.go` |
 
 ---
 
@@ -642,22 +642,18 @@ keystroke — a hook, a daemon, or `$HOME` on a file-sync service. The last is t
 watch: sync makes the window as wide as its own interval, and it can resurrect a deleted
 todo as easily as drop a new one.
 
-### 10.10 A configurable editor — deferred (2026-08-19)
+### 10.10 A configurable editor — shipped as §18 (2026-08-19)
 
-The folder link is `vscode://file/<path>`, hardcoded. Cursor answers `cursor://`, Zed
-`zed://`, and a JetBrains IDE something else again, so on a machine without VS Code the
-glyph reaches whatever else claimed the scheme, or nothing.
+Parked for one afternoon and then built, because the first reader of the feature used Cursor.
+The reasoning that parked it survived the build and shaped it: the key is a **name**, not a
+template. `{"config": {"editor": "cursor"}}` holds one of `editor.Known`'s names and board
+owns the URL's shape, because a template with a path substitution in it is one edit away from
+being a command, and board opens nothing (§8).
 
-Not built as config, for two reasons that pull the same way. Growing the config surface is
-a trade §2 argues against, and this one would grow it by a *template* — a string with a
-`{path}` in it — which is the shape that invites a shell command next. And the URL has to
-be built before `view` sees it, because `view` is pure and reads neither `$HOME` nor a
-config file (§3): a config key here means the URL moves onto `Fleet`, where it stops being
-a rendering detail and becomes derived state two renderers can disagree about.
-
-*Trigger:* somebody whose editor is not VS Code, saying so. The narrow fix at that point is
-an `editor_scheme` key holding a scheme name and nothing else — `cursor`, `zed` — so board
-still owns the URL's shape and only the first token comes from the file.
+What did not survive: "the URL has to be built before `view` sees it, so a config key means
+it moves onto `Fleet`". It moved onto `Screen` instead — beside `Threshold`, which comes from
+the same file and is the same kind of fact. `Fleet` never learns what an editor is, so
+`internal/board` was untouched by the change.
 
 ### 10.11 The demo has no preview — deferred (2026-08-19)
 
@@ -1122,7 +1118,7 @@ the session is working in:
 - **the folder**, the worktree itself, opened in an editor to read the branch's diff.
 
 They are rendered as a three-column cell at the right-hand end of the row — `↗` for the
-preview, `▤` for the folder — and they are hyperlinks, not keys.
+preview, `⧉` for the folder — and they are hyperlinks, not keys.
 
 ### The worktree is the join, and a path prefix is not
 
@@ -1183,6 +1179,59 @@ and changes the cursor — so a legend entry would spend a scarce line restating
 glyph already does, and on a terminal without OSC 8 it would promise a click that never
 happens. That is §9.14 read forwards: name the route that exists, and do not name one that
 might not.
+
+### Which editor, and why the chooser is a command
+
+An editor is supportable exactly when it registers a URL scheme that takes a path, because
+board hands over a URL and runs nothing. Three do, in the same shape — the path is whatever
+follows `<scheme>://file`:
+
+| name | bundle | scheme | how the shape is known |
+|---|---|---|---|
+| `cursor` | `Cursor.app` | `cursor://` | verified by hand; a VS Code fork |
+| `vscode` | `Visual Studio Code.app` | `vscode://` | documented by VS Code |
+| `zed` | `Zed.app` | `zed://` | `open_listener.rs` strips exactly `zed://file` |
+
+So one template covers all three, and `internal/editor` only has to answer *which*.
+`{"config": {"editor": "cursor"}}` pins it and `board editor <name>` writes that. Until then
+board picks: the only installed one, or the first of `Known` when several are.
+
+**`Known` is alphabetical, deliberately.** board has no opinion about which editor is better,
+and any other order would be one — encoded in a table nobody reads, deciding for everybody
+who never runs the command. Alphabetical is arbitrary in a way that is honest about being
+arbitrary, and it is stable: a link cannot silently move because you installed something,
+unless the new editor sorts first, and `doctor` names the choice either way.
+
+A configured editor wins even when board cannot find its bundle. The user said so, `Lookup`
+has already rejected the typos, and an app installed somewhere board does not look is likelier
+than a lie. `board editor` and `doctor` both flag the mismatch — `zed, not installed here` —
+rather than overruling it.
+
+**The chooser is a command because the moment of the click is unreachable.** The obvious
+design is the one macOS itself uses: the first time you open something, pick the app. board
+cannot do that. The terminal opens the link and tells board nothing — no callback, no exit
+code, no file touched — so there is no "first time this was opened" for board to hook, and an
+editor board never launches cannot be chosen at launch time (§9.35). What board *can* observe
+is "several editors are installed and you have not chosen", which is a fact available at any
+time and therefore belongs in a command that answers it on demand:
+
+    $ board editor
+      folder links open  Cursor.app   cursor://   (automatically)
+
+      → cursor   Cursor.app
+        vscode   Visual Studio Code.app
+        zed      not installed
+
+      change it:  board editor vscode
+
+A prompt inside `board watch` was considered and declined. It would cost the loop a second
+mode — `watch` has exactly one, and §12 is the argument for keeping it that way — and it would
+interrupt an ambient dashboard on first run to ask a question nobody had yet. `doctor`'s
+`links` row carries the same answer without asking anything.
+
+**No editor found means no folder glyph**, not a glyph pointing at `vscode://` on a machine
+with no VS Code. `actionCols` and `actionCell` are held to the same predicate by a test, so
+the column is not reserved for a cell that will not be drawn.
 
 ### The frame has links; the one-shot table does not
 

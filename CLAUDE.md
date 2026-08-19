@@ -60,6 +60,7 @@ Routing only; `DESIGN.md` §3 is why the tree is this shape.
       maki/          roster + state: the reports its plugin writes, plus live pids (§17)
       cmux/          tab titles, hook clock, focus — enrichment, never the roster
       preview/       portless's routes: the local URL serving a worktree (§18)
+      editor/        which editor a folder link opens, and `board editor` (§18)
       board/         Fleet/Row; Build = pure join, Collect = impure gather
       view/          PURE: Frame, header, layout arithmetic, Table, palette, scale
       watch/         IMPURE: alternate screen, termios, signals, ticker
@@ -132,7 +133,11 @@ one, record why in `EVIDENCE.md` §9.
   and a preview hostname is derived from a branch name (§18).
 - A row points at one preview, joined on the git worktree — never on directory
   containment, which crosses worktrees (§18, `EVIDENCE.md` §9.34).
-- The folder link's scheme is fixed at `vscode://`; §10.10 is the trade.
+- The folder link's editor is chosen, not fixed: the config's `editor` name, else the first
+  of `editor.Known` installed. `Known` is alphabetical **deliberately** — any other order is
+  an opinion about editors (§18).
+- board cannot know a link was clicked, so nothing may be built on "the first time it is
+  opened" (`EVIDENCE.md` §9.35).
 - One job per package, one concern per file; past ~250 lines, consider splitting (§2).
 
 A new command or band is worth a `DESIGN.md` entry — after it works, not before.

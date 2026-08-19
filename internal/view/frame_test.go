@@ -167,20 +167,20 @@ func TestColumnWidths(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got, _, _ := columns(c.f, c.cols); got != c.want {
+			if got, _, _ := columns(c.f, c.cols, true); got != c.want {
 				t.Errorf("label column = %d, want %d", got, c.want)
 			}
 		})
 	}
 	// Sized to content: the longest label present, so bars sit next to the text.
 	f := board.Fleet{Rows: []board.Row{{Label: strings.Repeat("x", 30)}}}
-	if got, _, _ := columns(f, 130); got != 30 {
+	if got, _, _ := columns(f, 130, true); got != 30 {
 		t.Errorf("label column = %d, want 30 (the longest label)", got)
 	}
 	// And the tail is sized to the longest workspace, not to a guess: it used to have
 	// no width of its own at all, which is what wrapped the rows.
 	f = board.Fleet{Rows: []board.Row{{Label: "x", Workspace: "platform-migration"}}}
-	if _, got, _ := columns(f, 130); got != len("platform-migration") {
+	if _, got, _ := columns(f, 130, true); got != len("platform-migration") {
 		t.Errorf("tail column = %d, want %d", got, len("platform-migration"))
 	}
 }

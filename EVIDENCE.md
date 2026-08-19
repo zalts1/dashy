@@ -51,6 +51,7 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.32 | The maki hook installed, ran, and was denied everything — an `init.lua` with no `plugin.toml` beside it gets no permissions at all | `hooks/maki.go`, `doctor/`, `DESIGN.md` §17 |
 | 9.33 | cmux counts a surface's whole process tree, so "a maki with no report" is not the same as "no hook" | `board/build.go`, `DESIGN.md` §14, §17 |
 | 9.34 | A hyperlink is an OSC, not an SGR — one `m` in a URL cost 16 phantom columns, and a clamped link made the screen below it clickable | `view/format.go`, `view/link.go`, `host/worktree.go`, `preview/`, `DESIGN.md` §18 |
+| 9.35 | The click is unobservable, so "ask on first use" is unbuildable — the chooser had to become a command | `editor/`, `cmd/board/commands.go`, `DESIGN.md` §18, §10.10 |
 
 ---
 
@@ -1146,3 +1147,55 @@ portless deletes nothing when a process exits — so a route with no live pid is
 exactly as a maki report with no live process is not a row (§17). `preview.Roster` carries
 both halves for the same reason `maki.Roster` does, and `doctor`'s `links` row states them
 apart: `3 portless routes, none live` is a diagnosis, and `no routes up` is a quiet machine.
+
+### 9.35 The click is unobservable, so the chooser could not be where it belonged (2026-08-19)
+
+**Asked for:** the folder link hardcoded `vscode://`, and the first reader of §18 used Cursor.
+The natural design, and the one requested — *the first time a folder is opened, show an "open
+with" panel and remember the answer* — is the one macOS itself uses.
+
+**Found: board cannot know a link was clicked.** That is not a missing feature, it is the
+property §18 was built on. board writes an OSC 8 sequence and the terminal owns everything
+after it: no callback, no exit status, no file touched, no process spawned in board's tree. The
+same fact that makes the link safe — board launches nothing — makes "the first time it was
+opened" unobservable. And there is no OS panel to borrow either: macOS raises a chooser only
+when *nothing* handles a scheme, never among several apps that all do, so `vscode://` would
+open VS Code and `cursor://` Cursor with no question asked in either case.
+
+Board could only have that panel by running `open` itself, which is the one thing §8 says it
+does not do.
+
+**Shipped instead:** the question moved to a fact board *can* observe at any time — "several
+editors are installed and none is configured" — and therefore to a command that answers it on
+demand. `board editor` lists what is here and marks what folder links open; `board editor
+cursor` writes the name to `~/.board.json`; `board editor auto` gives the choice back. Until
+somebody runs it, board picks — the only installed editor, or the first of `Known`.
+
+A prompt on `board watch`'s bottom line was the other candidate and was declined: it costs the
+loop a second mode, and `watch` has exactly one for the reasons in §12 and §9.18.
+
+**Two things verified rather than assumed.** `cursor://file/Users/you/work/repo` really
+does open a folder — a `workspaceStorage/*/workspace.json` naming that folder appeared seconds
+after the URL was dispatched, which is the observable board itself does not get. And Zed's URL
+shape was read out of Zed rather than guessed:
+
+    } else if let Some(file) = url.strip_prefix("zed://file") {
+        this.parse_file_path(file)
+
+The prefix is stripped and the remainder parsed as a path, which is byte-for-byte the shape VS
+Code documents. So three editors are one template and `internal/editor` only answers *which* —
+had any of the three wanted its path in a query parameter, as JetBrains' `idea://` does, it
+would have been a second template rather than a third row in a table.
+
+**The tie-break is alphabetical, and that is a decision and not a default.** With several
+editors installed and nothing configured, any ordering is an opinion about which editor is
+better, encoded where nobody reads it, applied to everybody who never runs the command.
+Alphabetical is arbitrary in a way that is honest about being arbitrary. It is also stable,
+which matters more than it looks: installing a second editor cannot move an existing link
+unless the new name sorts first, and `doctor`'s `links` row names the choice either way.
+
+**One prediction from §10.10 was wrong.** It said a config key would force the editor URL onto
+`Fleet`, "where it stops being a rendering detail and becomes derived state two renderers can
+disagree about". It went on `Screen` instead, beside `Threshold` — read from the same file,
+about the machine rather than about the fleet. `internal/board` never learned what an editor
+is, and `Table` cannot disagree with `Frame` about something it has no access to.

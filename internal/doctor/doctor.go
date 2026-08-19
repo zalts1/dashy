@@ -22,6 +22,7 @@ import (
 	"github.com/zalts1/dashy/internal/claude"
 	"github.com/zalts1/dashy/internal/cmux"
 	"github.com/zalts1/dashy/internal/config"
+	"github.com/zalts1/dashy/internal/editor"
 	"github.com/zalts1/dashy/internal/hooks"
 	"github.com/zalts1/dashy/internal/maki"
 	"github.com/zalts1/dashy/internal/preview"
@@ -71,6 +72,13 @@ type Report struct {
 	// machine without portless still gets a folder link on every row.
 	NoPortless bool
 
+	// Editor is the name of the editor folder links open, empty when board found none —
+	// which is the one answer that explains a missing glyph on every row at once.
+	// EditorFound is whether its bundle is actually here: a configured editor is honoured
+	// even when it is not, and then the link is drawn and may reach nothing (§18).
+	Editor      string
+	EditorFound bool
+
 	Hooks    []string // events with board's notify hook wired up
 	HooksErr error    // settings.json unreadable — the state install-hooks refuses on
 
@@ -112,6 +120,8 @@ func Gather() Report {
 		previews, previewErr = preview.Read()
 	}
 
+	ed := editor.Gather(st.Config.Editor, config.Path())
+
 	makiHooked, makiManifest, makiHooksErr := hooks.MakiInstalled()
 
 	spans := map[string]bool{}
@@ -139,6 +149,8 @@ func Gather() Report {
 		PreviewsSeen: previews.Listed,
 		PreviewErr:   previewErr,
 		NoPortless:   noPortless,
+		Editor:       ed.Chosen.Name,
+		EditorFound:  ed.Installed[ed.Chosen.Name],
 		Hooks:        installed,
 		HooksErr:     hooksErr,
 		MakiHooked:   makiHooked,
@@ -186,7 +198,7 @@ func Format(r Report) string {
 	// halves are stated in those terms. It is also six characters, which is what keeps the
 	// answer column where version.LabelWidth puts it — widening a documented constant to
 	// fit a label is the tail wagging the dog (§13).
-	row("links", previewRow(r))
+	row("links", previewRow(r)+editorRow(r))
 
 	claudeHooks, claudeOK := "not installed", false
 	switch {
@@ -247,6 +259,25 @@ func previewRow(r Report) string {
 		return "portless installed, no routes up"
 	default:
 		return fmt.Sprintf("%d portless %s", r.Previews, plural(r.Previews, "route"))
+	}
+}
+
+// editorRow is the folder half of the `links` row: which editor opens one, and whether
+// board can see it. Named rather than counted, because there is exactly one and its name is
+// the argument to the command that changes it.
+func editorRow(r Report) string {
+	switch {
+	case r.Editor == "":
+		// No editor board can build a URL for. The one answer that explains a folder glyph
+		// missing from every row at once — and the repair is a command, not a config edit.
+		return " · no editor — board editor"
+	case !r.EditorFound:
+		// Configured and honoured, and the bundle is not where board looks. Stated as both
+		// halves rather than as a conclusion: an app installed elsewhere still works, and a
+		// name for an editor that is genuinely gone does not.
+		return " · " + r.Editor + ", not installed here"
+	default:
+		return " · " + r.Editor
 	}
 }
 

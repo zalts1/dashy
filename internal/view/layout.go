@@ -113,10 +113,14 @@ func clip(frame string, rows int) string {
 // And nothing again when the terminal cannot hold a bare row beside it — shed whole, like
 // the KPI strip's cells, because half a link cell is a glyph that no longer lines up with
 // the one above it and that reads as a rendering fault rather than as an absent link (§18).
-func actionCols(rows []board.Row, cols int) int {
+// folders says whether a folder link can be built at all — board found an editor. Passed as
+// a fact about the machine rather than as the scheme itself, because the arithmetic has no
+// business knowing what a URL looks like; `pointsSomewhere` is the one predicate both this
+// and the renderer answer, and a test pins them to the same answer.
+func actionCols(rows []board.Row, cols int, folders bool) int {
 	linked := false
 	for _, r := range rows {
-		if r.Preview != "" || r.Folder != "" {
+		if pointsSomewhere(r, folders) {
 			linked = true
 			break
 		}
@@ -133,6 +137,13 @@ func actionCols(rows []board.Row, cols int) int {
 	return actionsGap + actionsW
 }
 
+// pointsSomewhere reports whether this row would draw a link cell. A row's folder counts
+// only when there is an editor to open it in: without one the glyph would point at nothing,
+// so the column must not be reserved for it either (§18).
+func pointsSomewhere(r board.Row, folders bool) bool {
+	return r.Preview != "" || (folders && r.Folder != "")
+}
+
 // columns sizes the row's three elastic columns: the label, the tail — the workspace,
 // unbounded in the data and therefore the thing that used to overflow — and the bar.
 //
@@ -140,7 +151,7 @@ func actionCols(rows []board.Row, cols int) int {
 // floor and only then does the tail truncate. Spending, the label is filled out whole
 // before anything else, and the bar takes what is left over — which is where the surplus
 // belongs, because the gap it closes is the one between a label and its bar (§9.29).
-func columns(f board.Fleet, cols int) (labelW, tailW, barW int) {
+func columns(f board.Fleet, cols int, folders bool) (labelW, tailW, barW int) {
 	whole := 0
 	for _, r := range f.Rows {
 		whole = max(whole, runes(r.Label))
@@ -157,7 +168,7 @@ func columns(f board.Fleet, cols int) (labelW, tailW, barW int) {
 	// Reserved before anything elastic is sized, and taken off avail rather than out of a
 	// column: the cell is a fixed width at the row's right-hand end, so every column left
 	// of it is sized inside what remains.
-	act := actionCols(f.Rows, cols)
+	act := actionCols(f.Rows, cols, folders)
 	if cols-headMargin-act < rowChrome(barW)+minLabelW {
 		barW = 0
 	}

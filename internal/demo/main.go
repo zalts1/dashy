@@ -28,6 +28,10 @@ import (
 const (
 	interval  = 10 * time.Second
 	threshold = 45 * time.Minute
+	// Fixed like the clock below, and for the same reason: which editor is installed on the
+	// machine doing the recording must not change the frames it records (§16, §18). The
+	// demo fleet carries no folders yet, so nothing renders from it — see §10.11.
+	demoScheme = "vscode"
 )
 
 // start is fixed rather than time.Now: the header carries a clock, so a wall clock
@@ -168,7 +172,7 @@ func main() {
 
 	for _, b := range script() {
 		render(out, view.Frame(b.fleet, view.Screen{Now: b.now, Interval: interval,
-			Threshold: threshold, Rows: rows, Cols: cols}, b.ui))
+			Threshold: threshold, Rows: rows, Cols: cols, EditorScheme: demoScheme}, b.ui))
 		time.Sleep(b.hold)
 	}
 }

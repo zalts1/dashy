@@ -8,6 +8,7 @@ import (
 	"github.com/zalts1/dashy/internal/cmux"
 	"github.com/zalts1/dashy/internal/config"
 	"github.com/zalts1/dashy/internal/doctor"
+	"github.com/zalts1/dashy/internal/editor"
 	"github.com/zalts1/dashy/internal/view"
 )
 
@@ -34,6 +35,45 @@ func show() {
 // takes no arguments and cannot fail — every unreadable thing is a row that says so.
 func diagnose() {
 	fmt.Print(doctor.Format(doctor.Gather()))
+}
+
+// chooseEditor is `board editor`: the chooser for what a row's folder link opens.
+//
+// It exists because the obvious place for the question is unreachable. board hands the URL
+// to the terminal and the terminal opens it, so there is no moment of the click for board
+// to notice and no "open with" panel it could raise — an editor board never launches cannot
+// be chosen at launch time (DESIGN.md §18). So the choice is made ahead of time, here, and
+// with no argument the command is a listing rather than an error: being asked what the
+// options are is the whole reason somebody types this.
+func chooseEditor(args []string) error {
+	st := config.Load()
+	if len(args) == 0 {
+		fmt.Print(editor.Format(editor.Gather(st.Config.Editor, config.Path())))
+		return nil
+	}
+	name := args[0]
+	// `auto` is the way back, and it is a word rather than an empty argument because an
+	// empty one is how a shell expands a variable that was never set.
+	if name == "auto" {
+		st.SetEditor("")
+		if err := st.Save(); err != nil {
+			return err
+		}
+		fmt.Print(editor.Format(editor.Gather("", config.Path())))
+		return nil
+	}
+	e, ok := editor.Lookup(name)
+	if !ok {
+		// The refusal names the whole vocabulary: a reader who guessed the spelling wrong
+		// should not have to guess again.
+		return fmt.Errorf("board does not know the editor %q — try one of: %s", name, editor.Names())
+	}
+	st.SetEditor(e.Name)
+	if err := st.Save(); err != nil {
+		return err
+	}
+	fmt.Print(editor.Format(editor.Gather(e.Name, config.Path())))
+	return nil
 }
 
 // label names the session board was invoked from. Labels are keyed on the surface

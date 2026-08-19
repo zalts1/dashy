@@ -25,6 +25,13 @@ type Screen struct {
 	Threshold time.Duration
 	Rows      int
 	Cols      int
+	// EditorScheme builds the folder link — `cursor`, `vscode`, `zed` — and is empty when
+	// board found no editor, which drops the glyph rather than pointing it at nothing.
+	//
+	// It sits here beside Threshold rather than on Fleet because it is the same kind of
+	// fact: read from ~/.board.json, about the machine and not about the fleet. Fleet stays
+	// free of it, so `board` knows nothing about editors (§18).
+	EditorScheme string
 }
 
 // UI is the transient interaction state, kept separate from the fleet snapshot
@@ -99,8 +106,9 @@ func Frame(f board.Fleet, s Screen, u UI) string {
 
 func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
 	var b bytes.Buffer
-	labelW, tailW, barW := columns(f, s.Cols)
-	actW := actionCols(f.Rows, s.Cols)
+	folders := s.EditorScheme != ""
+	labelW, tailW, barW := columns(f, s.Cols, folders)
+	actW := actionCols(f.Rows, s.Cols, folders)
 	bars := barW > 0
 	// The columns between a label and its duration: the bar, the warn mark, and the
 	// gaps around them.
@@ -148,7 +156,7 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
 		// keeps the shape it had before links existed. actW is the reservation; whether this
 		// row spends it is the row's own business.
 		tailCell := dim(cut(tail, tailW))
-		if acts := actionCell(r); actW > 0 && acts != "" {
+		if acts := actionCell(r, s.EditorScheme); actW > 0 && acts != "" {
 			tailCell = dim(pad(tail, tailW)) + strings.Repeat(" ", actionsGap) + acts
 		}
 		return lead + state + text + mid +

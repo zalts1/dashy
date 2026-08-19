@@ -2,6 +2,7 @@ package main
 
 const usage = `usage: board | board watch [interval] | board jump <substring> | board label "<text>"
        board todo | board todo "<text>" | board todo done <text or id>
+       board editor | board editor <name> | board editor auto
        board install-hooks | board uninstall-hooks | board version | board doctor`
 
 // helpRequested reports whether the arguments are a question rather than work.
