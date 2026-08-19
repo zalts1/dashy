@@ -217,8 +217,14 @@ func TestIdleAndStale(t *testing.T) {
 	})
 }
 
-// Band first, then the thing ignored longest at the top of its band.
-func TestSortIsBandThenOldest(t *testing.T) {
+// Band first, then the most recently touched at the top of its band.
+//
+// It used to be the other way round — the thing ignored longest at the top — on the argument that
+// the top of a band is where the eye lands and neglect is what board is for. Reversed on the
+// evidence of somebody reading it: a list of times descending from 2d22h reads as sorted backwards,
+// because every other tool puts recency first, and the header already carries `oldest 2d22h` for
+// the neglect (§9.46).
+func TestSortIsBandThenNewest(t *testing.T) {
 	agent := func(id string, pid int, status string) claude.Agent {
 		return claude.Agent{SessionID: id, Pid: pid, Status: status}
 	}
@@ -243,7 +249,7 @@ func TestSortIsBandThenOldest(t *testing.T) {
 	for _, r := range Build(s, now).Rows {
 		got = append(got, r.Label)
 	}
-	want := []string{"blocked", "old-quiet", "fresh-quiet", "busy"}
+	want := []string{"blocked", "fresh-quiet", "old-quiet", "busy"}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("order = %v, want %v", got, want)

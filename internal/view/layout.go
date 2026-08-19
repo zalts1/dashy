@@ -106,9 +106,12 @@ type band struct {
 // many are hidden. It copies rather than reslicing: the caller reuses the group across
 // passes.
 //
-// Both collapsible groups are sorted worst-first — quiet by idle descending, todos by
-// age — so cutting from the end always drops the least reproachful, and anything hidden
-// belongs below everything shown.
+// Cutting from the end means anything hidden belongs below everything shown, which is what keeps
+// the `+N` count honest. What lands at the end differs by band since §9.46: todos are still
+// oldest-first, so the tail is the least reproachful; **sessions are newest-first, so the tail is
+// the most neglected** and a short tab now hides the rows that most want attention. minQuietRows is
+// the floor that limits it, and the header's `oldest 2d22h` plus the strip's `N quiet >45m` are what
+// stop it being silent.
 func pick(rows []board.Row, n int, sel string) band {
 	if n >= len(rows) {
 		return band{rows: rows}

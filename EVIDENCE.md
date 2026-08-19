@@ -62,6 +62,7 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.43 | Colours that are alternatives need not match colours that are neighbours | `view/palette.go`, `DESIGN.md` §6 |
 | 9.44 | Four boxes one space apart read as one run of ink; and the frame can afford air it should give back when short | `view/link.go`, `view/frame.go`, `view/layout.go`, `DESIGN.md` §6 |
 | 9.45 | A half-empty cell reads as broken, not sparse — the fix is a glyph too faint to be information | `view/link.go`, `view/palette.go`, `DESIGN.md` §6, §18 |
+| 9.46 | Sessions sort newest-first; a column of times descending read as sorted backwards. Todos keep the old order, and §9.19 is why | `board/build.go`, `view/layout.go`, `DESIGN.md` §4 |
 
 ---
 
@@ -1668,3 +1669,47 @@ sequence, so it appears after every real link. The assertion was wrong, not the 
 legend with a hole in it, which is the same complaint one level up again. It pushed the fullest rung
 to 126 columns, so at 118 the ladder now sheds the scale's values; that is the ladder working, and
 §9.44 is why it exists.
+
+### 9.46 A column of times descending read as sorted backwards (2026-08-19)
+
+**Believed, since §4 was written:** within a band, the thing you have ignored longest belongs at the
+top. The top of a band is where the eye lands and neglect is what board is for, so the most-neglected
+row gets the most valuable position on the screen. `pick` was built on the same premise — sheds from
+the end, because the end is the least reproachful.
+
+**Found:** it reads as a sorting bug. Shown
+
+    2d22h
+    7h10m
+    4h17m
+    2h42m
+       4m
+
+the reader's response was "it feels like the sorting is off", and on being told the values were
+strictly descending, "what I meant was that the lowest time should be first". Every list a person
+uses puts the newest first — mail, commits, notifications, chat — so a column counting *down* from
+two days reads as reversed before anyone considers what the ordering is for.
+
+The argument for the old order was not wrong, it was **redundant**. Neglect is already stated twice
+above the band, in the header's `oldest 2d22h` and the strip's `5 quiet >45m`, and the `⧗` marks it
+per row. Spending the band's best position on a third statement of it cost the position that answers
+"what was I just doing" — which is the question a fleet of six sessions is actually read for.
+
+**Shipped:** sessions sort most-recently-touched first. **Todos do not**, and §9.19 is exactly why —
+it already established that these are two different quantities wearing one field. A session's idle
+time is a *gap* that resets the moment somebody touches it, so its newest end is where the work is.
+A todo's age is a *lifetime* that only grows, so its oldest end is the reproach, and putting a note
+written seconds ago above one from a fortnight ago would bury what the list is for. Same field, two
+quantities, two orders — which is the third consequence §9.19 has now had.
+
+**The cost is real and lands on the collapse.** `pick` still sheds from the end of a band, and the
+end of QUIET is now the *most* neglected rather than the least — so a tab too short to show
+everything hides the rows that most want attention, which is the opposite of what that mechanism was
+for. Three things keep it honest rather than silent: `minQuietRows` floors what is shown, the `+N
+quiet` count never disappears (§9.13), and both header statements survive the collapse. `↓` past the
+last visible row still walks into the hidden ones, which are now the oldest — so the README's
+"rottenest first" is still true, by a different route.
+
+Not fixed by shedding from the front instead. That would leave the hidden rows *above* the shown
+ones, which breaks the one invariant the `+N` line depends on: anything hidden belongs below
+everything shown.

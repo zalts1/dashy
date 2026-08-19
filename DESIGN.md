@@ -186,6 +186,21 @@ renderer — both renderers consume the same snapshot so they can never disagree
 
 ## 4. State model
 
+**Ordering, amended 2026-08-19 (§9.46).** Within a band, sessions sort **most recently touched
+first**: the top of QUIET is what you were last doing. It was the reverse until a reader read a
+column of times counting down from 2d22h as a sorting bug — which it is, to anyone whose other lists
+all put the newest first. The old argument was not wrong so much as redundant: neglect is already
+stated in the header's `oldest`, in the strip's `N quiet >45m`, and per row by `⧗`, so the band's best
+position was spending itself on a third telling.
+
+**Todos are the exception and keep the old order.** §9.19 established that idle time and age are two
+quantities in one field: a session's is a *gap* that resets when touched, a todo's is a *lifetime*
+that only grows. So the newest session is where the work is, and the oldest todo is the reproach.
+
+The collapse pays for this: `pick` sheds from the end of a band, so a short tab now hides the most
+neglected sessions rather than the least. `minQuietRows`, the `+N quiet` count and the two header
+statements are what keep that visible rather than silent (`view/layout.go`).
+
 | state | meaning | claude | maki |
 |---|---|---|---|
 | `blocked →` | genuinely needs an answer | interactive `status: waiting`, or background `state: blocked` | `needs_input` |

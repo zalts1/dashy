@@ -14,15 +14,15 @@ The same fleet once, in plain text, for a pipe or a bug report:
 $ board
 STATE        LABEL                                        REPO                 IDLE
 blocked → ⧗  merge app#1497 before branching              app                 3h00m
-done ⧗       rotate the staging credentials               ops                 3d02h
-done ⧗       answer the ACME security questionnaire       docs -> acme-que…   1d04h
-done ⧗       backfill the events table                    data                7h20m
-done ⧗       hunt the flaky payment test                  background          5h00m
-done ⧗       fold the quiet band                          tools               4h05m
-done ⧗       Review pipeline PR #541                      reviews             2h48m
-done ⧗       ship the pricing page copy                   web                   55m
-done         bump the staging image                       infra                 26m
 done         migrate auth handlers to v2                  auth                   9m
+done         bump the staging image                       infra                 26m
+done ⧗       ship the pricing page copy                   web                   55m
+done ⧗       Review pipeline PR #541                      reviews             2h48m
+done ⧗       fold the quiet band                          tools               4h05m
+done ⧗       hunt the flaky payment test                  background          5h00m
+done ⧗       backfill the events table                    data                7h20m
+done ⧗       answer the ACME security questionnaire       docs -> acme-que…   1d04h
+done ⧗       rotate the staging credentials               ops                 3d02h
 running      build the csv export endpoint                api                    0m
 todo         reply to the ACME csv export request                           12d ago
 todo         book the quarterly review                                       1d ago
@@ -79,7 +79,7 @@ than a paused tab. `Ctrl-C` still exits from inside the prompt.
 
 When QUIET does not fit, the band ends with `+N quiet`. **That is a count, not a
 control** — nothing expands a band. To read a hidden row, press `↓` past the last
-visible one (it walks into the collapsed rows one at a time, rottenest first) or make
+visible one (it walks into the collapsed rows one at a time, oldest first) or make
 the tab taller. Rows with no cmux tab can be selected and read too; `Enter` on one
 says there is nowhere to jump.
 
@@ -95,6 +95,11 @@ after 10s of no keypress so the tab always returns to being ambient.
 | `blocked →` | genuinely needs an answer | interactive `status: waiting`, or background `state: blocked` | `needs_input` |
 | `running` | working | `status: busy` | `working` |
 | `done` | finished its turn, unnoticed | everything else | `idle` |
+
+Rows are ordered **most recently touched first** within a band, so the top of QUIET is what you were
+last doing. Todos are the exception and stay oldest-first: a session's idle time is a gap that
+resets, a todo's age is a lifetime that only grows, so an old todo is a reproach and belongs at the
+top of its own list.
 
 `⧗` marks a quiet session past the idle threshold (default 45m) — it sits right after the state
 mark, so `○ ⧗` reads as "quiet, and has been for a while" in one glance. An hourglass rather than

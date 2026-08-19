@@ -201,13 +201,33 @@ func Build(s Snapshot, now time.Time) Fleet {
 			Rank:  RankTodo,
 		})
 	}
-	// Band first, then oldest within a band: the thing you have ignored longest
-	// sits at the top of its group.
+	// Band first, then **most recently touched** within a band: the thing you last worked on sits
+	// at the top of its group.
+	//
+	// This was the other way round until §9.46, and the old reasoning is worth keeping: the top of a
+	// band is where the eye lands, so putting the most-neglected row there made neglect the first
+	// thing you saw. What that argument missed is that a column of times descending from 2d22h reads
+	// as *sorted backwards* — every other list a person uses puts the newest first — so the ordering
+	// was spending the band's most valuable position on a signal the header already carries in
+	// `oldest 2d22h` and the KPI strip in `5 quiet >45m`.
+	//
+	// The cost is real and lands on `pick`, which sheds from the end of a band: the end is now the
+	// oldest rows, so a tab too short to show everything hides the most neglected instead of the
+	// least. `minQuietRows` and the `+N quiet` count are what keep that honest, and the two header
+	// statements are what keep it from being silent.
+	// Todos are the exception, and §9.19 is why: a session's idle time is a **gap** that resets the
+	// moment somebody touches it, so the newest is the thing you were last doing and belongs at the
+	// top. A todo's age is a **lifetime** that only grows, so its oldest is a reproach and putting a
+	// note written seconds ago above one from a fortnight ago would bury exactly what the list is
+	// for. Same field, two quantities, two orders.
 	sort.SliceStable(rows, func(i, j int) bool {
 		if rows[i].Rank != rows[j].Rank {
 			return rows[i].Rank < rows[j].Rank
 		}
-		return rows[i].Idle > rows[j].Idle
+		if rows[i].Rank == RankTodo {
+			return rows[i].Idle > rows[j].Idle
+		}
+		return rows[i].Idle < rows[j].Idle
 	})
 	f.Rows = rows
 	f.Workspaces = len(spans)
