@@ -28,13 +28,13 @@ jobs:
           # permanent warning is one nobody reads.
           cache: false
 
-      # The runner is the outsider machine — no cmux, no claude — which is what makes
-      # every degraded path below a fact rather than an argument. Asserted, not assumed:
-      # a runner image that started shipping either tool would silently stop being a
-      # test bed, and nothing else here would notice.
-      - name: neither upstream is installed
+      # The runner is the outsider machine — no cmux, no claude, no maki — which is what
+      # makes every degraded path below a fact rather than an argument. Asserted, not
+      # assumed: a runner image that started shipping any of them would silently stop
+      # being a test bed, and nothing else here would notice.
+      - name: no upstream is installed
         run: |
-          for tool in claude cmux; do
+          for tool in claude cmux maki; do
             if command -v "$tool" >/dev/null 2>&1; then
               echo "::error::$tool is on PATH; this job is no longer the outsider machine"
               exit 1

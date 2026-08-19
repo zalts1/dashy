@@ -1,7 +1,7 @@
 # CLAUDE.md
 
-`board` is a Go CLI (module `github.com/zalts1/dashy`, stdlib only) reporting on every live Claude Code
-session under cmux.
+`board` is a Go CLI (module `github.com/zalts1/dashy`, stdlib only) reporting on every live
+coding-agent session under cmux — Claude Code and maki, in one fleet.
 
 ## Where things are written down
 
@@ -12,7 +12,7 @@ one `§` away, in the section where a change to it gets recorded.
 | file | holds | authority for |
 |---|---|---|
 | `README.md` | the user contract | commands, states, config keys |
-| `DESIGN.md` | the settled record: §1–§8, §10–§11, with a `§` index at the top | why anything is the shape it is |
+| `DESIGN.md` | the settled record: §1–§8, §10–§17, with a `§` index at the top | why anything is the shape it is |
 | `EVIDENCE.md` | §9.x, append-only, with a `§` index at the top | what was believed, what falsified it |
 | `CONTRIBUTING.md` | the outside contributor's process | how a PR is opened, tested, and declined |
 | package docs | `go doc ./...` | what each package's job is |
@@ -33,7 +33,7 @@ go build -o board ./cmd/board    # binary is gitignored; build in place
 go vet ./... && go test ./...
 go test ./internal/view -run TestGolden        # frame is pinned byte-for-byte
 COLUMNS=118 LINES=44 ./board watch | cat       # non-TTY: one frame, then exit
-./board version                                # board's, claude's and cmux's
+./board version                                # board's, claude's, cmux's and maki's
 ./demo/record.sh                               # re-record docs/board.gif (needs vhs)
 
 git tag -a vX.Y.Z && git push origin vX.Y.Z     # releasing: the tag IS the version
@@ -57,11 +57,12 @@ Routing only; `DESIGN.md` §3 is why the tree is this shape.
       host/          file paths, child processes (cmux env always stripped)
       config/        ~/.board.json — the only file written
       claude/        roster + state: `claude agents --json`, jobs, transcript mtime
+      maki/          roster + state: the reports its plugin writes, plus live pids (§17)
       cmux/          tab titles, hook clock, focus — enrichment, never the roster
       board/         Fleet/Row; Build = pure join, Collect = impure gather
       view/          PURE: Frame, header, layout arithmetic, Table, palette, scale
       watch/         IMPURE: alternate screen, termios, signals, ticker
-      hooks/         notify, install-hooks, uninstall-hooks
+      hooks/         notify, install-hooks, uninstall-hooks — both agents, two mechanisms
       doctor/        what board could and could not read here
       demo/          the fixture fleet the GIF renders — a main, but never a command
     demo/            board.tape + record.sh: the recording, run by hand (§16)
@@ -92,6 +93,11 @@ Two kinds, and the difference matters more than any single entry.
 - **`notify` must never fail the agent** — every error path is a silent success (§8).
 - **`install-hooks` refuses an unparseable `~/.claude/settings.json`**, backs up first,
   and is idempotent (§8).
+- **The maki block is prepended to `init.lua`, never appended**, and unbalanced markers are
+  a refusal. A Lua `return` must end its block, so an appended hook is a syntax error in
+  the file that starts maki (§8, §17).
+- **board never rewrites or deletes a `plugin.toml` it did not write** — that file is the
+  permission policy for every plugin in its directory (§8, §17).
 - **cmux env vars are always stripped from child processes** (§8).
 - **The frame fits the terminal in both directions.** A wrapped line silently adds a
   screen row, which breaks the height measurement and scrolls the header away (§6,
@@ -108,6 +114,8 @@ one, record why in `EVIDENCE.md` §9.
 - No dependencies; stdlib + `syscall` (§2).
 - No listener, port, or daemon — the watch tab *is* the process (§2).
 - No sorting, no filtering, no dismiss — the bands are the sort (§1, §8).
+- The frame never says which agent a row belongs to; `doctor` counts the rosters apart
+  (§1, §17).
 - The todo cap of 10 is a refusal, not a trim (§12).
 - Capture and removal both live in the frame, and the capture mode stays bounded (§12,
   §9.18).

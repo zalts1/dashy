@@ -1,20 +1,27 @@
 package hooks
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/zalts1/dashy/internal/config"
 )
 
-// Uninstall removes board's hooks from the user's Claude Code settings. It is Install's
-// inverse and holds the same line (§8): it refuses a file it cannot parse, it backs up
+// Uninstall is Install's inverse, on both agents, and for the same reason it attempts
+// both halves whatever the other one did.
+func Uninstall() error {
+	return errors.Join(uninstallClaude(), uninstallMaki())
+}
+
+// uninstallClaude removes board's hooks from the user's Claude Code settings. It holds
+// the same line installClaude does (§8): it refuses a file it cannot parse, it backs up
 // before its first change, and having nothing to remove is a report rather than an error.
 //
 // It exists because the alternative was a README paragraph asking the reader to delete
 // two entries out of somebody else's JSON by eye. Install being safe while uninstall is
 // manual is not a tool you can ask a colleague to try.
-func Uninstall() error {
+func uninstallClaude() error {
 	path := settingsPath()
 	settings, original, mode, err := readSettings(path)
 	if err != nil {

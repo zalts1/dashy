@@ -26,7 +26,7 @@ grep -n '^#\+ ' DESIGN.md        # § → line, then Read with offset/limit
 |---|---|---|
 | 1 | what board is, and the four non-goals | scope — any new feature or command |
 | 2 | the original constraints, each kept, restated or retired | anything that trades one away |
-| 3 | four inputs, one file written, pid as join key, the package tree | `board/`, `host/`, adding a source |
+| 3 | the inputs, one file written, pid as join key, the package tree | `board/`, `host/`, adding a source |
 | 4 | state model: `blocked`/`running`/`done`, staleness, label precedence | `board/build.go`, `claude/` |
 | 5 | why the `ASKED` ledger was removed and cannot come back | proposing any new band |
 | 6 | rendering: form, validated colour, encoding, width, header, behaviour | all of `view/` |
@@ -38,24 +38,31 @@ grep -n '^#\+ ' DESIGN.md        # § → line, then Read with offset/limit
 | 12 | todos: a row with no process, the cap of 10, where capture and removal each live | `config/`, `board/build.go`, the `TODO` band |
 | 13 | `version`: the tag is the release, upstreams reported verbatim, absence never raised | `version/`, `host/probe.go`, releasing |
 | 14 | trouble: an unreadable world is not an empty one, and `doctor` reads without writing | `claude/`, `board/build.go`, `view/header.go`, `doctor/` |
-| 15 | `uninstall-hooks`: defined as install's inverse, and what it must not touch on the way | `hooks/`, anything editing `~/.claude/settings.json` |
+| 15 | `uninstall-hooks`: defined as install's inverse, and what it must not touch on the way | `hooks/`, anything editing `~/.claude/settings.json` or a maki `init.lua` |
 | 16 | the demo: a fixture fleet through the real join, recorded by hand | `internal/demo/`, `demo/`, the top of the README |
+| 17 | maki as the second agent: no roster command, so board installs one; two reads settle liveness | `maki/`, `hooks/maki.go`, `board/build.go` |
 
 ---
 
 ## 1. What board is
 
-One screen showing every live Claude Code session running under cmux, ranked by
-whether it needs you.
+One screen showing every live coding-agent session running under cmux — Claude Code and
+maki — ranked by whether it needs you.
 
 The bottleneck it addresses is **attention, not capacity**. With ~30 concurrent
 sessions the failure is not that too few agents are running; it is that two of them
 have been blocked on a question for a day and nothing surfaces that. So board
 optimises for one thing: *where do I look first*.
 
-**It is a reporting surface.** It reads four sources, writes one file, and takes
+**It is a reporting surface.** It reads six sources, writes one file, and takes
 exactly two actions on the world (focus a tab, set a label). That is what makes it
 safe to leave installed, and it is the property to protect when adding features.
+
+**Which agent a row belongs to is not on the screen.** The three states are the fleet's
+vocabulary and both agents map onto them exactly, so a column repeating the agent on every
+row would be the one thing §9.13 says a band has to earn — and it would answer a question
+the reader does not have, since the action is the same either way. `doctor` counts the two
+rosters separately, which is where the distinction is worth something (§14, §17).
 
 Four things it deliberately is not. Each is a judgement about where the bottleneck is,
 so each is only as good as that judgement:
@@ -64,8 +71,9 @@ so each is only as good as that judgement:
   is blocked, working, or rotting. Structure belongs in Linear, which already exists.
 - **No spawning or orchestration.** Making it easier to run *more* agents attacks
   the wrong side of the bottleneck.
-- **No rebuilding what cmux or Claude Code already ship.** Not cmux's Feed, not
-  `claude agents`' peek/reply/attach. Jump-to-tab is the real gap (§7).
+- **No rebuilding what cmux or either agent already ships.** Not cmux's Feed, not
+  `claude agents`' peek/reply/attach, not maki's own `/sessions` picker — which sees one
+  maki process, where board's gap is every tab at once. Jump-to-tab is the real gap (§7).
 - **No sorting and no filtering.** The bands are the sort. Hiding rows is the same
   failure as muting a notification (§8).
 
@@ -124,25 +132,28 @@ requires. A fourth needs the same.
 
 ## 3. Architecture
 
-Four inputs, all read-only. One file written.
+Six inputs, all read-only. One file written.
 
 | what | source | cost |
 |---|---|---|
-| roster + state | `claude agents --json` — interactive `status` idle/busy/waiting, background `state` blocked | ~250ms |
+| claude roster + state | `claude agents --json` — interactive `status` idle/busy/waiting, background `state` blocked | ~250ms |
 | tab title, workspace, surface UUID | `cmux --id-format both top --all --json`, joined on **pid** | ~50ms |
 | idle clock | cmux `~/.cmuxterm/claude-hook-sessions.json` → `updatedAt`, else transcript mtime | free |
 | a background agent's open question | `~/.claude/jobs/<shortId>/state.json` → `needs` | free |
+| maki roster + state + clock | `~/.board/maki/<surface>.json`, written by the Lua block board installs (§17) | free |
+| maki liveness | `pgrep -x maki` — a report outlives the process that wrote it (§17) | ~5ms |
 | labels + config | `~/.board.json` — **the only file board writes** | free |
 
 `~/.cmuxterm/workstream.jsonl` was a fifth source, read 8MB deep every tick to feed
 the `ASKED` ledger. Both are gone — §9.13.
 
-The two subprocess calls are independent and run concurrently, so a tick costs
-~250ms rather than ~300.
+The subprocess calls are independent and run concurrently, so a tick costs ~250ms rather
+than the sum.
 
-**pid is the join key.** cmux surface nodes carry no session UUID, and
-`cmux_process_pids` is 1:1 with the agent process. The tree is walked rather than
-indexed because its nesting has changed before.
+**pid is the join key, for both agents.** cmux surface nodes carry no session UUID, and
+`cmux_process_pids` names the processes on a surface. The tree is walked rather than
+indexed because its nesting has changed before. maki reports are keyed by surface id and
+reached through the same pid map, so there is one join and not two (§17).
 
 ### Packages
 
@@ -174,11 +185,16 @@ renderer — both renderers consume the same snapshot so they can never disagree
 
 ## 4. State model
 
-| state | meaning | source |
-|---|---|---|
-| `blocked →` | genuinely needs an answer | interactive `status: waiting`, or background `state: blocked` |
-| `running` | working | `status: busy` |
-| `done` | finished its turn, unnoticed | everything else |
+| state | meaning | claude | maki |
+|---|---|---|---|
+| `blocked →` | genuinely needs an answer | interactive `status: waiting`, or background `state: blocked` | `needs_input` |
+| `running` | working | `status: busy` | `working` |
+| `done` | finished its turn, unnoticed | everything else | `idle` |
+
+Both agents land on the same three words, which is what makes the second one an addition
+rather than a dialect. maki's `needs_input` is the cleaner of the two blocked signals: it
+is `permission_prompt.is_open() || pending_input`, so it already means what board wants,
+where claude needed the ledger below to get there.
 
 `⚠` marks a quiet session past the idle threshold (default 45m). A **working session
 is never stale**: elapsed time there is progress, not rot.
@@ -197,9 +213,11 @@ Roster membership, both deliberate:
   would invert the point of the tool. Their label is Claude Code's own `needs`
   string, which beats a slug: "watch CI to green, or leave it here?"
 
-Label precedence: user label → Claude's `needs`/name → cmux tab title → cwd
-basename. Labels are keyed on **surface id**, so they survive a session ending and
-being resumed in the same tab.
+Label precedence: user label → the agent's own name for it → cmux tab title → cwd
+basename. The middle rung is Claude Code's `needs`/name for a background job and maki's
+session title; one rule, one function, so the two agents cannot come to disagree about
+what a row is called. Labels are keyed on **surface id**, so they survive a session ending
+and being resumed in the same tab.
 
 ---
 
@@ -482,6 +500,16 @@ Four more, each with a test or a documented refusal:
   change, never overwriting an earlier backup. Both are idempotent via the
   `<binary> notify` command marker. **Neither may change anything it did not write** —
   not another tool's hooks, not an unrelated key, and not the file's permissions (§15).
+- **The same line holds on a maki `init.lua`, which board cannot parse at all.** The
+  marked block is prepended, never appended — a Lua `return` must end its block, so an
+  appended hook would be a syntax error in the file that starts maki. Markers that do not
+  make sense (an opening without a closing, or the two the wrong way round) are a refusal:
+  board cannot know where a half-deleted block ended, and the wrong guess deletes somebody
+  else's program. The block itself is written to fail silently, because it runs inside
+  maki (§17).
+- **board never rewrites a `plugin.toml` it did not write**, and never deletes one that no
+  longer carries its marker. That file is the permission policy for every bit of Lua in
+  its directory, most of which has nothing to do with board (§17).
 - **cmux env vars are always stripped from child processes.** cmux treats
   `CMUX_SURFACE_ID`/`CMUX_WORKSPACE_ID` as the implicit target of every command, so a
   stale inherited value makes even a global query fail (§9.8).
@@ -770,10 +798,11 @@ it goes back to Linear (§9.17).
 
 ## 13. `version` — what is installed
 
-board is a third of its own bug report. The roster comes from `claude agents --json`
-and the tabs from cmux, neither is a documented contract, and both have moved before
-(§9.1, §9.3) — so "board is broken" is unanswerable without the two upstream versions
-beside board's own. That is the whole command: three lines, meant to be pasted.
+board is the smallest part of its own bug report. The rosters come from `claude agents
+--json` and from a Lua block inside maki, and the tabs from cmux; none of the three is a
+documented contract and two have moved before (§9.1, §9.3) — so "board is broken" is
+unanswerable without every upstream version beside board's own. That is the whole command:
+one line per tool, meant to be pasted.
 
 **There is no version constant and no `-ldflags`.** `runtime/debug.ReadBuildInfo`
 already knows: `go install ...@v0.1.0` stamps the tag, and since Go 1.24 a plain
@@ -782,8 +811,8 @@ the tree is modified. **The tag is the release** — nothing to bump, so nothing
 forget to bump. A build with no VCS directory reports `(devel)`, which is a fact about
 how that binary was made and is passed through rather than laundered into `unknown`.
 
-The two upstream strings are printed **verbatim**. Parsing them to a bare number would
-put a parser over two undocumented surfaces on the far side of someone else's machine,
+The upstream strings are printed **verbatim**. Parsing them to a bare number would
+put a parser over three undocumented surfaces on the far side of someone else's machine,
 which is §9.1's mistake in a new place; cmux's build number and commit are also the
 next thing anyone would ask for. The single exception is a leading token that repeats
 the label — `cmux --version` names itself and `claude --version` does not — dropped so
@@ -794,15 +823,20 @@ works, so a missing tool is `not found` and an unreadable board is `unknown`: di
 because one sends you to an install and the other does not. It cannot fail and cannot
 print an empty field (§8, and §11 for the fixtures that pin it).
 
-`claude.Version` and `cmux.Version` live beside the other calls to their own binaries,
-so everything that shells out to a tool is greppable in one package; `host.Probe` holds
-the one shared judgement, which line of stdout to believe.
+**A missing maki is still a line.** Its absence is the ordinary case rather than a fault —
+board reports on whichever agents are installed (§17) — but omitting the row would leave
+the reader unsure whether board looked, which is the confusion §14 exists to end.
+
+`claude.Version`, `cmux.Version` and `maki.Version` live beside the other calls to their
+own binaries, so everything that shells out to a tool is greppable in one package;
+`host.Probe` holds the one shared judgement, which line of stdout to believe.
 
 ---
 
 ## 14. Trouble, and `doctor` — what board could not read
 
-board reads two undocumented surfaces and used to throw away every failure of both.
+board reads three undocumented surfaces and used to throw away every failure of the first
+two.
 `claude.Agents` returned a bare `nil` on any error and on any shape it did not
 recognise; `show` tested for cmux and `watch` did not. So a missing `claude`, a changed
 roster schema, and a genuinely quiet fleet produced **the same screen**, and a
@@ -812,7 +846,7 @@ whole support burden (`EVIDENCE.md` §9.26).
 
 **The fix is one concept, not four.** `Fleet.Trouble` is the phrase for what could not
 be read, empty when the world was legible, derived in pure `Build` from a `Snapshot`
-that now carries `RosterErr` and `NoCmux`. Both renderers print that one field, for the
+that carries `RosterErr`, `NoCmux` and `MakiErr`. Both renderers print that one field, for the
 same reason every count is derived there: two renderers must not invent their own words
 for the same fact (§3).
 
@@ -830,21 +864,40 @@ Consequences, each falling out rather than designed:
   second entry point; it was the frame reporting what it is showing. `show` lost its
   cmux test in the same change, so both entry points now read one phrase off one field
   and cannot disagree. The one-shot table leads with it, because that output is piped.
-- **The roster outranks the tabs.** With no roster there are no rows at all; with no
-  cmux the background agents survive. One line carries the more fundamental fact and
-  names `doctor`, which carries both.
+- **The order is by how much of the board the fact costs.** The claude roster outranks
+  everything — with no roster there are no claude rows at all, and it is the bulk of most
+  fleets. Then cmux, without which every interactive session loses its tab. Then maki,
+  which costs one agent's rows. One line carries the most fundamental fact and names
+  `doctor`, which carries them all.
+- **A missing `claude` stops being trouble once maki is reporting.** board has a fleet on
+  screen and the tool that is absent was a choice. It is the reports that settle that and
+  not the binary: an installed maki nobody is running leaves board with nothing to show,
+  which is exactly the state §9.26 is about.
+- **`maki not reporting` needs both halves — a maki in a tab, and not one report on the
+  machine.** cmux counts a surface's whole process tree, so any maki a script or a
+  `maki --print` starts inside a tab looks like an unreported one; on a wired machine that
+  line would appear every tick, and a signal that cries wolf stops being read. With no
+  reports at all there is nothing to cry wolf about, and the phrase means what it says: the
+  hook was never installed (§17).
 
 **`doctor` is the escalation, and `version` stays.** They answer different questions —
-`version` is three lines to paste, `doctor` is the diagnosis — so this is not §9.18's
+`version` is four lines to paste, `doctor` is the diagnosis — so this is not §9.18's
 two entry points for one thing. It embeds `version.Info` and calls `version.Format`, so
 there is exactly one place that knows how to print a version string, and it aligns its
-own four rows to `version.LabelWidth`.
+own five rows to `version.LabelWidth`.
 
-Its rows are the wiring: the three versions, then the roster (a count, or the error's
+Its rows are the wiring: the four versions, then the roster (a count, or the error's
 own words — the frame's "· board doctor" would be circular here), the tabs (`0 tabs`
 with a healthy roster is the shape of §9.3), the hooks (named individually, because a
 half-install is a hook that never fires), the config path (and whether it exists yet),
 and whether notifications are on.
+
+**Two agents, and still one row each for `roster` and `hooks`.** Those are the concerns —
+what board read, and how it was wired — so each row carries both agents rather than each
+agent getting a row. Splitting by agent would put the label `maki` on two different lines
+of a nine-line report, once as a version and once as a diagnosis. On a machine without
+maki both halves say nothing at all: the version block has already reported it absent, and
+nagging about a tool nobody installed is how a diagnostic loses its reader.
 
 **It never prints `notify_cmd`.** The output is meant to be pasted into a bug report and
 that field is a shell command routinely carrying a webhook URL or a token. Whether it is
@@ -890,7 +943,15 @@ other. The write is the same temp-and-rename as `config.Save` (§9.27), for a st
 reason: a torn `~/.board.json` costs a todo list, a torn `settings.json` breaks Claude
 Code.
 
-`doctor` still only reads (§14). Diagnosing this file and changing it stay separate
+**The maki half is the same command and three more things to put back**: the block out of
+`init.lua`, the `plugin.toml` board wrote — and only while it still carries board's marker,
+because a user who has edited it owns it — and the reports directory, which the block wrote
+but board is responsible for. An `init.lua` left holding nothing but whitespace is removed
+outright: board created it, maki treats an absent file and an empty one alike, and an empty
+file is a trace of a tool that has been removed. Same inverse test, on a Lua file this
+time (§17).
+
+`doctor` still only reads (§14). Diagnosing these files and changing them stay separate
 commands.
 
 ## 16. The demo — a fleet nobody has to protect
@@ -927,3 +988,86 @@ Three constraints hold it in place:
   an unchecked contrast claim at the top of the README. Below 32 rows the fit loop starts
   trimming the quiet band to `+N quiet` (§9.21) — correct behaviour, and the wrong thing
   to lead with.
+
+---
+
+## 17. maki — the second agent, and why it is read this way
+
+board reported on one agent because there was one worth reporting on. maki is a second,
+and the interesting thing about adding it is how little of board it touched: no new band,
+no new state, no new column, no change to `view` at all. The three states are the fleet's
+vocabulary and maki's `working`/`needs_input`/`idle` map onto them one for one, so a maki
+session is a row like any other (§4). Everything below is about getting the rows.
+
+**maki has no `agents --json`.** Its roster lives inside the running process — the UI
+event loop owns every live session — and the only way in is the Lua plugin API. So board
+installs a plugin. `hooks/maki.go` holds the whole of it: a marked block prepended to the
+`init.lua` maki will load, which registers autocmds and writes what `maki.session.live()`
+answers to `~/.board/maki/<cmux surface id>.json`.
+
+That is the same shape as the Claude Code hook and a different mechanism, and the
+differences are all consequences of the file being a program rather than data:
+
+- **Prepended, never appended.** A maki `init.lua` returns its config, `return` must end a
+  Lua block, and anything after one is a syntax error. Appending would break maki's
+  startup on every machine board touched.
+- **Markers instead of a parse.** board cannot decide whether an edit is safe by reading
+  Lua, so the block carries its own boundaries and unbalanced markers are a refusal (§8).
+- **The block must never fail maki**, which is `notify`'s rule one level in (§8). The
+  top-level environment reads are inside a `pcall`, and the reporting task is handed to
+  `maki.async.run`'s own error sink, so nothing board wrote can surface as a maki error.
+- **`atomic_write`, so a reader sees the old file or the whole new one.** board's read is
+  every ten seconds and the write is on every turn; without it the overlap is a truncated
+  file and an unreadable roster (§14).
+
+**It writes on state changes, not on a timer.** `SessionStatusChanged` fires exactly when
+the transition board draws happens — including when a permission prompt opens, which is
+maki's `needs_input` and board's `blocked →`. `TurnStart`/`TurnEnd`/`TurnError`,
+`SessionFocusChanged` and `SessionReset` are also subscribed, so the set of sessions stays
+current and a maki that has just started reports before its first turn.
+
+**The idle clock is maki's own `updated_at`, and no file mtime is consulted.** A session
+idle for three hours writes nothing, and its report still carries the second it last
+moved. So a stale file is not a stale clock — which is what makes the write-on-change
+design work at all.
+
+**Liveness is a second read, and that is the part with no alternative.** maki fires no
+shutdown event, so a report outlives the process that wrote it, and a report on disk is
+not evidence of a session. `pgrep -x maki` is what says otherwise. Go's standard library
+cannot enumerate processes, so this is one more subprocess on the tick — a few
+milliseconds beside the roster's ~250 — and an exact-name match is the whole query.
+
+**The two reads join through the pid map board already had.** `Build` walks the process
+list, turns each pid into a surface through cmux, and looks the report up by surface. So
+liveness, the tab, the workspace and jumpability all fall out of one join, and a report
+whose maki has exited simply never matches. The walk is over the sorted pid list rather
+than the report map, so two sessions that tie on band and idle time do not swap places
+between ticks.
+
+**Several rows can share one tab**, because one maki process holds every session opened in
+it and `Enter` reaches the tab, not the session. That is honest rather than ideal: hiding
+the sessions that are not focused would hide working ones, which is the inversion §8
+rejects for dismiss. maki exposes `session.focus` to Lua and to nothing else, so a
+per-session jump is not available to ask for.
+
+**A maki running in no cmux tab is not a row**, exactly as an interactive claude session
+with no surface is not one (§4). board is a view of tabs.
+
+**Not installed is not a fault.** board reports on whichever agents are here, so
+`maki.Available()` is asked before anything is made of a silent maki, and every row of
+`doctor` that would mention it says nothing instead (§13, §14).
+
+### The manifest is half the install
+
+maki denies **every** permission to an `init.lua` that has no `plugin.toml` beside it. The
+block installed, ran, read nothing, wrote nothing, and said so nowhere — found by running
+maki 0.4.9, not by reading it (`EVIDENCE.md` §9.32). So `install-hooks` writes the
+manifest too, and `MakiInstalled` reports the two halves separately: a block with no
+manifest is installed and inert, which is not the same state as installed.
+
+The manifest board writes grants the two permissions the block uses — `env` for
+`CMUX_SURFACE_ID`, `fs_write` for the report — and **denies nothing**. An absent key means
+allowed, so naming only what board needs leaves every decision about Lua the user adds
+later to the user. A `plugin.toml` that is already there is never rewritten and never
+deleted: it is policy for everything in that directory, and `install-hooks` says what the
+block needs instead of taking the decision (§8).

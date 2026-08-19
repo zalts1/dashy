@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,11 +25,19 @@ func marker() (string, error) {
 	return filepath.Base(self) + " notify", nil
 }
 
-// Install merges the Stop and Notification hooks into the user's Claude Code
+// Install wires board into both agents it reports on. Each half is attempted whatever
+// the other one did: a machine with a settings.json board refuses to rewrite is still a
+// machine whose maki can be made to report, and stopping at the first failure would hide
+// the half that worked.
+func Install() error {
+	return errors.Join(installClaude(), installMaki())
+}
+
+// installClaude merges the Stop and Notification hooks into the user's Claude Code
 // settings. It is idempotent via the `<binary> notify` command marker, it refuses to
 // touch a file it cannot parse, and it backs up before its first change — this is
-// the one file board edits that it does not own.
-func Install() error {
+// one of the two files board edits that it does not own.
+func installClaude() error {
 	self, err := os.Executable()
 	if err != nil {
 		return err

@@ -1,6 +1,7 @@
 # board
 
-One screen showing every live Claude Code session running under cmux.
+One screen showing every live coding-agent session running under cmux — Claude Code and
+[maki](https://github.com/tontinton/maki), in one fleet.
 
 ![board watch: a session comes back with a question, a todo is captured, the quiet band folds away](docs/board.gif)
 
@@ -42,9 +43,9 @@ the demo builds a synthetic world and renders it through the same code (`demo/re
     board todo                list the todos, with ages and the cap
     board todo "<text>"       add one (max 10)
     board todo done <text|id> finish one, matched like jump
-    board install-hooks       merge Stop + Notification hooks into ~/.claude/settings.json
+    board install-hooks       wire both agents up: Claude Code hooks, and maki's init.lua
     board uninstall-hooks     take them back out, leaving every other hook alone
-    board version             board's version, and claude's and cmux's
+    board version             board's version, and claude's, cmux's and maki's
     board doctor              what board can and cannot read on this machine
     board -h                  this list, from the tool itself (`--help`, `help`)
 
@@ -87,13 +88,18 @@ after 10s of no keypress so the tab always returns to being ambient.
 
 ## States
 
-| state | meaning | derived from |
-|---|---|---|
-| `blocked →` | genuinely needs an answer | `claude agents`: interactive `status: waiting`, or background `state: blocked` |
-| `running` | working | `claude agents`: `status: busy` |
-| `done` | finished its turn, unnoticed | everything else |
+| state | meaning | Claude Code | maki |
+|---|---|---|---|
+| `blocked →` | genuinely needs an answer | interactive `status: waiting`, or background `state: blocked` | `needs_input` |
+| `running` | working | `status: busy` | `working` |
+| `done` | finished its turn, unnoticed | everything else | `idle` |
 
 `⚠` marks a quiet session past the idle threshold (default 45m).
+
+Both agents land on the same three words, and **the screen does not say which agent a row
+belongs to.** The action is the same either way — `Enter` focuses the tab — so a column
+repeating the agent on every row would cost width and answer a question you do not have.
+`board doctor` counts the two rosters separately, which is where the difference matters.
 
 ## Todos
 
@@ -127,14 +133,15 @@ if you start the work, remove the todo — board will not notice the overlap for
 There is no undo: the header reports the text it removed, so a mis-key costs one line
 of retyping.
 
-Rows come from `claude agents --json`, which knows every live session. cmux supplies
-tab titles, workspace names and the idle clock, joined on pid. Background agents
+Claude Code rows come from `claude agents --json`, which knows every live session. cmux
+supplies tab titles, workspace names and the idle clock, joined on pid. Background agents
 (`claude --bg`) appear with `background` in the workspace column — they have no tab,
 so they cannot be jumped to, and their label is the open question Claude Code
 records for them.
 
 Interactive sessions with no cmux surface are subagents or sessions started outside
-cmux; they are not rows, because this board is a view of tabs.
+cmux; they are not rows, because this board is a view of tabs. The same rule applies to a
+maki started outside cmux.
 
 **Why `done` and not `waiting`:** cmux's `needsInput` lifecycle fires ~60 seconds
 after *any* finished turn, so it means "sitting at the prompt", not "asked you
@@ -145,6 +152,47 @@ unresolved Feed cards instead, so it stays rare and worth reacting to.
 ~60ms it managed when it derived state from cmux alone. That buys 10 sessions it
 used to miss, including background agents blocked for weeks.
 
+## maki
+
+maki sessions are rows like any other — same three states, same bands, same `Enter` to
+jump. Getting them takes one more step, because **maki has no roster command.** Its
+sessions live inside the running process, and the only way in is maki's Lua plugin API.
+
+So `board install-hooks` installs a plugin. It prepends a marked block to the `init.lua`
+maki loads (`~/.config/maki/init.lua`, or `~/.maki/init.lua` if you have one) and writes a
+`plugin.toml` beside it granting the block the two permissions it uses. From then on, every
+time a session changes state maki writes what it knows to
+`~/.board/maki/<cmux surface id>.json`, and board reads that.
+
+    $ board install-hooks
+    installed hooks: Stop, Notification
+    installed maki hook: /Users/you/.config/maki/init.lua
+    granted it fs_write and env: /Users/you/.config/maki/plugin.toml
+
+Three things worth knowing about it:
+
+- **The block is prepended, not appended.** A maki `init.lua` ends in `return { … }`, and
+  in Lua nothing may follow a `return` — an appended hook would be a syntax error in the
+  file that starts maki. Your own Lua survives verbatim below it, a timestamped
+  `.board-bak-*` copy is taken first, and running it twice changes nothing.
+- **`plugin.toml` is half the install.** maki denies every permission to an `init.lua`
+  with no manifest beside it, so without that file the block installs and silently does
+  nothing (`EVIDENCE.md` §9.32). If you already have one, board leaves it alone and tells
+  you the block needs `fs_write` and `env` in it.
+- **maki is optional.** Without it installed, nothing above happens and nothing complains
+  — board reports on whichever agents are on the machine.
+
+One maki process holds every session you have opened in its tab, so **one tab can be
+several rows.** `Enter` on any of them focuses the tab; maki does not expose a
+per-session jump to anything outside itself.
+
+A maki row's idle clock is maki's own `updated_at` for that session, and its label is the
+session title maki gave it — the same precedence claude rows follow (your label first, then
+the agent's name for it, then the tab title, then the directory).
+
+**maki not reporting · board doctor** on the screen means a maki is running in a tab and
+board has no reports at all: run `board install-hooks`.
+
 ## Install
 
     go install github.com/zalts1/dashy/cmd/board@latest
@@ -153,14 +201,14 @@ Or from a clone:
 
     go build -o board ./cmd/board
 
-Requires macOS, [cmux](https://github.com/manaflow-ai/cmux), and Claude Code — board
-reads the roster from `claude agents --json` and the tabs from cmux, so it has nothing
-to report without both.
+Requires macOS, [cmux](https://github.com/manaflow-ai/cmux), and at least one of Claude
+Code and [maki](https://github.com/tontinton/maki) — board reads its rows from the agents
+and its tabs from cmux, so it has nothing to report without cmux and something to report on.
 
-**Verified against Claude Code 2.1.220 and cmux 0.64.16** — the versions this release was
-cut against. Neither surface is a documented contract, so a patch release on either side
-can move what board reads; `board doctor` reports what is on your machine, and a mismatch
-is the first thing to check.
+**Verified against Claude Code 2.1.235, cmux 0.64.22 and maki 0.4.9** — the versions this
+release was cut against. None of the three is a documented contract, so a patch release on
+any of them can move what board reads; `board doctor` reports what is on your machine, and
+a mismatch is the first thing to check.
 
 No dependencies, no daemon, no port, no telemetry, and no network of its own — the only
 request board can make is a `notify_cmd` you wrote yourself. `board watch` in a dedicated
@@ -171,30 +219,41 @@ it is, with no build flags, and reports what it depends on beside it:
 
     $ board version
     board  v0.2.0
-    claude 2.1.220 (Claude Code)
-    cmux   0.64.16 (96) [5321becb6]
+    claude 2.1.235 (Claude Code)
+    cmux   0.64.22 (102) [ddd4a01bc]
+    maki   0.4.9
 
-**Quote all three in a bug report.** board reads its roster from `claude agents --json`
-and its tabs from cmux, and neither is a documented contract — the two upstream lines
-are usually the answer. A tool that could not be asked reads `not found`; a board built
-outside a git tree reads `(devel)`, which says how it was built rather than hiding it.
+**Quote all four in a bug report.** board reads its rows from the agents and its tabs from
+cmux, and none of those surfaces is a documented contract — the three upstream lines are
+usually the answer. A tool that could not be asked reads `not found`, which for maki is
+the ordinary case rather than a problem; a board built outside a git tree reads `(devel)`,
+which says how it was built rather than hiding it.
 
 ## When the board looks wrong — `board doctor`
 
     $ board doctor
     board  v0.2.0
-    claude 2.1.220 (Claude Code)
-    cmux   0.64.16 (96) [5321becb6]
-    roster 16 sessions
+    claude 2.1.235 (Claude Code)
+    cmux   0.64.22 (102) [ddd4a01bc]
+    maki   0.4.9
+    roster 16 claude sessions · 3 maki sessions in 2 tabs
     tabs   22 tabs in 7 workspaces
-    hooks  Stop, Notification
+    hooks  Stop, Notification · maki init.lua
     config /Users/you/.board.json
     notify off — set notify_cmd to push
 
-Eight lines saying what board can and cannot read here. `roster` is `claude agents
---json`; `tabs` is cmux. **`16 sessions` with `0 tabs` is the interesting failure** —
-board joins the two on pid and drops any interactive session with no tab, so a fleet
-that looks too small usually means the tabs did not arrive.
+Nine lines saying what board can and cannot read here. `roster` is both agents' rosters —
+`claude agents --json`, then what maki has reported — and `tabs` is cmux. **`16 claude
+sessions` with `0 tabs` is the interesting failure**: board joins the two on pid and drops
+any interactive session with no tab, so a fleet that looks too small usually means the tabs
+did not arrive.
+
+`roster` and `hooks` each carry both agents rather than each agent getting a row, and on a
+machine without maki they say nothing about it — the version block above has already. The
+maki halves worth recognising:
+
+    roster 16 claude sessions · 2 maki running, no reports    ← install-hooks was never run
+    hooks  Stop, Notification · maki init.lua without plugin.toml   ← installed and inert
 
 It reads and never writes, so it works on a machine where `install-hooks` refuses. It
 **never prints `notify_cmd`**, only whether one is set: this output is meant to be
@@ -206,6 +265,10 @@ An empty board and an unreadable one are different reports, and the screen says 
 
 That line takes the header's own slot in `board watch` and leads the one-shot table, in
 place of the session count. `no sessions` means board looked and the fleet is quiet.
+
+It reports the most fundamental fact it has room for, and there is an order: the claude
+roster, then cmux, then maki. A missing `claude` stops being reported once maki is
+reporting — board has a fleet on screen, and the tool you did not install was a choice.
 
 ## Config — `~/.board.json`
 
@@ -254,6 +317,11 @@ survive. A timestamped `.board-bak-*` copy is written first, an existing backup 
 overwritten, and running it twice is a report rather than an error. It refuses a
 settings file it cannot parse, exactly as `install-hooks` does: board cannot safely edit
 what it cannot read.
+
+On the maki side it takes the block back out of `init.lua`, byte for byte, and clears
+`~/.board/maki`. The `plugin.toml` goes only while it is still the one board wrote — if you
+have edited it, it is yours and it stays. An `init.lua` left holding nothing but whitespace
+is removed outright, since board is the one that created it.
 
 Then delete `~/.board.json` and the binary. **Labels and todos live only in
 `~/.board.json`**, so copy anything on the list out first; nothing else is written.

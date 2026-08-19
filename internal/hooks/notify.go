@@ -1,5 +1,7 @@
-// Package hooks is board's Claude Code integration: the notify entrypoint and the
-// installer that wires it up.
+// Package hooks is board's agent integration: the notify entrypoint, and the installers
+// that wire board into both agents. Two mechanisms, because the agents have two — hooks in
+// a JSON settings file for Claude Code, a Lua block and its permission manifest for maki
+// (maki.go, DESIGN.md §17).
 //
 // Invariant: notify must never fail the agent. It runs inside the agent's own hook
 // chain, so every error path here is a silent success — including a broken

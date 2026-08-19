@@ -1,4 +1,5 @@
-// Command board reports on every live Claude Code session running under cmux.
+// Command board reports on every live coding-agent session running under cmux — Claude
+// Code and maki, in one fleet (DESIGN.md §17).
 //
 // This file is dispatch and nothing else: each subcommand is a few lines that read
 // arguments and hand off to a package. Logic here is logic that cannot be tested.

@@ -9,18 +9,19 @@ import (
 // the interesting cases are the broken machines, and they are only testable if the
 // three strings arrive as data (§11).
 
-func TestFormatReportsAllThree(t *testing.T) {
+func TestFormatReportsEveryTool(t *testing.T) {
 	got := Format(Info{
 		Board:  "v0.1.0",
 		Claude: "2.1.220 (Claude Code)",
 		Cmux:   "0.64.16 (96) [5321becb6]",
+		Maki:   "maki 0.4.9",
 	})
-	for _, want := range []string{"v0.1.0", "2.1.220 (Claude Code)", "0.64.16 (96) [5321becb6]"} {
+	for _, want := range []string{"v0.1.0", "2.1.220 (Claude Code)", "0.64.16 (96) [5321becb6]", "0.4.9"} {
 		if !strings.Contains(got, want) {
-			t.Errorf("version output is missing %q — a bug report needs all three:\n%s", want, got)
+			t.Errorf("version output is missing %q — a bug report needs all of them:\n%s", want, got)
 		}
 	}
-	if n := len(strings.Split(strings.TrimRight(got, "\n"), "\n")); n != 3 {
+	if n := len(strings.Split(strings.TrimRight(got, "\n"), "\n")); n != 4 {
 		t.Errorf("got %d lines, want one per tool:\n%s", n, got)
 	}
 	if !strings.HasSuffix(got, "\n") {
@@ -40,23 +41,24 @@ func TestFormatDoesNotParseUpstreamStrings(t *testing.T) {
 
 // A missing tool is the normal case for this command: it is what someone runs when
 // board is not working. Every line must still name its tool and say something.
-func TestFormatMissingToolsStillReportThreeLines(t *testing.T) {
+func TestFormatMissingToolsStillReportEveryLine(t *testing.T) {
 	cases := []struct {
 		name string
 		in   Info
 	}{
-		{"no claude", Info{Board: "v0.1.0", Cmux: "0.64.16"}},
-		{"no cmux", Info{Board: "v0.1.0", Claude: "2.1.220"}},
+		{"no claude", Info{Board: "v0.1.0", Cmux: "0.64.16", Maki: "0.4.9"}},
+		{"no cmux", Info{Board: "v0.1.0", Claude: "2.1.220", Maki: "0.4.9"}},
+		{"no maki", Info{Board: "v0.1.0", Claude: "2.1.220", Cmux: "0.64.16"}},
 		{"nothing at all", Info{}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			got := Format(c.in)
 			lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
-			if len(lines) != 3 {
-				t.Fatalf("got %d lines, want 3 even when tools are missing:\n%s", len(lines), got)
+			if len(lines) != 4 {
+				t.Fatalf("got %d lines, want 4 even when tools are missing:\n%s", len(lines), got)
 			}
-			for _, tool := range []string{"board", "claude", "cmux"} {
+			for _, tool := range []string{"board", "claude", "cmux", "maki"} {
 				if !strings.Contains(got, tool) {
 					t.Errorf("no line for %q:\n%s", tool, got)
 				}

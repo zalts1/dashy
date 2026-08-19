@@ -5,8 +5,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        board reads its roster from `claude agents --json` and its tabs from cmux.
-        Neither is a documented contract, so **the upstream versions are usually the
+        board reads its rows from Claude Code and maki, and its tabs from cmux. None of
+        those is a documented contract, so **the upstream versions are usually the
         answer** — `board doctor` carries them along with what board could and could
         not read on your machine.
 
@@ -21,11 +21,12 @@ body:
       render: text
       placeholder: |
         board  v0.2.0
-        claude 2.1.220 (Claude Code)
-        cmux   0.64.16 (96) [5321becb6]
-        roster 16 sessions
+        claude 2.1.235 (Claude Code)
+        cmux   0.64.22 (102) [ddd4a01bc]
+        maki   0.4.9
+        roster 16 claude sessions · 3 maki sessions in 2 tabs
         tabs   22 tabs in 7 workspaces
-        hooks  Stop, Notification
+        hooks  Stop, Notification · maki init.lua
         config /Users/you/.board.json
         notify off — set notify_cmd to push
     validations:
@@ -36,9 +37,10 @@ body:
     attributes:
       label: What you expected, and what the board showed instead
       description: >
-        The gap is the bug. `16 sessions` with `0 tabs` is the common one — board joins
-        the two on pid and drops any interactive session with no tab, so a fleet that
-        looks too small usually means the tabs did not arrive.
+        The gap is the bug. `16 claude sessions` with `0 tabs` is the common one — board
+        joins the two on pid and drops any interactive session with no tab, so a fleet that
+        looks too small usually means the tabs did not arrive. For maki, `maki running, no
+        reports` on the roster row means `board install-hooks` has not been run.
     validations:
       required: true
 
