@@ -202,3 +202,83 @@ func TestTodosHaveNoStorybook(t *testing.T) {
 		}
 	}
 }
+
+// The location column answers "where does this work live", and it answers it in git's terms
+// rather than cmux's: the repository, and the worktree inside it when the session is in one.
+// cmux names a workspace per agent task, so its title routinely repeats the row's own label and
+// the column paid ~45 columns to say nothing (§9.39).
+func TestRepoAndTree(t *testing.T) {
+	tr := trees()
+	repos := map[string]string{repo: repo, treeA: repo, treeB: repo}
+
+	a := interactive()
+	a.Cwd = repo + "/app"
+	r := one(t, snap(a, func(s *Snapshot) { s.Trees, s.Repos = tr, repos }))
+	if r.Repo != "repo" {
+		t.Errorf("main checkout repo = %q, want repo", r.Repo)
+	}
+	// A main checkout has no worktree to name: the repository *is* the worktree, so naming it
+	// twice would be the duplication this replaced.
+	if r.Tree != "" {
+		t.Errorf("main checkout named a worktree: %q", r.Tree)
+	}
+
+	a.Cwd = treeA
+	r = one(t, snap(a, func(s *Snapshot) { s.Trees, s.Repos = tr, repos }))
+	if r.Repo != "repo" || r.Tree != "feature-a" {
+		t.Errorf("worktree row = %q -> %q, want repo -> feature-a", r.Repo, r.Tree)
+	}
+
+	// A background agent keeps the sentinel the README documents: it has no tab, and that is
+	// what the column has always said about it.
+	if got := one(t, snap(background(), func(s *Snapshot) {
+		s.Titles = map[int]cmux.Titles{}
+		s.Trees, s.Repos = tr, repos
+	})).Repo; got != "background" {
+		t.Errorf("background agent repo = %q, want background", got)
+	}
+
+	// A cwd board could not resolve leaves the column empty rather than inventing a name.
+	a.Cwd = "/Users/x/work/gone"
+	if r := one(t, snap(a, func(s *Snapshot) { s.Trees, s.Repos = tr, repos })); r.Repo != "" {
+		t.Errorf("unresolvable cwd got repo %q, want none", r.Repo)
+	}
+}
+
+// Where is the plain-text form both renderers size and print from, so the frame and the table
+// cannot disagree about what the column says (§3).
+func TestWhere(t *testing.T) {
+	cases := []struct {
+		r    Row
+		want string
+	}{
+		{Row{Repo: "dashy"}, "dashy"},
+		{Row{Repo: "app", Tree: "acme-1013"}, "app -> acme-1013"},
+		{Row{Repo: "background"}, "background"},
+		{Row{}, ""},
+		// A tree with no repo cannot happen through Build, and if it ever did the tree is the
+		// more specific fact and the one worth showing.
+		{Row{Tree: "orphan"}, "orphan"},
+	}
+	for _, c := range cases {
+		if got := c.r.Where(); got != c.want {
+			t.Errorf("Row%+v.Where() = %q, want %q", c.r, got, c.want)
+		}
+	}
+}
+
+// jump matches what the reader can see. The column shows the repository and the worktree now,
+// so those are searchable — otherwise `board jump dashy` would miss a row whose visible
+// location is exactly that.
+func TestFindMatchesTheLocation(t *testing.T) {
+	rows := []Row{
+		{Key: "a", Label: "one", Workspace: "WS", Repo: "dashy"},
+		{Key: "b", Label: "two", Workspace: "WS", Repo: "app", Tree: "acme-1013-dataview"},
+	}
+	if hits := Find(rows, "dashy"); len(hits) != 1 || hits[0].Key != "a" {
+		t.Errorf("Find(repo) = %+v, want the dashy row", hits)
+	}
+	if hits := Find(rows, "acme-1013"); len(hits) != 1 || hits[0].Key != "b" {
+		t.Errorf("Find(worktree) = %+v, want the worktree row", hits)
+	}
+}

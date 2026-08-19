@@ -62,6 +62,10 @@ func TestGoldenFrames(t *testing.T) {
 		// that stopped being closed (§18, §9.34).
 		{"frame-links.txt", goldenLinkFleet(),
 			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118, goldenScheme}, UI{}},
+		// The legend under `?`: the scale's rungs and all three glyphs by name, on the line the
+		// keys were on. Pinned because it is the one line whose whole job is to be read (§9.38).
+		{"frame-help.txt", goldenLinkFleet(),
+			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118, goldenScheme}, UI{Help: true}},
 	}
 	for _, c := range cases {
 		t.Run(c.file, func(t *testing.T) {
@@ -93,9 +97,11 @@ func goldenLinkFleet() board.Fleet {
 	f.Rows[0].Folder = "/Users/you/work/repo"
 	f.Rows[0].Preview = "https://app.localhost"
 	f.Rows[0].Storybook = "http://localhost:6006"
+	f.Rows[0].PR = "https://github.com/you/repo/pull/1497"
 	f.Rows[2].Folder = "/Users/you/work/repo/.claude/worktrees/csv export"
 	f.Rows[2].Storybook = "http://localhost:6007"
 	f.Rows[3].Folder, f.Rows[3].Preview = "/Users/you/work/other", "https://api.localhost:8443"
+	f.Rows[3].PR = "https://github.com/you/repo/pull/1502"
 	f.Rows[4].Storybook = "http://localhost:6007"
 	f.Rows = append(f.Rows, board.Row{Key: "todo:t0", State: "todo",
 		Label: "book the quarterly review", Idle: 26 * time.Hour, Rank: board.RankTodo})
@@ -111,7 +117,7 @@ func goldenTroubleFleet() board.Fleet {
 		Trouble: "cmux not found · board doctor",
 		Rows: []board.Row{
 			{Key: "K-BG", State: "blocked →", Label: "watch CI to green, or leave it here?",
-				Workspace: "background", Idle: 52 * 24 * time.Hour, Rank: board.RankBlocked, Stale: true},
+				Repo: "background", Idle: 52 * 24 * time.Hour, Rank: board.RankBlocked, Stale: true},
 		},
 		Blocked: 1,
 		Stale:   1,
@@ -145,11 +151,11 @@ func goldenTodoFleet() board.Fleet {
 func goldenFleet() board.Fleet {
 	f := board.Fleet{
 		Rows: []board.Row{
-			{Key: "K-BLK", State: "blocked →", Label: "merge app#1497", Workspace: "APP", Surface: "S-BLK", Idle: 3 * time.Hour, Rank: board.RankBlocked},
-			{Key: "K-BG", State: "blocked →", Label: "watch CI to green, or leave it here?", Workspace: "background", Surface: "", Idle: 52 * 24 * time.Hour, Rank: board.RankBlocked, Stale: true},
-			{Key: "K-RUN", State: "running", Label: "busy thing", Workspace: "KILL", Surface: "S-RUN", Idle: 0, Rank: board.RankWorking},
-			{Key: "K-OLD", State: "done", Label: "rotting thing", Workspace: "REVIEWS", Surface: "S-OLD", Idle: 50 * time.Hour, Rank: board.RankQuiet, Stale: true},
-			{Key: "K-NEW", State: "done", Label: "fresh thing", Workspace: "TASKS", Surface: "S-NEW", Idle: 5 * time.Minute, Rank: board.RankQuiet},
+			{Key: "K-BLK", State: "blocked →", Label: "merge app#1497", Repo: "APP", Surface: "S-BLK", Idle: 3 * time.Hour, Rank: board.RankBlocked},
+			{Key: "K-BG", State: "blocked →", Label: "watch CI to green, or leave it here?", Repo: "background", Surface: "", Idle: 52 * 24 * time.Hour, Rank: board.RankBlocked, Stale: true},
+			{Key: "K-RUN", State: "running", Label: "busy thing", Repo: "KILL", Surface: "S-RUN", Idle: 0, Rank: board.RankWorking},
+			{Key: "K-OLD", State: "done", Label: "rotting thing", Repo: "app", Tree: "csv-export", Surface: "S-OLD", Idle: 50 * time.Hour, Rank: board.RankQuiet, Stale: true},
+			{Key: "K-NEW", State: "done", Label: "fresh thing", Repo: "TASKS", Surface: "S-NEW", Idle: 5 * time.Minute, Rank: board.RankQuiet},
 		},
 		Blocked:    2,
 		Stale:      2,
@@ -158,7 +164,7 @@ func goldenFleet() board.Fleet {
 	}
 	for i := 0; i < 30; i++ {
 		f.Rows = append(f.Rows, board.Row{Key: fmt.Sprintf("K-F%d", i), State: "done",
-			Label: "filler", Workspace: "W", Surface: "S-F",
+			Label: "filler", Repo: "W", Surface: "S-F",
 			Idle: time.Duration(30-i) * time.Hour, Rank: board.RankQuiet})
 	}
 	return f

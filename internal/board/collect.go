@@ -7,6 +7,7 @@ import (
 	"github.com/zalts1/dashy/internal/claude"
 	"github.com/zalts1/dashy/internal/cmux"
 	"github.com/zalts1/dashy/internal/config"
+	"github.com/zalts1/dashy/internal/github"
 	"github.com/zalts1/dashy/internal/host"
 	"github.com/zalts1/dashy/internal/maki"
 	"github.com/zalts1/dashy/internal/preview"
@@ -61,12 +62,21 @@ func Collect() Fleet {
 	// whole join (§18) — and the memo matters because a fleet routinely has several
 	// sessions in one worktree.
 	trees := map[string]string{}
+	repos := map[string]string{}
 	resolve := func(dir string) {
 		if dir == "" {
 			return
 		}
 		if _, seen := trees[dir]; !seen {
-			trees[dir] = host.WorkTree(dir)
+			t := host.WorkTree(dir)
+			trees[dir] = t
+			// Memoised on the worktree rather than on the directory: several sessions in one
+			// worktree resolve the repository once, and the read is a single file (§18).
+			if t != "" {
+				if _, seen := repos[t]; !seen {
+					repos[t] = host.Repository(t)
+				}
+			}
 		}
 	}
 	for _, a := range agents {
@@ -80,6 +90,16 @@ func Collect() Fleet {
 	}
 	for _, sb := range previews.Storybooks {
 		resolve(sb.Dir)
+	}
+
+	// The pull requests, and the only read here that leaves the machine. Asked last because it
+	// needs the worktrees the loop above resolved, and asked at all only when the `github` key is
+	// set: unset — the default — nothing runs and no row carries the glyph (§10.12).
+	prs := map[string]string{}
+	if st.Config.GitHub {
+		for tree, pr := range github.Read(github.Targets(repos)) {
+			prs[tree] = pr.URL
+		}
 	}
 
 	clock := cmux.HookClock()
@@ -116,6 +136,8 @@ func Collect() Fleet {
 		Todos:      st.Todos,
 		Threshold:  st.Threshold(),
 		Trees:      trees,
+		Repos:      repos,
+		PRs:        prs,
 		Previews:   previews.Routes,
 		Storybooks: previews.Storybooks,
 		Maki:       roster,
@@ -127,14 +149,22 @@ func Collect() Fleet {
 	}, time.Now())
 }
 
-// Find returns the rows whose label or workspace contains q, case-insensitively.
+// Find returns the rows whose label, location or cmux workspace contains q, case-insensitively.
+//
+// The location is matched because it is what the reader can see: the column shows a repository
+// and a worktree now, so `board jump dashy` has to reach the row whose visible location is
+// exactly that. The workspace stays matchable even though it is no longer drawn — it was
+// matchable before, and taking a search term away is a worse surprise than an invisible one
+// that still works (§18).
 func Find(rows []Row, q string) []Row {
 	q = strings.ToLower(q)
 	var hits []Row
 	for _, r := range rows {
-		if strings.Contains(strings.ToLower(r.Label), q) ||
-			strings.Contains(strings.ToLower(r.Workspace), q) {
-			hits = append(hits, r)
+		for _, field := range []string{r.Label, r.Where(), r.Workspace} {
+			if strings.Contains(strings.ToLower(field), q) {
+				hits = append(hits, r)
+				break
+			}
 		}
 	}
 	return hits

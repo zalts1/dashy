@@ -12,18 +12,18 @@ The same fleet once, in plain text, for a pipe or a bug report:
 
 ```
 $ board
-STATE        LABEL                                        WORKSPACE            IDLE
-blocked → ⚠  merge app#1497 before branching              APP                 3h00m
-done ⚠       rotate the staging credentials               OPS                 3d02h
-done ⚠       answer the ACME security questionnaire       DOCS                1d04h
-done ⚠       backfill the events table                    DATA                7h20m
-done ⚠       hunt the flaky payment test                  background          5h00m
-done ⚠       fold the quiet band                          TOOLS               4h05m
-done ⚠       Review pipeline PR #541                      REVIEWS             2h48m
-done ⚠       ship the pricing page copy                   WEB                   55m
-done         bump the staging image                       INFRA                 26m
-done         migrate auth handlers to v2                  AUTH                   9m
-running      build the csv export endpoint                API                    0m
+STATE        LABEL                                        REPO                 IDLE
+blocked → ⧗  merge app#1497 before branching              app                 3h00m
+done ⧗       rotate the staging credentials               ops                 3d02h
+done ⧗       answer the ACME security questionnaire       docs -> acme-que…   1d04h
+done ⧗       backfill the events table                    data                7h20m
+done ⧗       hunt the flaky payment test                  background          5h00m
+done ⧗       fold the quiet band                          tools               4h05m
+done ⧗       Review pipeline PR #541                      reviews             2h48m
+done ⧗       ship the pricing page copy                   web                   55m
+done         bump the staging image                       infra                 26m
+done         migrate auth handlers to v2                  auth                   9m
+running      build the csv export endpoint                api                    0m
 todo         reply to the ACME csv export request                           12d ago
 todo         book the quarterly review                                       1d ago
 
@@ -57,10 +57,11 @@ so `board watch > frame.txt` works.
 Inside `board watch`: `↑`/`↓` (or `k`/`j`) select a row, `Enter` focuses that
 session's cmux tab **and leaves board running**, `a` adds a todo, `t` jumps to the top
 of the list, `d` finishes the selected one, `z` folds the quiet band to its count,
-`Esc` clears, `q` or `Ctrl-C` exits. That is the whole keymap — no
+`?` shows the legend, `Esc` clears, `q` or `Ctrl-C` exits. That is the whole keymap — no
 sorting, no filtering.
 
-`z` is the one thing that changes what the frame shows rather than where the cursor is.
+`z` and `?` are the two keys that change what the frame shows rather than where the cursor is;
+`?` only swaps the bottom line, so the fleet above it is untouched.
 QUIET starts **open**; folded, it keeps its header and its count — `QUIET · 13 ·
 collapsed` — so the backlog can be out of the way without being out of sight, and the
 rows it gives back go to the bands where something is happening. Folded rows are not
@@ -95,31 +96,59 @@ after 10s of no keypress so the tab always returns to being ambient.
 | `running` | working | `status: busy` | `working` |
 | `done` | finished its turn, unnoticed | everything else | `idle` |
 
-`⚠` marks a quiet session past the idle threshold (default 45m).
+`⧗` marks a quiet session past the idle threshold (default 45m) — it sits right after the state
+mark, so `○ ⧗` reads as "quiet, and has been for a while" in one glance. An hourglass rather than
+a warning triangle: a session nobody has looked at for three hours is not *wrong*, it is
+**waiting**.
 
 Both agents land on the same three words, and **the screen does not say which agent a row
 belongs to.** The action is the same either way — `Enter` focuses the tab — so a column
 repeating the agent on every row would cost width and answer a question you do not have.
 `board doctor` counts the two rosters separately, which is where the difference matters.
 
-## Three links per row — `⧆`, `⧇` and `⧉`
+## Four links per row — `⧆`, `⧇`, `⧉` and `⧭`
 
-At the right-hand end of a row, `board watch` puts up to three clickable glyphs:
+At the right-hand end of a row, `board watch` puts up to four clickable glyphs:
 
-    ○ migrate auth handlers to v2   ▇▇▇       9m  AUTH        ⧇ ⧉
+    ○ migrate auth handlers to v2   ▇▇▇       9m  AUTH        ⧇ ⧉ ⧭
     ○ ship the component library    ▇▇        4m  UI        ⧆ ⧇ ⧉
     ○ backfill the events table     ▇▇▇▇   7h20m  DATA          ⧉
 
 - **`⧆` pink** — a **Storybook** listening in the session's worktree
 - **`⧇` green** — the local **preview** serving that branch
 - **`⧉` cyan** — its **folder**, the worktree, opened in your editor to see the branch's diff
+- **`⧭` blue** — the **pull request** that branch has open (off by default; see below)
 
-They are ordered by how often a row has one, rarest first, so the folder anchors the right
-edge and the gaps fall on the left.
+The first three are ordered by how often a row has one, rarest first, so the folder anchors that
+run and the gaps fall on the left. `⧭` sits beyond all of them because it is the only one that does
+not point at this machine.
 
-Click them; they are terminal hyperlinks, so cmux opens the http ones in a browser tab beside
-the fleet and hands the folder to your editor. **board itself opens nothing** — it only says
-where the three things are.
+**⌘-click** them — hold Command and click. They are terminal hyperlinks, so cmux opens the http
+ones in a browser tab beside the fleet and hands the folder to your editor. **board itself opens
+nothing** — it only says where the three things are.
+
+A plain click does nothing, and that is Ghostty's rule rather than board's: a link fires only
+with the ctrl/super chord held, so selecting text over a row can never open something. Hovering
+does underline the glyph without any modifier, which is how you can tell a row has a live link
+before you reach for ⌘ — and cmux shows you the URL it points at while you hover, which names
+the destination more exactly than the glyph can.
+
+The frame says so too. The bottom line carries `⌘-click opens` whenever any row has a link, and
+**`?` swaps that line for the legend** — the idle scale's rungs, and each glyph by name:
+
+    ▇ 1h  ▇ 3h  ▇ 12h  ▇ 2d  ▇ 7d   ⧗ quiet a while   ⧆ storybook  ⧇ preview  ⧉ folder  ⧭ pr   ⌘-click   esc
+
+`?` again or `Esc` puts the keys back. It is the same line either way, so the frame never changes
+height, and the refresh keeps running while you read it. On a narrow tab it drops the scale's rungs
+rather than clipping, since the glyphs are what you opened it for.
+
+**Where a ⌘-click lands is cmux's decision, not board's.** An http link opens in a browser tab
+inside cmux by default. To use your own browser instead:
+
+    defaults write com.cmuxterm.app browserOpenTerminalLinksInCmuxBrowser -bool false
+
+board reports which way it is set on `board doctor`'s `links` row and never writes it — silently
+reconfiguring another application is not something a reporting tool should do.
 
 Both are properties of the same thing, the **git worktree** the session is in. A session in
 `.claude/worktrees/csv-export` gets that worktree's folder and that branch's preview; one in
@@ -156,6 +185,29 @@ TLS is one you have put behind portless, and it shows up as `⧇` instead.
 
 Nothing to install and nothing to configure — run `npm run storybook` and the glyph appears on
 the matching row within a tick.
+
+### `⧭` — the pull request
+
+Off by default, because it is the one thing board does that touches the network:
+
+```json
+{ "config": { "github": true } }
+```
+
+With it on, board asks `gh` whether the worktree's branch has an open pull request — one
+`gh api graphql --cache 3m` per worktree, four at a time. **board makes no request itself and holds
+no credential:** `gh` already has your login, and `gh` owns the cache, so nothing new is written and
+a cached answer costs ~40ms rather than ~580ms. That is also what keeps a 10-second poll from
+becoming a rate-limit problem.
+
+Every way it can fail is the same outcome — no glyph, no complaint: no `gh`, not logged in, no
+network, a repository you cannot see, a detached HEAD, a remote that is not GitHub. `board doctor`
+tells them apart.
+
+cmux knows this too, and board cannot ask it: cmux polls GitHub itself and keeps the badge inside
+the running process, where `cmux sidebar-state` will only answer about the tab it is called from.
+So board asks a second time. If cmux ever puts `pr` into `top --json`, this key stops being needed
+— `DESIGN.md` §10.12.
 
 ### `⧉` — the folder, in your editor
 
@@ -229,8 +281,11 @@ There is no undo: the header reports the text it removed, so a mis-key costs one
 of retyping.
 
 Claude Code rows come from `claude agents --json`, which knows every live session. cmux
-supplies tab titles, workspace names and the idle clock, joined on pid. Background agents
-(`claude --bg`) appear with `background` in the workspace column — they have no tab,
+supplies tab titles, workspace names and the idle clock, joined on pid. The location column is
+git's rather than cmux's — the repository, and the worktree inside it in green when the session
+is in one — because cmux names a workspace per agent task, so its title tends to repeat the row's
+own label. Background agents
+(`claude --bg`) appear with `background` in the location column — they have no tab,
 so they cannot be jumped to, and their label is the open question Claude Code
 records for them.
 
@@ -307,7 +362,9 @@ release was cut against. None of the three is a documented contract, so a patch 
 any of them can move what board reads; `board doctor` reports what is on your machine, and
 a mismatch is the first thing to check.
 
-No dependencies, no daemon, no port, no telemetry, and no network of its own — the only
+No dependencies, no daemon, no port, no telemetry, and — unless you set `github` — no network of
+its own. With that key on, board asks `gh` about your open pull requests and nothing else; the only
+other
 request board can make is a `notify_cmd` you wrote yourself. `board watch` in a dedicated
 tab is the whole runtime.
 
@@ -335,7 +392,7 @@ which says how it was built rather than hiding it.
     maki   0.4.9
     roster 16 claude sessions · 3 maki sessions in 2 tabs
     tabs   22 tabs in 7 workspaces
-    links  2 portless routes · 1 storybook · cursor
+    links  2 portless routes · 1 storybook · vscode · 1 open pr · cmux browser
     hooks  Stop, Notification · maki init.lua
     config /Users/you/.board.json
     notify off — set notify_cmd to push
@@ -363,6 +420,7 @@ names:
     links  3 portless routes, none live · cursor               ← stale file; no row gets ⧇
     links  1 portless route · no editor — board editor         ← no ⧉ on any row
     links  1 portless route · zed, not installed here          ← ⧉ is drawn and may miss
+    links  1 route · github on, no gh on PATH · cmux browser   ← no ⧭; install gh
     links  1 route · 2 storybook ports outside every worktree · cursor   ← no ⧆ on any row
 
 The storybook clause appears only when something is listening in the range, since board scans
@@ -391,7 +449,8 @@ reporting — board has a fleet on screen, and the tool you did not install was 
     "idle_threshold_minutes": 45,
     "poll_seconds": 10,
     "notify_cmd": "curl -sS -d @- https://ntfy.sh/my-topic",
-    "editor": "cursor"
+    "editor": "cursor",
+    "github": false
   },
   "labels": { "<cmux surface id>": "<label>" },
   "todos": [

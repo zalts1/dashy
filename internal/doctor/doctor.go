@@ -23,7 +23,9 @@ import (
 	"github.com/zalts1/dashy/internal/cmux"
 	"github.com/zalts1/dashy/internal/config"
 	"github.com/zalts1/dashy/internal/editor"
+	"github.com/zalts1/dashy/internal/github"
 	"github.com/zalts1/dashy/internal/hooks"
+	"github.com/zalts1/dashy/internal/host"
 	"github.com/zalts1/dashy/internal/maki"
 	"github.com/zalts1/dashy/internal/preview"
 	"github.com/zalts1/dashy/internal/version"
@@ -85,6 +87,18 @@ type Report struct {
 	Editor      string
 	EditorFound bool
 
+	// The pull-request half. GitHubOn is the config key; PRs is how many worktrees have one open;
+	// NoGh is gh missing from PATH, which is the one failure with an obvious repair. Reported only
+	// when the key is on, since off is the default and a permanent "pr off" is a clause every
+	// reader learns to skip (§9.13).
+	GitHubOn bool
+	PRs      int
+	NoGh     bool
+	// LinksInCmux is where a ⌘-click lands: a cmux browser tab, or the system browser. cmux's
+	// preference, never board's — reported because "why did that open there" has no other answer
+	// in board's output (§9.42).
+	LinksInCmux bool
+
 	Hooks    []string // events with board's notify hook wired up
 	HooksErr error    // settings.json unreadable — the state install-hooks refuses on
 
@@ -128,6 +142,15 @@ func Gather() Report {
 
 	ed := editor.Gather(st.Config.Editor, config.Path())
 
+	prs := 0
+	noGh := false
+	if st.Config.GitHub {
+		noGh = !github.Available()
+		if !noGh {
+			prs = len(github.Read(github.Targets(treesOf(previews))))
+		}
+	}
+
 	makiHooked, makiManifest, makiHooksErr := hooks.MakiInstalled()
 
 	spans := map[string]bool{}
@@ -159,6 +182,10 @@ func Gather() Report {
 		NoPortless:     noPortless,
 		Editor:         ed.Chosen.Name,
 		EditorFound:    ed.Installed[ed.Chosen.Name],
+		GitHubOn:       st.Config.GitHub,
+		PRs:            prs,
+		NoGh:           noGh,
+		LinksInCmux:    cmux.OpensLinksInternally(),
 		Hooks:          installed,
 		HooksErr:       hooksErr,
 		MakiHooked:     makiHooked,
@@ -206,7 +233,7 @@ func Format(r Report) string {
 	// halves are stated in those terms. It is also six characters, which is what keeps the
 	// answer column where version.LabelWidth puts it — widening a documented constant to
 	// fit a label is the tail wagging the dog (§13).
-	row("links", previewRow(r)+storybookRow(r)+editorRow(r))
+	row("links", previewRow(r)+storybookRow(r)+editorRow(r)+prRow(r)+browserRow(r))
 
 	claudeHooks, claudeOK := "not installed", false
 	switch {
@@ -289,6 +316,34 @@ func editorRow(r Report) string {
 	}
 }
 
+// treesOf is the worktree-to-repository map the pull-request read needs, rebuilt here from the
+// preview roster's directories. doctor gathers independently of board.Collect on purpose: it has
+// to work when the join does not (§14).
+func treesOf(previews preview.Roster) map[string]string {
+	out := map[string]string{}
+	for _, dirs := range [][]preview.Route{previews.Routes, previews.Storybooks} {
+		for _, rt := range dirs {
+			if t := host.WorkTree(rt.Dir); t != "" {
+				out[t] = host.Repository(t)
+			}
+		}
+	}
+	// The directory doctor itself was run from, so a machine with nothing serving still reports a
+	// pull request when there is one.
+	if t := host.WorkTree(cwd()); t != "" {
+		out[t] = host.Repository(t)
+	}
+	return out
+}
+
+func cwd() string {
+	d, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return d
+}
+
 // storybookRow is the Storybook clause of the `links` row, and it is silent when nothing is
 // listening in the range: board scans every tick whether or not anybody uses Storybook, and a
 // permanent "0 storybooks" would be noise on most machines (§9.13).
@@ -304,6 +359,33 @@ func storybookRow(r Report) string {
 	default:
 		return fmt.Sprintf(" · %d %s", r.Storybooks, plural(r.Storybooks, "storybook"))
 	}
+}
+
+// prRow is the pull-request clause, and it is silent unless the `github` key is on: off is the
+// default, and a permanent "pr off" would be noise on every machine that never wants it. The
+// README is where the key is documented (§10.12).
+func prRow(r Report) string {
+	switch {
+	case !r.GitHubOn:
+		return ""
+	case r.NoGh:
+		// The one PR failure with an obvious repair, and the only one worth telling apart: not
+		// logged in, offline and invisible-repository all look the same from here and all mean
+		// "no glyph".
+		return " · github on, no gh on PATH"
+	default:
+		return fmt.Sprintf(" · %d open %s", r.PRs, plural(r.PRs, "pr"))
+	}
+}
+
+// browserRow says where a ⌘-click lands. It is cmux's preference and board only reports it —
+// but it is reported always, because it is the answer to a question every reader of the links
+// eventually asks and board's output is otherwise silent on it (§9.42).
+func browserRow(r Report) string {
+	if r.LinksInCmux {
+		return " · cmux browser"
+	}
+	return " · system browser"
 }
 
 // makiRoster is the maki half of the roster row: what the two reads found, or nothing at

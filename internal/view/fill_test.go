@@ -13,9 +13,9 @@ import (
 // stops well short of the right edge and the surplus is the thing under test.
 func narrowFleet() board.Fleet {
 	return board.Fleet{Workspaces: 2, Stale: 1, Oldest: 30 * time.Hour, Rows: []board.Row{
-		{Key: "K-1", Label: "PT8", Workspace: "CAP", Surface: "S-1",
+		{Key: "K-1", Label: "PT8", Repo: "CAP", Surface: "S-1",
 			Idle: 30 * time.Hour, Rank: board.RankQuiet, Stale: true},
-		{Key: "K-2", Label: "ASAF WH", Workspace: "REVIEWS", Surface: "S-2",
+		{Key: "K-2", Label: "ASAF WH", Repo: "REVIEWS", Surface: "S-2",
 			Idle: 4 * time.Hour, Rank: board.RankQuiet},
 	}}
 }
@@ -78,9 +78,9 @@ func TestHeaderNeverExceedsTheTerminalWhateverTheBody(t *testing.T) {
 func outlierFleet() board.Fleet {
 	f := board.Fleet{Workspaces: 1}
 	for range 9 {
-		f.Rows = append(f.Rows, board.Row{Label: "twelve chars", Workspace: "WS", Rank: board.RankQuiet})
+		f.Rows = append(f.Rows, board.Row{Label: "twelve chars", Repo: "WS", Rank: board.RankQuiet})
 	}
-	f.Rows = append(f.Rows, board.Row{Label: strings.Repeat("x", 60), Workspace: "WS", Rank: board.RankQuiet})
+	f.Rows = append(f.Rows, board.Row{Label: strings.Repeat("x", 60), Repo: "WS", Rank: board.RankQuiet})
 	return f
 }
 
@@ -109,7 +109,7 @@ func TestLabelColumnFallsBackToP90WhenItDoesNotFit(t *testing.T) {
 func TestLabelColumnStillFitsAFleetOfLongLabels(t *testing.T) {
 	f := board.Fleet{Workspaces: 1}
 	for range 10 {
-		f.Rows = append(f.Rows, board.Row{Label: strings.Repeat("x", 60), Workspace: "WS", Rank: board.RankQuiet})
+		f.Rows = append(f.Rows, board.Row{Label: strings.Repeat("x", 60), Repo: "WS", Rank: board.RankQuiet})
 	}
 	if labelW, _, _ := columns(f, 300, true); labelW != 60 {
 		t.Errorf("label column = %d, want 60: every row needs it", labelW)
@@ -122,8 +122,13 @@ func TestBarsSpendWhatTheLabelsDoNotUse(t *testing.T) {
 	f := narrowFleet()
 	_, _, narrow := columns(f, 60, true)
 	_, _, wide := columns(f, 200, true)
-	if narrow != barCells {
-		t.Errorf("bar is %d cells at 60 columns, want the base %d — there is no surplus to spend", narrow, barCells)
+	// At its narrowest the bar is at least its base width, and the surplus only grows it. Not an
+	// equality: how much surplus exists at 60 columns depends on what the rest of the chrome
+	// costs, and the gutter stopped being a constant when it became elastic (§9.41). The
+	// invariant is that a bar is never *cut* below its base — a shorter run on an absolute scale
+	// reports a smaller number.
+	if narrow < barCells {
+		t.Errorf("bar is %d cells at 60 columns, below the base %d", narrow, barCells)
 	}
 	if wide <= narrow {
 		t.Errorf("bar is %d cells at 200 columns and %d at 60: the surplus went nowhere", wide, narrow)
@@ -137,7 +142,7 @@ func TestARowSpendsTheWidthItIsGiven(t *testing.T) {
 	for _, f := range []board.Fleet{narrowFleet(), wideFleet(), outlierFleet()} {
 		for _, cols := range []int{70, 90, 120, 149, 200, 300} {
 			labelW, tailW, barW := columns(f, cols, true)
-			w := rowChrome(barW) + labelW + tailW
+			w := rowChrome(barW, gutterFor(f)) + labelW + tailW
 			if w == cols-headMargin || barW == barMaxCells {
 				continue
 			}

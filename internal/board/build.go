@@ -29,6 +29,14 @@ type Snapshot struct {
 	// because it is a walk over the filesystem; Build is pure over the answer, which is
 	// what lets §18's join be pinned by a fixture rather than by a real repository.
 	Trees map[string]string
+	// Repos maps a worktree to the repository it belongs to, resolved impurely beside Trees.
+	// Separate from Trees because they are two questions: which worktree is this work in, and
+	// which repository is that worktree part of (§18).
+	Repos map[string]string
+	// PRs maps a worktree to the URL of the open pull request for its branch. Empty unless the
+	// `github` key is set — the one read board makes over the network, and the only one that is
+	// off by default (§10.12).
+	PRs map[string]string
 	// Previews are the local dev servers up on this machine, each with the directory it
 	// is serving. Enrichment, never a row: a preview with no session is nobody's work.
 	Previews []preview.Route
@@ -88,12 +96,22 @@ func Build(s Snapshot, now time.Time) Fleet {
 			ws = noWorkspace
 		}
 		idle := idleFor(s.Clock, a.SessionID, now)
+		repo, tree := where(s, a.Cwd)
+		if a.IsBackground() {
+			// The sentinel the README documents as how you spot a background agent, and it has
+			// always lived in this column. A background agent does have a repository; saying so
+			// instead would be a second change riding on this one.
+			repo, tree = noWorkspace, ""
+		}
 		r := Row{
 			Key:       a.SessionID,
 			State:     "done",
 			Label:     label(s.Labels[t.ID], s.JobLabels[a.SessionID], t.Surface, a.Cwd),
 			Workspace: ws,
 			Surface:   t.ID,
+			Repo:      repo,
+			Tree:      tree,
+			PR:        s.PRs[s.Trees[a.Cwd]],
 			Folder:    s.Trees[a.Cwd],
 			Preview:   nearest(s.Previews, s.Trees, s.Trees[a.Cwd], a.Cwd),
 			Storybook: nearest(s.Storybooks, s.Trees, s.Trees[a.Cwd], a.Cwd),
@@ -138,6 +156,7 @@ func Build(s Snapshot, now time.Time) Fleet {
 		if ws == "" {
 			ws = noWorkspace
 		}
+		makiRepo, makiTree := where(s, rep.Cwd)
 		for _, sess := range rep.Sessions {
 			idle := idleFor(s.Clock, sess.ID, now)
 			r := Row{
@@ -146,6 +165,9 @@ func Build(s Snapshot, now time.Time) Fleet {
 				Label:     label(s.Labels[t.ID], sess.Title, t.Surface, rep.Cwd),
 				Workspace: ws,
 				Surface:   t.ID,
+				Repo:      makiRepo,
+				Tree:      makiTree,
+				PR:        s.PRs[s.Trees[rep.Cwd]],
 				Folder:    s.Trees[rep.Cwd],
 				Preview:   nearest(s.Previews, s.Trees, s.Trees[rep.Cwd], rep.Cwd),
 				Storybook: nearest(s.Storybooks, s.Trees, s.Trees[rep.Cwd], rep.Cwd),

@@ -53,15 +53,27 @@ func TestParseTop(t *testing.T) {
 
 func TestStripSpinner(t *testing.T) {
 	cases := map[string]string{
-		"✳ merge app#1497":  "merge app#1497",
-		"⠋ thinking":        "thinking", // braille spinner frame
-		"⣿ late frame":      "late frame",
-		"plain title":       "plain title",
-		"  padded  ":        "padded",
-		"":                  "",
-		"✳":                 "",
-		"✳✳ two glyphs":     "✳ two glyphs", // only the leading one is activity
-		"done ✳ mid-string": "done ✳ mid-string",
+		"✳ merge app#1497": "merge app#1497",
+		"⠋ thinking":       "thinking", // braille spinner frame
+		// The quarter-circle rotation, which is what cmux actually uses for a busy agent. It
+		// survived into the label for as long as this function knew only ✳ and braille, so a
+		// row's label changed on every redraw — the one thing this function exists to stop
+		// (EVIDENCE.md §9.40).
+		"◐ Dashy local preview": "Dashy local preview",
+		"◑ Dashy local preview": "Dashy local preview",
+		"◒ half way":            "half way",
+		"◓ last frame":          "last frame",
+		"⣿ late frame":          "late frame",
+		"plain title":           "plain title",
+		"  padded  ":            "padded",
+		"":                      "",
+		"✳":                     "",
+		"✳✳ two glyphs":         "✳ two glyphs", // only the leading one is activity
+		"done ✳ mid-string":     "done ✳ mid-string",
+		// A quarter circle is a legitimate character mid-label, and only the leading one is
+		// activity — the same rule ✳ already followed.
+		"phase ◐ of the moon": "phase ◐ of the moon",
+		"◐◑ two frames":       "◑ two frames",
 	}
 	for in, want := range cases {
 		if got := StripSpinner(in); got != want {

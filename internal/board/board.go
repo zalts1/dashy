@@ -28,15 +28,34 @@ const todoKey = "todo:"
 // Kind by coincidence, not by dependency.
 const noWorkspace = "background"
 
+// TreeArrow separates a repository from the worktree inside it. Exported because the frame
+// paints the two halves in different colours and so has to find the seam, while the table prints
+// the whole thing plain — one separator, so they cannot drift apart (§3).
+//
+// Spelled out rather than a glyph because it is read as words, and because this string goes into
+// the one-shot table, where a glyph is one more thing a pipe has to carry (§18). Spelled out rather than a glyph
+// because it is read as words, and because the column is plain text in the one-shot table where
+// a glyph would be one more thing a pipe has to carry (§18).
+const TreeArrow = " -> "
+
 type Row struct {
 	// Key identifies the row for selection. It is the session id, which every row has
 	// — Surface is empty for background agents, and selection has to reach them: it is
 	// what lifts a row out of the collapsed quiet tail as well as what Enter acts on.
-	Key       string
-	State     string
-	Label     string
+	Key   string
+	State string
+	Label string
+	// Workspace is the cmux workspace's title. It is no longer drawn — cmux names a workspace
+	// per agent task, so on a real fleet it repeats the row's own label (§9.39) — but it is
+	// still the fleet's spread in the header and still matched by jump.
 	Workspace string
 	Surface   string // cmux surface id; empty for background agents, which have no tab
+	// Repo and Tree are the location column: the repository this work lives in, and the linked
+	// worktree inside it when the session is in one rather than in the main checkout. Tree is
+	// empty for a main checkout, because there the repository *is* the worktree and naming it
+	// twice is the duplication this replaced (§18).
+	Repo string
+	Tree string
 	// Folder is the worktree this session is working in — what an editor opens to show
 	// the branch's changed files. Empty when board could not resolve the directory, and
 	// for a todo, which has no process and so no directory (§18).
@@ -49,9 +68,27 @@ type Row struct {
 	// field and not a second Preview, because they are two different things to open and a row
 	// can carry both.
 	Storybook string
-	Idle      time.Duration
-	Stale     bool // quiet past the threshold
-	Rank      int
+	// PR is the open pull request for this worktree's branch, or "" — including whenever the
+	// `github` key is off, which is the default and means board asked nothing (§10.12).
+	PR    string
+	Idle  time.Duration
+	Stale bool // quiet past the threshold
+	Rank  int
+}
+
+// Where is the location column in plain text: the repository, and the worktree inside it when
+// there is one. Both renderers size and print from this, so they cannot disagree about what the
+// column says (§3) — the frame paints the two halves differently, which is a rendering choice
+// on top of one fact.
+func (r Row) Where() string {
+	switch {
+	case r.Repo == "":
+		return r.Tree
+	case r.Tree == "":
+		return r.Repo
+	default:
+		return r.Repo + TreeArrow + r.Tree
+	}
 }
 
 // Jumpable reports whether this row has a tab to focus. Selectable and jumpable are

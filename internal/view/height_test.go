@@ -15,7 +15,7 @@ func fleetOf(blocked, working, quiet int) board.Fleet {
 	add := func(n, rank int, label string) {
 		for i := 0; i < n; i++ {
 			f.Rows = append(f.Rows, board.Row{Key: fmt.Sprintf("K-%s%d", label, i), Label: label,
-				Workspace: "WS", Surface: label + string(rune('a'+i%26)),
+				Repo: "WS", Surface: label + string(rune('a'+i%26)),
 				Idle: time.Duration(i) * time.Hour, Rank: rank})
 		}
 	}

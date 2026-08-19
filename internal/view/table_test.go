@@ -31,10 +31,13 @@ func TestTableRowsAndSummary(t *testing.T) {
 		t.Fatalf("got %d lines, want %d:\n%s", len(lines), 1+len(f.Rows)+2, out)
 	}
 
-	if !strings.Contains(lines[3], "⚠") {
-		t.Errorf("stale row lost its warning mark: %q", lines[3])
+	// The same glyph the frame uses, read off the constant rather than spelled out here: the two
+	// renderers must agree about what stale looks like, and a literal in the test would let one
+	// of them drift (§9.41).
+	if !strings.Contains(lines[3], staleGlyph) {
+		t.Errorf("stale row lost its mark: %q", lines[3])
 	}
-	if strings.Contains(lines[1], "⚠") {
+	if strings.Contains(lines[1], staleGlyph) {
 		t.Errorf("fresh row marked stale: %q", lines[1])
 	}
 
@@ -50,7 +53,7 @@ func TestTableRowsAndSummary(t *testing.T) {
 
 func TestTableTruncatesRatherThanWrapping(t *testing.T) {
 	f := board.Fleet{Rows: []board.Row{
-		{State: "done", Label: strings.Repeat("x", 100), Workspace: strings.Repeat("w", 40)},
+		{State: "done", Label: strings.Repeat("x", 100), Repo: strings.Repeat("w", 40)},
 	}}
 	out := strings.TrimRight(Table(f, time.Hour), "\n")
 	for _, line := range strings.Split(out, "\n") {

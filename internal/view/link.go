@@ -106,31 +106,51 @@ func escapePath(s string) string {
 // All are single cell under the East Asian Width table, which is what decides the width
 // Ghostty allocates. That is the check that matters for the fit, and it is a different question
 // from the drawn size above: a glyph can occupy one cell and be drawn small inside it.
+// The state marks, and the one that qualifies them. ○ quiet, ◐ working, ▫ a todo — Geometric
+// Shapes, unchanged since the frame was drawn. ⧗ is new and replaces ⚠ on a stale row: a warning
+// triangle says "something is wrong", and a session nobody has looked at for three hours is not
+// wrong, it is *waiting*. An hourglass says that, and it comes from the same block as the link
+// glyphs so it is drawn at their size (§9.41).
+const (
+	quietGlyph   = "○"
+	workingGlyph = "◐"
+	todoGlyph    = "▫"
+	staleGlyph   = "⧗"
+)
+
 const (
 	previewGlyph   = "⧇"
 	storybookGlyph = "⧆"
 	folderGlyph    = "⧉"
+	// ⧭ is a circle with a down arrow, which is literally a *pull* mark — and a circle, so it is
+	// the one link glyph that cannot be mistaken for the three squares at a glance.
+	prGlyph = "⧭"
 )
 
 // actionCell is the row's trailing links, each on its own column so they line up down the
 // band whichever of them a row happens to have. Empty when the row has none — an empty cell
 // would pad every row of a fleet that has nothing to point at.
 //
-// Order is by how often a row has one, rarest first: Storybook, preview, folder. The folder is
-// on nearly every row, so putting it last anchors the cell's right-hand edge and keeps the
-// trailing trim from firing; the Storybook is the rarest, so its empty column falls on the
-// left where it costs nothing to look at. The alternative — grouping the two http links
-// together — spreads the gaps through the middle of the cell instead, which reads as ragged
-// down a band (§18).
+// Order is by how often a row has one, rarest first — Storybook, preview, folder — with the pull
+// request outside that run at the far right. The folder is on nearly every row, so ending the
+// local run with it keeps the trailing trim from firing; the Storybook is the rarest, so its empty
+// column falls on the left where it costs nothing to look at.
+//
+// The PR sits beyond all of them because it is the only one that does not point at this machine.
+// The first three are a port, a port and a directory; ⧭ is github.com. Grouping by locality is
+// why it is last rather than where its frequency would put it (§18).
 //
 // Green for the live thing and cyan for the editor, matched in measured contrast so neither
 // dominates the other (see linkPreview/linkFolder). Colour is what separates the two glyphs
 // at a glance; shape is what separates them when it is not read. Neither is the accent and
 // neither is dim: these are affordances rather than data, and exactly one element in the
-// frame is allowed to shout (§6). Under cmux the terminal underlines them on hover, which is
-// what makes them findable without a legend line promising a click the reader cannot see.
+// frame is allowed to shout (§6). Under cmux the terminal underlines them on hover with no
+// modifier — board does not enable mouse reporting, so Ghostty evaluates links locally — which
+// is what makes them findable without a legend line. Note that *opening* one is ⌘-click and not
+// click: Ghostty wants the ctrl/super chord held at press so a text selection cannot fire a
+// link. That half is a platform convention the frame cannot teach, so the README says it (§18).
 func actionCell(r board.Row, scheme string) string {
-	storybook, preview, folder := " ", " ", " "
+	storybook, preview, folder, pr := " ", " ", " ", " "
 	if r.Preview != "" {
 		preview = link(r.Preview, fg(linkPreview, previewGlyph))
 	}
@@ -140,7 +160,10 @@ func actionCell(r board.Row, scheme string) string {
 	if url := editorURL(scheme, r.Folder); url != "" {
 		folder = link(url, fg(linkFolder, folderGlyph))
 	}
+	if r.PR != "" {
+		pr = link(r.PR, fg(linkPR, prGlyph))
+	}
 	// Right-trimmed because nothing follows it on the line: a row whose only link is the
-	// Storybook would otherwise end in four columns of padding.
-	return strings.TrimRight(storybook+" "+preview+" "+folder, " ")
+	// Storybook would otherwise end in six columns of padding.
+	return strings.TrimRight(storybook+" "+preview+" "+folder+" "+pr, " ")
 }

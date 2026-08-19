@@ -39,6 +39,7 @@ func TestPaletteContrast(t *testing.T) {
 		"linkPreview":   linkPreview,
 		"linkFolder":    linkFolder,
 		"linkStorybook": linkStorybook,
+		"linkPR":        linkPR,
 	}
 	for name, hex := range values {
 		for _, bg := range []string{bgLightest, bgDarkest} {
@@ -80,7 +81,8 @@ func TestIdleRampIsOrdinal(t *testing.T) {
 // it is the one this test is really guarding (§9.36).
 func TestLinkGlyphColoursAreMatched(t *testing.T) {
 	set := map[string]string{
-		"linkPreview": linkPreview, "linkFolder": linkFolder, "linkStorybook": linkStorybook,
+		"linkPreview": linkPreview, "linkFolder": linkFolder,
+		"linkStorybook": linkStorybook, "linkPR": linkPR,
 	}
 	for _, bg := range []string{bgLightest, bgDarkest} {
 		for an, a := range set {
@@ -106,6 +108,7 @@ func TestEachGlyphGetsItsOwnColour(t *testing.T) {
 		"preview":   fg(linkPreview, previewGlyph),
 		"storybook": fg(linkStorybook, storybookGlyph),
 		"folder":    fg(linkFolder, folderGlyph),
+		"pr":        fg(linkPR, prGlyph),
 	} {
 		if !strings.Contains(cell, want) {
 			t.Errorf("the %s glyph is not painted its own colour:\n%q", name, cell)

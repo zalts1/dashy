@@ -364,3 +364,44 @@ func TestFormatReportsTheMakiRosterErrorVerbatim(t *testing.T) {
 		t.Errorf("the maki roster error lost its detail:\n%s", got)
 	}
 }
+
+// The pull-request clause is silent unless the key is on, because off is the default and a
+// permanent "pr off" is a clause every reader learns to skip (§9.13). When it is on, the one
+// failure worth telling apart is the one with an obvious repair.
+func TestFormatReportsPullRequests(t *testing.T) {
+	off := healthy()
+	if got := Format(off); strings.Contains(got, "pr") && strings.Contains(got, "github") {
+		t.Errorf("the key is off and doctor still talks about pull requests:\n%s", got)
+	}
+	on := healthy()
+	on.GitHubOn, on.PRs = true, 2
+	if got := Format(on); !strings.Contains(got, "2 open prs") {
+		t.Errorf("links row does not count open pull requests:\n%s", got)
+	}
+	none := healthy()
+	none.GitHubOn, none.PRs = true, 0
+	if got := Format(none); !strings.Contains(got, "0 open prs") {
+		t.Errorf("links row is silent about a fleet with no open PR:\n%s", got)
+	}
+	missing := healthy()
+	missing.GitHubOn, missing.NoGh = true, true
+	if got := Format(missing); !strings.Contains(got, "no gh on PATH") {
+		t.Errorf("links row does not name the one repairable PR failure:\n%s", got)
+	}
+}
+
+// Where a ⌘-click lands is cmux's preference and board's only job is to say which. Reported
+// always, because board's output is otherwise silent on it and "why did that open there" has no
+// other answer (§9.42).
+func TestFormatSaysWhereLinksOpen(t *testing.T) {
+	inside := healthy()
+	inside.LinksInCmux = true
+	if got := Format(inside); !strings.Contains(got, "cmux browser") {
+		t.Errorf("links row does not say links open inside cmux:\n%s", got)
+	}
+	outside := healthy()
+	outside.LinksInCmux = false
+	if got := Format(outside); !strings.Contains(got, "system browser") {
+		t.Errorf("links row does not say links open in the system browser:\n%s", got)
+	}
+}

@@ -64,6 +64,15 @@ var sessions = []session{
 	{511, "s-ops", "rotate the staging credentials", "OPS", "idle", 3*24*time.Hour + 2*time.Hour},
 }
 
+// repoOf is the fixture's stand-in for host.Repository: a path under `.claude/worktrees` belongs
+// to the checkout above it, anything else is its own repository.
+func repoOf(cwd string) string {
+	if i := strings.Index(cwd, "/.claude/worktrees/"); i > 0 {
+		return cwd[:i]
+	}
+	return cwd
+}
+
 // snapshot is one tick of the demo world. blocked names a session that has just come
 // back to ask something; extra is a todo that has just been added.
 func snapshot(now time.Time, blocked, extra string) board.Snapshot {
@@ -73,6 +82,12 @@ func snapshot(now time.Time, blocked, extra string) board.Snapshot {
 		JobLabels: map[string]string{"s-bg": "hunt the flaky payment test"},
 		Labels:    map[string]string{},
 		Threshold: threshold,
+		// The location column reads these (§18). Supplied by the fixture like everything else
+		// here: the demo must not depend on there being git repositories on the machine doing
+		// the recording, and one session is put in a linked worktree so the recording shows the
+		// `repo -> worktree` form as well as the plain one.
+		Trees: map[string]string{},
+		Repos: map[string]string{},
 		Todos: []config.Todo{
 			{ID: "2483b5", Text: "reply to the ACME csv export request", Created: now.Add(-12 * 24 * time.Hour)},
 			{ID: "9f1c22", Text: "book the quarterly review", Created: now.Add(-26 * time.Hour)},
@@ -86,10 +101,17 @@ func snapshot(now time.Time, blocked, extra string) board.Snapshot {
 		if x.id == blocked {
 			status = "waiting"
 		}
+		cwd := "/Users/you/work/" + strings.ToLower(x.workspace)
+		if x.id == "s-docs" {
+			// One session in a linked worktree, so the recording shows both forms of the column.
+			cwd = "/Users/you/work/docs/.claude/worktrees/acme-questionnaire"
+		}
 		s.Agents = append(s.Agents, claude.Agent{SessionID: x.id, Pid: x.pid, Kind: "interactive",
-			Cwd: "/Users/you/work/" + strings.ToLower(x.workspace), Status: status})
+			Cwd: cwd, Status: status})
 		s.Titles[x.pid] = cmux.Titles{ID: "S-" + x.id, Surface: x.label, Workspace: x.workspace}
 		s.Clock[x.id] = now.Add(-x.idle)
+		s.Trees[cwd] = cwd
+		s.Repos[cwd] = repoOf(cwd)
 	}
 	// One background agent, because they are the rows people are surprised board has:
 	// no tab, so no title and no workspace, and its label is the question Claude Code

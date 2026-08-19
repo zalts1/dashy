@@ -58,6 +58,10 @@ func bar(d time.Duration, w int) string {
 // set (1h/6h/1d/3d/7d) reads better and is wrong: 1d is already past the third
 // boundary, so it duplicated 3d's rung and dropped the one rows use for half a day
 // (EVIDENCE.md §9.20).
+// swatchDim is the bar glyph at a mid-ramp colour, for the ambient line's `▇ elapsed`. Mid
+// rather than the first rung: it stands for the whole scale rather than for a fresh session.
+func swatchDim() string { return fg(idleRamp[len(idleRamp)/2], "▇") }
+
 func scaleLegend() string {
 	out := ""
 	marks := []time.Duration{time.Hour, 3 * time.Hour, 12 * time.Hour, 48 * time.Hour, 168 * time.Hour}

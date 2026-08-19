@@ -54,6 +54,11 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.35 | The click is unobservable, so "ask on first use" is unbuildable — the chooser had to become a command | `editor/`, `cmd/board/commands.go`, `DESIGN.md` §18, §10.10 |
 | 9.36 | Colour was a rule enforced by memory; a test now measures it, and found the ramp is ordinal rather than legible and pink cannot reach the set's weight | `view/palette.go`, `view/palette_test.go`, `view/link.go`, `DESIGN.md` §6, §18 |
 | 9.37 | cmux does correlate the PR and board cannot reach it: exposed per-tab, and `top --json` names no tabs | `preview/`, `DESIGN.md` §10.12, §18 |
+| 9.38 | The underline advertises the link; the gesture does not. "Click them" was wrong, and the scale's key moved behind `?` to pay for saying so | `view/frame.go`, `view/scale.go`, `watch/keys.go`, `DESIGN.md` §6, §18 |
+| 9.39 | The widest column repeated the label: cmux names a workspace per agent task. It shows the repository and worktree now — and a silent edit shipped the map unwired | `board/`, `view/frame.go`, `view/table.go`, `host/worktree.go`, `DESIGN.md` §18 |
+| 9.40 | `StripSpinner` knew two spinner families and cmux uses a third — every busy row's label changed on every redraw | `cmux/top.go` |
+| 9.41 | The gutter was sized for a badge most fleets do not have, and `⚠` claimed a waiting session was broken | `view/layout.go`, `view/frame.go`, `DESIGN.md` §6 |
+| 9.42 | cmux's PR badge is unreachable, proven three ways; and navy at a legible weight is not navy | `github/`, `cmux/links.go`, `view/palette.go`, `DESIGN.md` §10.12, §18 |
 
 ---
 
@@ -1324,3 +1329,241 @@ file, so it is found by a bounded port scan — and that scan needs the same ans
 routes need: where is this pid working. Both now go through **one** `lsof` over the union of
 their pids, which is why the second source costs nothing measurable on top of the first. Two
 mechanisms, one expensive read, the same join.
+
+### 9.38 A hyperlink advertises itself; ⌘-click does not (2026-08-19)
+
+**Believed:** §18 argued against a legend line for the link glyphs on the grounds that a
+hyperlink is self-advertising — the terminal underlines it on hover and changes the cursor — so
+naming it would spend a scarce line restating what the glyph already does. That was §9.14 read
+forwards: name the route that exists.
+
+**Found:** half of it is self-advertising. The first person to use the feature saw the glyph,
+hovered it, saw it underline, clicked it, and nothing happened.
+
+Ghostty splits the two conditions and only one of them is free:
+
+    mouseLinkRefreshAllowedState(mouse_reporting=false, …) → always true    ← the underline
+    a left click opens a link only with the ctrl/super chord held at press  ← the gesture
+
+The underline needs no modifier, and specifically *because* board never enables mouse reporting:
+links are evaluated locally rather than forwarded to the TUI. So the affordance appears exactly
+as the argument claimed. **Opening** needs ⌘ held at press — Ghostty's rule, so that dragging a
+selection across a row cannot fire a link — and nothing on screen said so. The README said
+"click them", which was simply wrong.
+
+**Shipped:** `⌘-click opens` on the bottom line, conditional on the cell being drawn — the same
+predicate the cell uses, so a tab too narrow for the links cannot advertise them. Note what was
+*not* added: a key that opens the link. That would mean board launching a browser, which §8
+forbids; the hint describes a gesture the terminal owns and board cannot perform.
+
+**Then the meanings, and the width that paid for them.** "Which glyph is which" does not fit
+beside the idle scale — `⧆ storybook  ⧇ preview  ⧉ folder` is 36 columns on top of a line already
+at 87. So the bottom line took a third state rather than a fourth element: `?` swaps it for the
+legend, and swaps back. Same line, so §12's height rule holds; a display mode like the quiet
+fold (§9.21), so it does not pause the refresh, because nothing on that line goes stale.
+
+**This amends §6.** The ambient line now shows `▇ elapsed` and the five rungs live under `?`,
+which brushes against "a value scale without a key is decoration". The rule survives, narrowly
+and deliberately: the bar is still *labelled*, so a reader knows it measures elapsed time
+without pressing anything, and only the resolution moved. The trade was explicit — the rungs
+cost 34 columns, the two link hints and a legend that can name things cost less, and both lines
+came out shorter than the one they replaced:
+
+    before                                     87 cols
+    ambient  ▇ elapsed … ⌘-click opens ? keys   84 cols
+    ?        ▇ 1h … ⧆ storybook … esc           82 cols
+
+**One thing found while designing it, worth recording because it changes what a legend is for.**
+board cannot see ⌘ at all — it reads stdin in raw mode and a bare modifier press emits no bytes,
+so nothing can key off holding it. But cmux answers the meaning question unprompted: on
+`GHOSTTY_ACTION_MOUSE_OVER_LINK` it calls `setLinkHoverURL` and renders the hovered link's URL
+through its own indicator view. Hovering `⧆` names `http://localhost:6006`, which is more precise
+than any legend board has room for. So `?` is the durable answer for a reader who does not know
+the glyphs, and hover is the better answer for one who wants to know where *this* row points.
+
+### 9.39 The widest column was repeating the label (2026-08-19)
+
+**Believed:** the tail column shows the cmux workspace, and that is the one fact no band below
+carries — where in the fleet this session lives. §6 sized it as the elastic column that gives way
+last, and the header counts the same thing as the fleet's spread.
+
+**Found:** on a real fleet it repeats the row's own label. cmux creates a workspace per agent
+task and titles it after the task, and board's label precedence falls through to the tab title,
+so both halves of the row end up as the same string:
+
+    LABEL                                    WORKSPACE
+    Align dataview styles with playground…   ✳ Align dataview styles with playground…
+    Wizard copy and UX fixes                 ✳ Wizard copy and UX fixes
+    Build adoption page with score and ba…   ✳ Build adoption page with score and ba…
+
+Four of six rows. The column was spending ~45 of the frame's columns to say what the row already
+said, and squeezing the label to do it — the label was capped at 30 characters on a 124-column
+terminal while its neighbour restated it in full.
+
+Not a defect in board: it reported the workspace faithfully, and a fleet organised
+workspace-per-project (which is what the demo fixture assumes — APP, API, AUTH) gets real value
+from it. It is a defect in the *assumption* that a cmux workspace names a place rather than a
+task.
+
+**Shipped:** the column answers the same question in git's terms instead — the repository, and
+the worktree inside it when the session is in a linked one:
+
+    REPO
+    app -> acme-1013-dataview-refactor
+    date-invite
+    dashy
+
+Both halves were already on the row: `Folder` for the link cell gives the worktree, and
+`host.Repository` resolves it to the repository by reading the `gitdir:` pointer in the
+worktree's `.git` file. No new subprocess and no new read per tick — the repository is memoised
+on the worktree, so several sessions in one worktree resolve it once. The label column gained 16
+columns on the fleet above.
+
+The worktree half is painted in the preview's green rather than a new colour. It already means
+"this is the live thing", and a worktree is the live branch, so the readings agree — adding a
+seventh hue to say the same thing would not (§6). No brackets: the colour is the separation.
+
+`Where()` lives on `Row` so the frame and the table print and size from one string, and `TreeArrow`
+is exported because the frame has to find the seam to paint the halves differently while the table
+prints it plain. `Find` matches the location now as well as the label — the column is what a reader
+sees, so `board jump dashy` has to reach it — and still matches the workspace, because taking a
+search term away is a worse surprise than one that is invisible but works.
+
+Background agents keep `background` in that column. They do have a repository, and saying so
+would be a second change riding on this one; the README documents the sentinel as how you spot
+them.
+
+**And the finding that cost the most time, which is not about columns.** `Snapshot.Repos` was
+added, filled in `Collect`, read in `Build`, tested — and never wired into the struct literal.
+A mechanical edit had targeted `Trees:     trees,` and gofmt had since realigned that line to
+`Trees:      trees,`, so the replacement silently matched nothing. Every row fell through to the
+main-checkout branch and the column showed a bare worktree name.
+
+**The suite could not have caught it.** `Build` is pure and its test supplies `Repos` directly;
+`Collect` is the impure gather and has no test by design (§11). This is exactly the gap
+`CONTRIBUTING`'s "verify it by hand as well" exists for, and it was the hand check that found it
+— the third silent no-op edit in one session, after two stale comments in §9.36. The lesson is
+narrow and cheap: **after a mechanical edit, assert the thing is present, not that the command
+exited zero.**
+
+### 9.40 StripSpinner knew two spinners and cmux uses a third (2026-08-19)
+
+**Believed:** `StripSpinner` removes the leading activity glyph from a tab title "so labels stay
+stable between renders" — `✳` while a turn is queued, or a braille frame. Both were handled and
+tested.
+
+**Found:** cmux animates a busy agent with the quarter-circle rotation `◐◑◒◓` (U+25D0–25D3), which
+was in neither range. So a working row rendered:
+
+    ◐ ◑ Dashy local preview and VS Code integration
+
+The first mark is board's own `◐` for a working session, painted green. The second is a spinner
+frame that survived into the label — unpainted, rotating between ticks, and reported as
+"confusing", which it is. The label changed on every redraw, which is the exact defect this
+function exists to prevent, and it had been doing so for as long as cmux has used that spinner.
+
+**Shipped:** a third range. The check is now a small `isSpinner` predicate rather than a boolean
+expression inline, because the shape of the bug is "one more family nobody knew about" and the
+next one should cost one line. The symptom to recognise is written in the doc comment: a label
+that flickers between ticks.
+
+Worth noting what the test did not catch. `TestStripSpinner` had a table of nine cases and every
+one of them passed — the function was correct about everything it had been told about. Fixture
+tests confirm the cases you thought of, and the one that mattered came from looking at the
+screen.
+
+### 9.41 The gutter was sized for a badge most fleets do not have (2026-08-19)
+
+**Believed:** the state-mark column is 10 columns wide because the BLOCKED badge is 9 printed
+plus a space, and the mark is right-aligned inside it so it hugs the label instead of leaving a
+gap. Both halves were deliberate.
+
+**Found:** on a fleet with nothing blocked — which is most fleets most of the time — a quiet row
+reads as eleven blank columns and then a one-character mark:
+
+               ○ Align dataview styles with playground design
+
+Right-aligning made it worse rather than better: the gap the rule was avoiding got moved to the
+left of the mark, where it is the first thing the eye crosses on every row. And the width was
+being reserved for a badge that was not on screen.
+
+**Shipped, two changes that turned out to be the same change.** The mark is **left-aligned**, so
+it starts one column after the lead and every row's mark is in the same place whatever follows
+it. And the gutter is **elastic** — the badge's width when a row is blocked, four columns
+otherwise. Together they take a quiet row from eleven leading blanks to three, and hand six
+columns to the label on any fleet with nothing blocked.
+
+The cost is that a blocked row arriving shifts the table right. Accepted: a row entering NEEDS
+YOU already moves every band on the screen, and the columns belong to the label the rest of the
+time. Both widths include the stale glyph and a trailing space, because a blocked row can be
+stale too — sized without it, the blocked row came out one column wider than every other, which
+`TestDurationColumnsShareARightEdge` caught immediately.
+
+**And the stale mark stopped being a warning.** `⚠` sat three columns from the IDLE value, where
+it read as a property of the number, and it claimed something was wrong. A session nobody has
+looked at for three hours is not wrong — it is **waiting**. `⧗` says that, and beside the state
+mark it qualifies the state: `○ ⧗` is one glance. It comes from the link glyphs' block, so it is
+drawn at their size (§9.36).
+
+Two tests were over-specified and said so under the change: one asserted the label column equals
+its floor at 50 columns, and one asserted the bar equals its base width at 60 — both true only
+of the old chrome arithmetic. Rewritten as the invariants they meant (the label never goes below
+its floor; the bar is never cut below its base), which is what they should have been.
+
+
+### 9.42 cmux knows the pull request and cannot be asked — the proof (2026-08-19)
+
+§9.37 concluded that board cannot reach cmux's pull-request badge and deferred the glyph. Asked
+again — reasonably: *why can board not use what cmux already stores?* — the conclusion held, and
+the second look produced the evidence the first one was missing.
+
+**cmux does not store it.** It polls api.github.com and holds the badge in the running process.
+Everything on disk was checked:
+
+    session-com.cmuxterm.app.json          gitBranch, listeningPorts — no pull request
+    closed-item-history-…json              1 "pull" hit: the word "Pulled" in a transcript
+    notification-feed-history-…json        1 "pull" hit: "pull 0.64.22" in scrollback
+    search.db (+ wal)                      0 occurrences of "pull", no PR columns
+    defaults read com.cmuxterm.app         0 hits
+    github URLs across all of the above    0
+
+**And the one live surface cannot be pointed anywhere.** `cmux sidebar-state` prints exactly what
+was wanted, for the caller's own tab only:
+
+    cmux sidebar-state --tab=<a real surface id>   → the caller's tab
+    cmux sidebar-state --tab=NOT-A-REAL-ID        → the caller's tab
+    cmux sidebar-state --tab=tab:2                → the caller's tab
+
+`--tab` is accepted and ignored for every value. And board never has a caller's tab, because it
+strips cmux's env from every child (§9.8) — with those vars blanked the command returns **nothing
+at all**, not even the focused tab.
+
+So the premise is right and the conclusion is unavoidable: cmux knows, and there is no addressing
+path. board fetches a second time what one process on the machine already has. **That is the thing
+to fix upstream** — cmux putting `pr` into `top --json`, which it could do for free, would make
+the glyph local and delete `internal/github` entirely. Recorded as §10.12's trigger.
+
+**Shipped anyway, behind a key.** `gh api graphql --cache 3m` per worktree, off unless
+`{"config": {"github": true}}`. The shape of the compromise is that board makes no request and
+holds no credential and writes no cache: gh does all three. What board owns is one query, two file
+reads per worktree — `HEAD` for the branch, `.git/config` for the remote — and the decision to ask.
+
+Reading those two files is worth a note. A linked worktree's `HEAD` is not beside its files; it
+lives in the gitdir its `.git` pointer names, which is the same indirection §9.39 followed for the
+repository. Verified on four real worktrees, including both remote spellings git writes.
+
+**And navy is not a colour a dark terminal can show.** Asked for navy, measured it, and true navy
+`#000080` is **1.14** against `#282c34` — a third of the bare red §9.4 rejected as unreadable.
+Claude Code's own accent `#4C8DFF` is 4.37, below the link set's ~7.0, and only 5.1° of hue from
+the idle ramp, so it would read as a bar colour in a frame full of blue bars.
+
+`#b0b0ff` is navy's *hue* — 240.0°, exactly — lightened until it clears the set: 7.00 against
+`#282c34`, and 26.9° clear of the ramp's 213°. So the answer to "use navy" is navy's hue at the
+only luminance that works, which is a sentence worth having written down the next time somebody
+asks for a dark colour on a dark surface.
+
+**One thing board declined to build.** A config key to make ⌘-click open the system browser
+instead of cmux's own. Where a link lands is cmux's preference
+(`browserOpenTerminalLinksInCmuxBrowser`), and board reporting it is `doctor`'s job while board
+*writing* it would be one tool silently reconfiguring another — the line §8 already draws around a
+`plugin.toml` board did not create. The README carries the `defaults write` instead.

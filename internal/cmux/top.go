@@ -106,12 +106,32 @@ func surfaceNode(v map[string]any, ws, wsTitle string) node {
 	return n
 }
 
-// StripSpinner drops the leading activity glyph Claude Code puts in tab titles
-// (✳ or a braille spinner frame) so labels stay stable between renders.
+// StripSpinner drops the leading activity glyph an agent puts in a tab title so labels stay
+// stable between renders. A rotating frame in a label means the label changes on every redraw,
+// which is the whole reason this exists.
+//
+// Three families, because three have turned up: ✳ while a turn is queued, a braille frame, and
+// the quarter-circle rotation ◐◑◒◓ — the last of which was missing and shipped a visible defect
+// for as long as it was (EVIDENCE.md §9.40). Any new spinner is one more range here, so the
+// symptom to recognise is a label that flickers between ticks.
+//
+// Only the *leading* glyph is activity. A quarter circle mid-label is somebody's text.
 func StripSpinner(s string) string {
 	r := []rune(strings.TrimSpace(s))
-	if len(r) > 0 && (r[0] == '✳' || (r[0] >= 0x2800 && r[0] <= 0x28FF)) {
+	if len(r) > 0 && isSpinner(r[0]) {
 		return strings.TrimSpace(string(r[1:]))
 	}
 	return string(r)
+}
+
+func isSpinner(r rune) bool {
+	switch {
+	case r == '✳':
+		return true
+	case r >= 0x2800 && r <= 0x28FF: // braille, any frame
+		return true
+	case r >= 0x25D0 && r <= 0x25D3: // ◐ ◑ ◒ ◓
+		return true
+	}
+	return false
 }

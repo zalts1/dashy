@@ -21,11 +21,11 @@ func screen(rows, cols int) Screen {
 // with no tab.
 func fixture() board.Fleet {
 	return board.Fleet{Workspaces: 4, Rows: []board.Row{
-		{Key: "K-BLK", State: "blocked →", Label: "merge app#1497", Workspace: "APP", Surface: "S-BLK", Idle: 3 * time.Hour, Rank: board.RankBlocked},
-		{Key: "K-BG", State: "blocked →", Label: "no tab to jump to", Workspace: "background", Idle: time.Hour, Rank: board.RankBlocked},
-		{Key: "K-OLD", State: "done", Label: "rotting thing", Workspace: "REVIEWS", Surface: "S-OLD", Idle: 50 * time.Hour, Rank: board.RankQuiet, Stale: true},
-		{Key: "K-NEW", State: "done", Label: "fresh thing", Workspace: "TASKS", Surface: "S-NEW", Idle: 5 * time.Minute, Rank: board.RankQuiet},
-		{Key: "K-RUN", State: "running", Label: "busy thing", Workspace: "KILL", Surface: "S-RUN", Rank: board.RankWorking},
+		{Key: "K-BLK", State: "blocked →", Label: "merge app#1497", Repo: "APP", Surface: "S-BLK", Idle: 3 * time.Hour, Rank: board.RankBlocked},
+		{Key: "K-BG", State: "blocked →", Label: "no tab to jump to", Repo: "background", Idle: time.Hour, Rank: board.RankBlocked},
+		{Key: "K-OLD", State: "done", Label: "rotting thing", Repo: "REVIEWS", Surface: "S-OLD", Idle: 50 * time.Hour, Rank: board.RankQuiet, Stale: true},
+		{Key: "K-NEW", State: "done", Label: "fresh thing", Repo: "TASKS", Surface: "S-NEW", Idle: 5 * time.Minute, Rank: board.RankQuiet},
+		{Key: "K-RUN", State: "running", Label: "busy thing", Repo: "KILL", Surface: "S-RUN", Rank: board.RankWorking},
 	}}
 }
 
@@ -63,10 +63,10 @@ func collapsing() board.Fleet {
 	f := fixture()
 	for i := 0; i < 40; i++ {
 		f.Rows = append(f.Rows, board.Row{Key: fmt.Sprintf("K-F%d", i), Label: "filler",
-			Workspace: "W", Surface: "S-F", Idle: time.Duration(40-i) * time.Hour, Rank: board.RankQuiet})
+			Repo: "W", Surface: "S-F", Idle: time.Duration(40-i) * time.Hour, Rank: board.RankQuiet})
 	}
 	f.Rows = append(f.Rows, board.Row{Key: "K-BGQ", Label: "background agent, no tab",
-		Workspace: "background", Idle: time.Minute, Rank: board.RankQuiet})
+		Repo: "background", Idle: time.Minute, Rank: board.RankQuiet})
 	return f
 }
 
@@ -146,12 +146,12 @@ func TestBarsOnlyWhereTimeIsOwed(t *testing.T) {
 }
 
 func TestColumnWidths(t *testing.T) {
-	wide := board.Fleet{Rows: []board.Row{{Label: strings.Repeat("x", 200), Workspace: "APP"}}}
+	wide := board.Fleet{Rows: []board.Row{{Label: strings.Repeat("x", 200), Repo: "APP"}}}
 	// avail is what the elastic columns share once the fixed chrome and the right
 	// margin are paid for.
 	// Measured against a base-width bar: these are the cases where the label is what the
 	// terminal is short of, so there is no surplus for the bar to have taken.
-	avail := func(cols int) int { return cols - headMargin - rowChrome(barCells) }
+	avail := func(cols int) int { return cols - headMargin - rowChrome(barCells, gutterFor(wide)) }
 	cases := []struct {
 		name string
 		f    board.Fleet
@@ -159,11 +159,10 @@ func TestColumnWidths(t *testing.T) {
 		want int
 	}{
 		{"short labels do not shrink below the floor", fixture(), 130, minLabelW},
-		// The tail keeps its floor even for a 3-letter workspace, so the label gets
+		// The tail keeps its floor even for a 3-letter repo, so the label gets
 		// what is left of avail, not all of it.
 		{"a long label is capped by the terminal", wide, 90, avail(90) - runes(wsHeader)},
 		{"and by the absolute cap on a wide terminal", wide, 400, maxLabelW},
-		{"a narrow terminal cannot push it below the floor", wide, 50, minLabelW},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -172,14 +171,22 @@ func TestColumnWidths(t *testing.T) {
 			}
 		})
 	}
+	// A narrow terminal may not push the label below its floor. Asserted as a floor rather than
+	// as an exact width, which is what it always meant: how many columns the label gets at 50
+	// depends on what the location column's own floor costs, and that changed when the header
+	// became REPO (§9.39). The invariant is the floor, not the arithmetic that lands on it.
+	if got, _, _ := columns(wide, 50, true); got < minLabelW {
+		t.Errorf("label column = %d at 50 cols, below the floor %d", got, minLabelW)
+	}
+
 	// Sized to content: the longest label present, so bars sit next to the text.
 	f := board.Fleet{Rows: []board.Row{{Label: strings.Repeat("x", 30)}}}
 	if got, _, _ := columns(f, 130, true); got != 30 {
 		t.Errorf("label column = %d, want 30 (the longest label)", got)
 	}
-	// And the tail is sized to the longest workspace, not to a guess: it used to have
+	// And the tail is sized to the longest location, not to a guess: it used to have
 	// no width of its own at all, which is what wrapped the rows.
-	f = board.Fleet{Rows: []board.Row{{Label: "x", Workspace: "platform-migration"}}}
+	f = board.Fleet{Rows: []board.Row{{Label: "x", Repo: "platform-migration"}}}
 	if _, got, _ := columns(f, 130, true); got != len("platform-migration") {
 		t.Errorf("tail column = %d, want %d", got, len("platform-migration"))
 	}
@@ -241,7 +248,7 @@ func TestQuietFolds(t *testing.T) {
 
 	t.Run("no quiet band, no key", func(t *testing.T) {
 		bare := board.Fleet{Rows: []board.Row{
-			{Key: "K-RUN", State: "running", Label: "busy thing", Workspace: "KILL", Rank: board.RankWorking},
+			{Key: "K-RUN", State: "running", Label: "busy thing", Repo: "KILL", Rank: board.RankWorking},
 		}}
 		if strings.Contains(Frame(bare, screen(44, 130), UI{}), "fold") {
 			t.Error("a fold key offered for a band that is not there")

@@ -81,3 +81,56 @@ func realTempDir(t *testing.T) string {
 	}
 	return dir
 }
+
+// Repository is the other half of WorkTree: a linked worktree's *repository*, so the column
+// can say `app -> feature-a` rather than making the reader guess which repo a branch directory
+// belongs to (§18).
+func TestRepository(t *testing.T) {
+	tmp := realTempDir(t)
+	repo := filepath.Join(tmp, "repo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git", "worktrees", "feature-a"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tree := filepath.Join(repo, ".claude", "worktrees", "feature-a")
+	if err := os.MkdirAll(tree, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A linked worktree's .git is a file naming the gitdir inside the repository it came from.
+	// That pointer is the only thing on disk that connects the two.
+	gitdir := "gitdir: " + filepath.Join(repo, ".git", "worktrees", "feature-a") + "\n"
+	if err := os.WriteFile(filepath.Join(tree, ".git"), []byte(gitdir), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := Repository(tree); got != repo {
+		t.Errorf("Repository(worktree) = %q, want the repository %q", got, repo)
+	}
+	// A main checkout is its own repository: .git is a directory, there is no pointer to read,
+	// and answering itself is what lets the caller treat both the same way.
+	if got := Repository(repo); got != repo {
+		t.Errorf("Repository(main checkout) = %q, want itself", got)
+	}
+	// A directory in no repository at all answers itself too.
+	loose := filepath.Join(tmp, "loose")
+	if err := os.MkdirAll(loose, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := Repository(loose); got != loose {
+		t.Errorf("Repository(no repo) = %q, want itself", got)
+	}
+	// A .git file board cannot make sense of answers the worktree rather than guessing. A
+	// wrong repository name in the column is worse than a missing one.
+	odd := filepath.Join(tmp, "odd")
+	if err := os.MkdirAll(odd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(odd, ".git"), []byte("something else entirely\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := Repository(odd); got != odd {
+		t.Errorf("Repository(unparseable .git) = %q, want itself", got)
+	}
+	if got := Repository(""); got != "" {
+		t.Errorf("Repository(\"\") = %q, want empty", got)
+	}
+}

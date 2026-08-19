@@ -44,6 +44,12 @@ const (
 	linkPreview   = "#51cf66" // ⧇ a dev server is serving this worktree
 	linkFolder    = "#3bc9db" // ⧉ the worktree, in an editor
 	linkStorybook = "#ff99bb" // ⧆ a component workbench listening in this worktree
+	// ⧭ the open pull request for this worktree's branch. Navy's own hue — 240° exactly —
+	// lightened until a dark terminal can show it: true navy #000080 measures 1.14 against
+	// #282c34, a third of the bare red §9.4 rejected, so "navy" at this weight is this. Chosen
+	// 27° clear of the idle ramp's 213° as well, because a blue in the frame that is not a bar
+	// has to be unmistakably not a bar (§9.42).
+	linkPR = "#b0b0ff"
 )
 
 // idleRamp is the ordinal ramp for idle magnitude: dim = fresh, bright = rotting.

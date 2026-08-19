@@ -14,26 +14,30 @@ import (
 func linkFleet() board.Fleet {
 	return board.Fleet{
 		Rows: []board.Row{
-			{Key: "K-1", State: "running", Label: "build the export endpoint", Workspace: "API",
+			{Key: "K-1", State: "running", Label: "build the export endpoint", Repo: "API",
 				Surface: "S-1", Rank: board.RankWorking,
 				Folder: "/Users/you/work/repo", Preview: "https://api.localhost"},
-			{Key: "K-2", State: "done", Label: "migrate auth handlers", Workspace: "AUTH",
+			{Key: "K-2", State: "done", Label: "migrate auth handlers", Repo: "AUTH",
 				Surface: "S-2", Idle: 30 * time.Minute, Rank: board.RankQuiet,
 				Folder: "/Users/you/work/repo/.claude/worktrees/auth-v2"},
-			{Key: "K-5", State: "done", Label: "all three links", Workspace: "UI",
+			{Key: "K-5", State: "done", Label: "all four links", Repo: "UI",
 				Surface: "S-5", Idle: 12 * time.Minute, Rank: board.RankQuiet,
 				Folder:    "/Users/you/work/repo",
 				Preview:   "https://ui.localhost",
-				Storybook: "http://localhost:6006"},
-			{Key: "K-3", State: "done", Label: "no directory at all", Workspace: "OPS",
+				Storybook: "http://localhost:6006",
+				PR:        "https://github.com/you/repo/pull/7"},
+			{Key: "K-6", State: "done", Label: "a pull request and nothing else", Repo: "OPS",
+				Surface: "S-6", Idle: 8 * time.Minute, Rank: board.RankQuiet,
+				PR: "https://github.com/you/repo/pull/9"},
+			{Key: "K-3", State: "done", Label: "no directory at all", Repo: "OPS",
 				Surface: "S-3", Idle: 90 * time.Minute, Rank: board.RankQuiet, Stale: true},
-			{Key: "K-4", State: "done", Label: "a preview and no folder", Workspace: "WEB",
+			{Key: "K-4", State: "done", Label: "a preview and no folder", Repo: "WEB",
 				Surface: "S-4", Idle: 20 * time.Minute, Rank: board.RankQuiet,
 				Preview: "https://web.localhost"},
 			{Key: "todo:t1", State: "todo", Label: "book the quarterly review",
 				Idle: 26 * time.Hour, Rank: board.RankTodo},
 		},
-		Stale: 1, Workspaces: 5, Oldest: 90 * time.Minute, TodoCap: 10,
+		Stale: 1, Workspaces: 6, Oldest: 90 * time.Minute, TodoCap: 10,
 	}
 }
 
@@ -69,8 +73,11 @@ func TestActionCell(t *testing.T) {
 	if !strings.Contains(both, linkOpen+"cursor://file/Users/you/work/repo"+st) {
 		t.Errorf("folder glyph is not a link to the chosen editor: %q", both)
 	}
-	if printed(both) != actionsW {
-		t.Errorf("cell with both links printed %d columns, want %d: %q", printed(both), actionsW, both)
+	// Five, not actionsW: the slots are fixed, so an absent *leading* glyph holds its column and an
+	// absent *trailing* one is trimmed. This row has the middle two, so it keeps the Storybook's
+	// blank on the left and loses the PR's on the right.
+	if printed(both) != 5 {
+		t.Errorf("cell with preview+folder printed %d columns, want 5: %q", printed(both), both)
 	}
 
 	folderOnly := actionCell(byKey(t, "K-2"), "cursor")
@@ -81,8 +88,8 @@ func TestActionCell(t *testing.T) {
 	if !strings.HasPrefix(folderOnly, "  ") {
 		t.Errorf("folder glyph did not keep the preview's column: %q", folderOnly)
 	}
-	if printed(folderOnly) != actionsW {
-		t.Errorf("folder-only cell printed %d columns, want %d: %q", printed(folderOnly), actionsW, folderOnly)
+	if printed(folderOnly) != 5 {
+		t.Errorf("folder-only cell printed %d columns, want 5: %q", printed(folderOnly), folderOnly)
 	}
 
 	// Nothing to point at is no cell at all, not an empty one — that is what keeps a row
@@ -98,15 +105,29 @@ func TestActionCell(t *testing.T) {
 	// than spaced out: padding there would widen the frame's right edge on a row that has
 	// nothing in the column it widened for (§9.29).
 	previewOnly := actionCell(byKey(t, "K-4"), "cursor")
-	// All three, for the row that has them: the cell is exactly its width, no more.
+	// All four, for the row that has them: the cell is exactly its width, no more.
 	if all := actionCell(byKey(t, "K-5"), "cursor"); printed(all) != actionsW {
-		t.Errorf("cell with all three printed %d columns, want %d: %q", printed(all), actionsW, all)
+		t.Errorf("cell with all four printed %d columns, want %d: %q", printed(all), actionsW, all)
 	} else {
-		for _, g := range []string{previewGlyph, storybookGlyph, folderGlyph} {
+		for _, g := range []string{storybookGlyph, previewGlyph, folderGlyph, prGlyph} {
 			if !strings.Contains(all, g) {
-				t.Errorf("cell with all three is missing %q: %q", g, all)
+				t.Errorf("cell with all four is missing %q: %q", g, all)
 			}
 		}
+		// The pull request is the rightmost thing on the row, because it is the only one that
+		// does not point at this machine (§18).
+		if strings.Index(all, prGlyph) < strings.Index(all, folderGlyph) {
+			t.Errorf("the PR glyph is not right of the folder: %q", all)
+		}
+	}
+	// A pull request alone still fills the whole cell, because its column is the last one: the
+	// three blanks in front of it are what keep it under the same header as everybody else's.
+	prOnly := actionCell(byKey(t, "K-6"), "cursor")
+	if printed(prOnly) != actionsW {
+		t.Errorf("PR-only cell printed %d columns, want %d: %q", printed(prOnly), actionsW, prOnly)
+	}
+	if !strings.HasPrefix(prOnly, "      ") {
+		t.Errorf("PR-only cell did not keep the three columns before it: %q", prOnly)
 	}
 	// The cell is the last thing on the line, so absent *trailing* glyphs are trimmed rather
 	// than spaced out: padding there would widen the frame's right edge on a row that has
@@ -140,7 +161,8 @@ func TestActionCell(t *testing.T) {
 func TestFleetWithNoLinksIsUnchanged(t *testing.T) {
 	bare := linkFleet()
 	for i := range bare.Rows {
-		bare.Rows[i].Folder, bare.Rows[i].Preview, bare.Rows[i].Storybook = "", "", ""
+		bare.Rows[i].Folder, bare.Rows[i].Preview = "", ""
+		bare.Rows[i].Storybook, bare.Rows[i].PR = "", ""
 	}
 	if got := frameOf(bare, 118); strings.Contains(got, linkOpen) {
 		t.Error("a fleet with no links rendered a hyperlink")
@@ -186,7 +208,8 @@ func TestActionCellIsShedWhenNarrow(t *testing.T) {
 	// And a fleet with nothing to point at never reserves it, at any width.
 	bare := linkFleet()
 	for i := range bare.Rows {
-		bare.Rows[i].Folder, bare.Rows[i].Preview, bare.Rows[i].Storybook = "", "", ""
+		bare.Rows[i].Folder, bare.Rows[i].Preview = "", ""
+		bare.Rows[i].Storybook, bare.Rows[i].PR = "", ""
 	}
 	if got := actionCols(bare.Rows, 118, true); got != 0 {
 		t.Errorf("a fleet with no links reserved %d columns", got)
