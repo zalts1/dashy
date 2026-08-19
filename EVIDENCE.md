@@ -50,6 +50,10 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.31 | `-h` was not missing, it was a todo: the absent flag wrote to the one file board owns | `cmd/board/usage.go`, `cmd/board/main.go` |
 | 9.32 | The maki hook installed, ran, and was denied everything — an `init.lua` with no `plugin.toml` beside it gets no permissions at all | `hooks/maki.go`, `doctor/`, `DESIGN.md` §17 |
 | 9.33 | cmux counts a surface's whole process tree, so "a maki with no report" is not the same as "no hook" | `board/build.go`, `DESIGN.md` §14, §17 |
+| 9.34 | A hyperlink is an OSC, not an SGR — one `m` in a URL cost 16 phantom columns, and a clamped link made the screen below it clickable | `view/format.go`, `view/link.go`, `host/worktree.go`, `preview/`, `DESIGN.md` §18 |
+| 9.35 | The click is unobservable, so "ask on first use" is unbuildable — the chooser had to become a command | `editor/`, `cmd/board/commands.go`, `DESIGN.md` §18, §10.10 |
+| 9.36 | Colour was a rule enforced by memory; a test now measures it, and found the ramp is ordinal rather than legible and pink cannot reach the set's weight | `view/palette.go`, `view/palette_test.go`, `view/link.go`, `DESIGN.md` §6, §18 |
+| 9.37 | cmux does correlate the PR and board cannot reach it: exposed per-tab, and `top --json` names no tabs | `preview/`, `DESIGN.md` §10.12, §18 |
 
 ---
 
@@ -1075,3 +1079,248 @@ the same fixture that has two pids on one surface is the one that fails. A tab i
 once, however many pids resolve to it.
 
 §3's "1:1 with the agent process" is corrected to "names the processes on a surface".
+
+
+### 9.34 A hyperlink is not a colour, and a worktree is not a path prefix (2026-08-19)
+
+Four findings from one change — the link cell of §18. Three are about the frame's width
+invariant, which held for two years because every escape in it was an SGR colour; the
+fourth is about the join.
+
+**Believed:** "escape sequences cost no columns, so skip to the `m`". Both width functions
+were written that way and both were right, for as long as SGR was the only escape the frame
+contained (§9.10, §9.12).
+
+**Found:** OSC 8 is an OSC. It ends at ST (`ESC \\`) or BEL, not at `m`, and the `m` a
+scan-to-`m` stops at is whatever `m` the *URL* happens to contain:
+
+    printed(link("https://api.localhost", "↗"))        = 0    want 1
+    printed(link("https://team.localhost/admin", "↗")) = 16   want 1
+
+Zero is the harmless failure — a column undercounted is a frame that fits with room to
+spare. Sixteen is the one that matters: the fit loop believed a row was sixteen columns
+wider than it was, and a row wider than the terminal wraps, and a wrapped line makes the
+frame taller than `height()` counted, and the header is then the first thing to scroll away.
+The identical bug as §9.12, arriving through a door that did not exist when §9.12 was fixed.
+
+**Shipped:** one `escape()` scanner, shared by `printed` and `clampLine`. Two scanners
+disagreeing about where a sequence ends is two answers to one question, which is the same
+argument §3 makes for derived state living on `Fleet`.
+
+**Second finding, from writing the clamp test.** A colour left open at a truncation bleeds
+into the next line, which is why `clampLine` already emitted a reset. A **hyperlink** left
+open does not bleed — it *annexes*: every cell written after it joins the link, so one
+clipped row would make the whole screen below it click through to somebody else's dev
+server. Truncation now closes the link as well as the colour, and only when it opened one.
+
+**Third finding, a panic.** `pad("APP", 0)` indexed `r[:w-1]` backwards. It had been
+unreachable because the tail column was only ever passed to `cut`, which guards `w < 2` —
+and the link cell pads that same column so the glyphs line up. Found by
+`TestLinkedFrameNeverWraps`, sweeping 40 to 200 columns, at the width where the tail gives
+way to nothing (§9.12 says it really does reach zero). The tail is the column that gives way
+last, so a renderer touching it must survive a width of none.
+
+**Fourth finding, and the one that would have shipped wrong quietly.** The obvious join for
+"is there a preview for this session" is directory containment: the dev server's cwd is the
+session's, or below it. Claude Code puts its worktrees **inside** the main checkout:
+
+    /Users/you/work/repo                                  ← main checkout, one session
+    /Users/you/work/repo/.claude/worktrees/feature-a      ← another session, another branch
+
+A dev server in `feature-a` is below `repo`, so containment puts a feature branch's preview
+on the main checkout's row — a URL that looks like this session's work and is not. The join
+is the nearest ancestor holding a `.git` entry instead, which separates them because a
+linked worktree's `.git` is a *file* and answers itself. Pinned by
+`TestPreviewJoinsOnTheWorktree` over a fixture with all three directories in it, which is
+§9.1's rule doing its job: derived state pinned by a fixture, not by reading the function.
+
+**Measured, and the reason there is no §2 argument to have here.** Two new reads per tick —
+one `lsof` over the route pids, one stat walk per unique directory — cost nothing:
+
+    baseline    0.32  0.30  0.32
+    with links  0.33  0.32  0.31
+
+Both hide behind `claude agents`, which has been the tick since §9.3. The `lsof` runs
+concurrently with it and the stat walk is a handful of syscalls over a memoised set of
+directories.
+
+**One structure borrowed wholesale.** `routes.json` outlives the dev servers it names —
+portless deletes nothing when a process exits — so a route with no live pid is not a link,
+exactly as a maki report with no live process is not a row (§17). `preview.Roster` carries
+both halves for the same reason `maki.Roster` does, and `doctor`'s `links` row states them
+apart: `3 portless routes, none live` is a diagnosis, and `no routes up` is a quiet machine.
+
+### 9.35 The click is unobservable, so the chooser could not be where it belonged (2026-08-19)
+
+**Asked for:** the folder link hardcoded `vscode://`, and the first reader of §18 used Cursor.
+The natural design, and the one requested — *the first time a folder is opened, show an "open
+with" panel and remember the answer* — is the one macOS itself uses.
+
+**Found: board cannot know a link was clicked.** That is not a missing feature, it is the
+property §18 was built on. board writes an OSC 8 sequence and the terminal owns everything
+after it: no callback, no exit status, no file touched, no process spawned in board's tree. The
+same fact that makes the link safe — board launches nothing — makes "the first time it was
+opened" unobservable. And there is no OS panel to borrow either: macOS raises a chooser only
+when *nothing* handles a scheme, never among several apps that all do, so `vscode://` would
+open VS Code and `cursor://` Cursor with no question asked in either case.
+
+Board could only have that panel by running `open` itself, which is the one thing §8 says it
+does not do.
+
+**Shipped instead:** the question moved to a fact board *can* observe at any time — "several
+editors are installed and none is configured" — and therefore to a command that answers it on
+demand. `board editor` lists what is here and marks what folder links open; `board editor
+cursor` writes the name to `~/.board.json`; `board editor auto` gives the choice back. Until
+somebody runs it, board picks — the only installed editor, or the first of `Known`.
+
+A prompt on `board watch`'s bottom line was the other candidate and was declined: it costs the
+loop a second mode, and `watch` has exactly one for the reasons in §12 and §9.18.
+
+**Two things verified rather than assumed.** `cursor://file/Users/you/work/repo` really
+does open a folder — a `workspaceStorage/*/workspace.json` naming that folder appeared seconds
+after the URL was dispatched, which is the observable board itself does not get. And Zed's URL
+shape was read out of Zed rather than guessed:
+
+    } else if let Some(file) = url.strip_prefix("zed://file") {
+        this.parse_file_path(file)
+
+The prefix is stripped and the remainder parsed as a path, which is byte-for-byte the shape VS
+Code documents. So three editors are one template and `internal/editor` only answers *which* —
+had any of the three wanted its path in a query parameter, as JetBrains' `idea://` does, it
+would have been a second template rather than a third row in a table.
+
+**The tie-break is alphabetical, and that is a decision and not a default.** With several
+editors installed and nothing configured, any ordering is an opinion about which editor is
+better, encoded where nobody reads it, applied to everybody who never runs the command.
+Alphabetical is arbitrary in a way that is honest about being arbitrary. It is also stable,
+which matters more than it looks: installing a second editor cannot move an existing link
+unless the new name sorts first, and `doctor`'s `links` row names the choice either way.
+
+**One prediction from §10.10 was wrong.** It said a config key would force the editor URL onto
+`Fleet`, "where it stops being a rendering detail and becomes derived state two renderers can
+disagree about". It went on `Screen` instead, beside `Threshold` — read from the same file,
+about the machine rather than about the fleet. `internal/board` never learned what an editor
+is, and `Table` cannot disagree with `Frame` about something it has no access to.
+
+
+### 9.36 Colour was validated by whoever remembered to (2026-08-19)
+
+**Believed:** §6 says *"colour is validated, never eyeballed — do not add a colour without
+re-validating"*, and `CLAUDE.md` lists it as a hard rule. Two years of values cleared that bar.
+
+**Found:** nothing enforced it. The rule lived in prose, the numbers lived in a markdown table,
+and the only thing standing between the palette and an eyeballed substitution was the author
+remembering the rule at the moment of adding a colour. Adding three link colours was the first
+time anything was added since the table was written, and the honest thing was to make the check
+executable: `TestPaletteContrast` computes the WCAG ratio for every value against both
+documented backgrounds.
+
+It found two things in the palette that was already there.
+
+**`inkMuted` is the floor, exactly.** It measures 3.8996, so a floor of 3.90 fails on itself.
+Trivial, and worth stating because it means the floor is not an arbitrary round number: it is
+"no dimmer than the dimmest thing that was already argued for", and the value that defines it
+is one of the values it constrains.
+
+**The idle ramp is ordinal, not legible, and that is the design.** Its low rungs are far under
+any text-contrast bar — `#256abf` measures **2.59** against `#282c34` and 3.80 against
+`#040404`, below even the rejected bare red of §9.4. The first instinct is that this is a
+defect. It is not: §6 validates the ramp for *ordinality*, adjacent rungs clear ΔL 0.094
+against a 0.06 minimum, and a bar you can barely see is a session nobody needs to look at. Dim
+means fresh. The numbers are now written into the test that could have been used to "fix" them.
+
+A smaller thing fell out: `scale_test.go` carried its own `luminance` using a squared
+approximation, correct for the ordering it asserted and not for a ratio. There is one exact
+formula now, shared, so §6's table can be checked against the arithmetic that produced it.
+
+**Then the glyphs, which are the part no amount of measuring settles.** The preview link began
+as `↗`, which is the obvious mark and measured fine and was simply *too light* beside `⧉` — a
+thin diagonal stroke next to a boxy double square. Four heavier arrows were tried and none of
+them read as a set with the folder glyph either. What worked was abandoning the arrow: `⧫`, a
+solid lozenge, and later `⧆` for the Storybook, both from `⧉`'s own Unicode block
+(Miscellaneous Mathematical Symbols-B). **One block is one font's design family**, which is why
+the three now hold their relative weight; picking by meaning across three blocks does not.
+
+**Then the one-block rule was abandoned, and rendering falsified the abandonment within
+minutes.** `⧫` was replaced by `▣` — the same idea as a boxed mark, from Geometric Shapes
+rather than Miscellaneous Mathematical Symbols-B. The reasoning for allowing it was that
+Geometric Shapes already supplies the frame's `○ ▫ ▇`, so the font certainly has the face and
+the fallback risk was small. That reasoning was about the *wrong property*. Rendered beside
+`⧆` and `⧉`, `▣` came out at roughly half their drawn size and read as a rendering fault:
+
+    ⧆  ▣  ⧉        the middle one is not smaller by design
+
+**The finding: a Unicode block predicts a glyph's drawn size, and East Asian Width does not.**
+The two are independent questions and only one of them was being checked. `▣` is a single cell
+by the width table — the fit rule was never in danger — and a monospace font still draws it at
+whatever size its block's design calls for. So "one block is one font's design family" is not
+tidiness, it is the only size guarantee available, and the set went to `⧇` (U+29C7, squared
+small circle) which is the same idea as `▣` drawn at the block's size.
+
+The consequence is a real constraint worth stating: **a fourth link glyph comes from U+29xx or
+it does not match.** That block has no arrow in it, which is the actual reason the preview
+could not stay an arrow — not weight, as recorded above, but availability.
+
+All three being squares is what that costs, and it moves the whole burden of telling them
+apart onto colour. That is why the matching below stopped being tidiness and became
+load-bearing: a set of same-shaped marks at unequal weight is unreadable in a way a set of
+different shapes would have survived.
+
+**Pink is the value that justifies the whole test.** Asked for a pink Storybook glyph matched to
+the other two (6.98 and 7.04), and it does not exist at the obvious saturations: `#e64980`
+measures 3.75, `#f783ac` 5.86, `#f06595` 4.67 — pink approaches this band from far below. Going
+pale overshoots instead: `#ffa8d0` is 7.84, `#f9a8d4` 7.72. A sweep of pink hues at 35–40%
+saturation found `#ff99bb` at **7.02**, which is where a legible pink crosses the set's own
+weight. Eyeballed, any of those seven would have looked "pink and about right", and the cell
+would have had one mark quietly louder or quieter than the others.
+
+**Also, a stale comment shipped.** Two multi-line comment replacements in `view/link.go`
+silently failed to apply while the constants beside them changed, so the committed file
+explained `↗` and `▤` — glyphs that no longer existed — for one commit. Nothing caught it: a
+comment cannot fail a test. The lesson is narrow and worth having: when a change is *the
+comment*, read the file back rather than trusting the edit.
+
+### 9.37 cmux knows about the PR; board cannot get at it (2026-08-19)
+
+**Believed:** cmux correlates each tab to its GitHub pull request — it does, visibly, in the
+sidebar — so board could read that the way it reads tab titles and the hook clock. Enrichment
+from cmux, no network, consistent with §3.
+
+**Found: it is real, and it is out of reach.** `cmux sidebar-state` answers exactly what was
+wanted:
+
+    pr=#20 open https://github.com/zalts1/dashy/pull/20
+    pr_label=PR
+    git_branch=a-row-points-at-more-than-its-tab dirty
+    ports=none
+
+But it answers for **one tab per call**, at ~140ms, and the tab must be named with `--tab=<uuid>`
+— and **board cannot name one.** `cmux top --json` is where board gets everything it knows about
+tabs, and on this machine that tree contains no node of `kind: "tab"` at all and no `tab_id` on
+any surface; the only `tab_id` in the whole document is the caller's own panel. So there is no
+mapping from a row to a tab, and no way to enumerate tabs to search for one. `--workspace N`
+reaches only that workspace's *selected* tab, which is a fraction of the fleet.
+
+Two further facts closed the door rather than propping it open. cmux's badge is
+`SidebarPullRequestBadge{number, label, url, status, branch, isStale}` — **no review state at
+all**, so the "reviewed since your last commit" half was never available from it, whatever the
+addressing. And `~/Library/Application Support/cmux/session-*.json`, which board *can* read
+cheaply and which does carry `gitBranch` and `listeningPorts`, carries no PR: the badge lives in
+the running process.
+
+**So the PR glyphs are deferred, not built** (§10.12), and the measurements are the reason. The
+route that works is GitHub itself: one `gh api graphql --cache 3m` per worktree returns number,
+url, state, `latestReviews[].submittedAt` and the last commit's `committedDate` — everything both
+glyphs need — at **580ms cold and 30–60ms cached**, with the cache in gh's own `~/.cache/gh`. That
+would have kept two of board's documented properties intact (it still writes only
+`~/.board.json`, still runs no daemon) and broken the third: *no network of its own*. Declined for
+now on that basis alone; the cost was never the problem.
+
+*Trigger:* cmux exposing `pr` in `top --json`, or in the session file — either makes the whole
+thing free and local.
+
+**One thing this investigation did produce.** Storybook has no roster, no proxy and no state
+file, so it is found by a bounded port scan — and that scan needs the same answer the portless
+routes need: where is this pid working. Both now go through **one** `lsof` over the union of
+their pids, which is why the second source costs nothing measurable on top of the first. Two
+mechanisms, one expensive read, the same join.

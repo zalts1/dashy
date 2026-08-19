@@ -37,7 +37,7 @@ func TestHelpIsRecognisedWithoutSwallowingRealArguments(t *testing.T) {
 // nobody finds. Listed by hand: this is the check on the dispatch in main, not a
 // restatement of it.
 func TestUsageNamesEveryCommand(t *testing.T) {
-	for _, cmd := range []string{"watch", "jump", "label", "todo",
+	for _, cmd := range []string{"watch", "jump", "label", "todo", "editor",
 		"install-hooks", "uninstall-hooks", "version", "doctor"} {
 		if !strings.Contains(usage, cmd) {
 			t.Errorf("usage does not mention %q", cmd)

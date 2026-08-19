@@ -22,8 +22,10 @@ import (
 	"github.com/zalts1/dashy/internal/claude"
 	"github.com/zalts1/dashy/internal/cmux"
 	"github.com/zalts1/dashy/internal/config"
+	"github.com/zalts1/dashy/internal/editor"
 	"github.com/zalts1/dashy/internal/hooks"
 	"github.com/zalts1/dashy/internal/maki"
+	"github.com/zalts1/dashy/internal/preview"
 	"github.com/zalts1/dashy/internal/version"
 )
 
@@ -54,6 +56,34 @@ type Report struct {
 	// NoMaki is not a fault. board reports on whichever agents are installed, so the rows
 	// below say nothing about maki when it is absent — the version block has already.
 	NoMaki bool
+
+	// The preview read, in the two halves preview.Roster carries: PreviewsSeen is every
+	// route portless names, Previews are the ones with a live process behind them. Seen
+	// above Previews of zero is the shape of a stale routes.json — no row will carry a link
+	// and portless still lists three things as up.
+	//
+	// This row exists because a failed preview read is invisible in the frame. A missing
+	// roster costs every row and takes the header's own slot (§14); a missing preview costs
+	// one glyph, so nothing on screen would say board looked (§18).
+	Previews     int
+	PreviewsSeen int
+	PreviewErr   error
+	// The Storybook half, in the same two pieces: Storybooks are the ones a row can carry,
+	// StorybooksSeen every socket found in the range. Reported only when something is
+	// listening — on a machine where nobody runs Storybook there is nothing to diagnose, and
+	// a permanent "0 storybooks" is a clause readers learn to skip (§9.13).
+	Storybooks     int
+	StorybooksSeen int
+	// NoPortless is not a fault, for the reason NoMaki is not: previews are optional and a
+	// machine without portless still gets a folder link on every row.
+	NoPortless bool
+
+	// Editor is the name of the editor folder links open, empty when board found none —
+	// which is the one answer that explains a missing glyph on every row at once.
+	// EditorFound is whether its bundle is actually here: a configured editor is honoured
+	// even when it is not, and then the link is drawn and may reach nothing (§18).
+	Editor      string
+	EditorFound bool
 
 	Hooks    []string // events with board's notify hook wired up
 	HooksErr error    // settings.json unreadable — the state install-hooks refuses on
@@ -89,6 +119,15 @@ func Gather() Report {
 	for _, rep := range roster.Reports {
 		makiSessions += len(rep.Sessions)
 	}
+	noPortless := !preview.Available()
+	var previews preview.Roster
+	var previewErr error
+	if !noPortless {
+		previews, previewErr = preview.Read()
+	}
+
+	ed := editor.Gather(st.Config.Editor, config.Path())
+
 	makiHooked, makiManifest, makiHooksErr := hooks.MakiInstalled()
 
 	spans := map[string]bool{}
@@ -101,26 +140,34 @@ func Gather() Report {
 	_, statErr := os.Stat(config.Path())
 
 	return Report{
-		Versions:     version.Report(),
-		Sessions:     len(agents),
-		RosterErr:    rosterErr,
-		Tabs:         len(titles),
-		Workspaces:   len(spans),
-		NoCmux:       !cmux.Available(),
-		MakiProcs:    len(roster.Pids),
-		MakiReports:  len(roster.Reports),
-		MakiSessions: makiSessions,
-		MakiErr:      makiErr,
-		NoMaki:       noMaki,
-		Hooks:        installed,
-		HooksErr:     hooksErr,
-		MakiHooked:   makiHooked,
-		MakiManifest: makiManifest,
-		MakiHooksErr: makiHooksErr,
-		ConfigPath:   config.Path(),
-		ConfigOnDisk: statErr == nil,
-		NotifyOn:     st.Config.NotifyCmd != "",
-		NotifyCmd:    st.Config.NotifyCmd,
+		Versions:       version.Report(),
+		Sessions:       len(agents),
+		RosterErr:      rosterErr,
+		Tabs:           len(titles),
+		Workspaces:     len(spans),
+		NoCmux:         !cmux.Available(),
+		MakiProcs:      len(roster.Pids),
+		MakiReports:    len(roster.Reports),
+		MakiSessions:   makiSessions,
+		MakiErr:        makiErr,
+		NoMaki:         noMaki,
+		Previews:       len(previews.Routes),
+		PreviewsSeen:   previews.Listed,
+		Storybooks:     len(previews.Storybooks),
+		StorybooksSeen: previews.Listeners,
+		PreviewErr:     previewErr,
+		NoPortless:     noPortless,
+		Editor:         ed.Chosen.Name,
+		EditorFound:    ed.Installed[ed.Chosen.Name],
+		Hooks:          installed,
+		HooksErr:       hooksErr,
+		MakiHooked:     makiHooked,
+		MakiManifest:   makiManifest,
+		MakiHooksErr:   makiHooksErr,
+		ConfigPath:     config.Path(),
+		ConfigOnDisk:   statErr == nil,
+		NotifyOn:       st.Config.NotifyCmd != "",
+		NotifyCmd:      st.Config.NotifyCmd,
 	}
 }
 
@@ -154,6 +201,12 @@ func Format(r Report) string {
 		row("tabs", fmt.Sprintf("%d %s in %d %s",
 			r.Tabs, plural(r.Tabs, "tab"), r.Workspaces, plural(r.Workspaces, "workspace")))
 	}
+
+	// `links`, not `preview`: the row answers "can a row point anywhere", and both of its
+	// halves are stated in those terms. It is also six characters, which is what keeps the
+	// answer column where version.LabelWidth puts it — widening a documented constant to
+	// fit a label is the tail wagging the dog (§13).
+	row("links", previewRow(r)+storybookRow(r)+editorRow(r))
 
 	claudeHooks, claudeOK := "not installed", false
 	switch {
@@ -189,6 +242,68 @@ func Format(r Report) string {
 		row("notify", "off — set notify_cmd to push")
 	}
 	return b.String()
+}
+
+// previewRow says what the preview read found. It gets a row of its own rather than a half
+// of `roster`, because a preview is not a session: the roster row answers "how much work is
+// there", and this one answers "can a row point at it" (§18).
+func previewRow(r Report) string {
+	switch {
+	case r.NoPortless:
+		// Optional, like maki, and stated as what the reader still has rather than as an
+		// absence: without portless every row still carries its folder.
+		return "no portless — rows link to folders only"
+	case r.PreviewErr != nil:
+		// Verbatim, for the reason the roster errors are: the wrapped error carries the
+		// detail a maintainer asks for next.
+		return r.PreviewErr.Error()
+	case r.Previews == 0 && r.PreviewsSeen > 0:
+		// Both halves rather than a conclusion. routes.json outlives the dev servers it
+		// names, so this is a file full of processes that have exited — and it is also what
+		// a machine with nothing but `portless alias` entries looks like.
+		return fmt.Sprintf("%d portless %s, none live",
+			r.PreviewsSeen, plural(r.PreviewsSeen, "route"))
+	case r.Previews == 0:
+		return "portless installed, no routes up"
+	default:
+		return fmt.Sprintf("%d portless %s", r.Previews, plural(r.Previews, "route"))
+	}
+}
+
+// editorRow is the folder half of the `links` row: which editor opens one, and whether
+// board can see it. Named rather than counted, because there is exactly one and its name is
+// the argument to the command that changes it.
+func editorRow(r Report) string {
+	switch {
+	case r.Editor == "":
+		// No editor board can build a URL for. The one answer that explains a folder glyph
+		// missing from every row at once — and the repair is a command, not a config edit.
+		return " · no editor — board editor"
+	case !r.EditorFound:
+		// Configured and honoured, and the bundle is not where board looks. Stated as both
+		// halves rather than as a conclusion: an app installed elsewhere still works, and a
+		// name for an editor that is genuinely gone does not.
+		return " · " + r.Editor + ", not installed here"
+	default:
+		return " · " + r.Editor
+	}
+}
+
+// storybookRow is the Storybook clause of the `links` row, and it is silent when nothing is
+// listening in the range: board scans every tick whether or not anybody uses Storybook, and a
+// permanent "0 storybooks" would be noise on most machines (§9.13).
+func storybookRow(r Report) string {
+	switch {
+	case r.StorybooksSeen == 0:
+		return ""
+	case r.Storybooks == 0:
+		// Listening and unplaceable: the process is not inside any session's worktree, which
+		// is the whole diagnosis. Stated as both halves rather than as a conclusion.
+		return fmt.Sprintf(" · %d storybook %s outside every worktree",
+			r.StorybooksSeen, plural(r.StorybooksSeen, "port"))
+	default:
+		return fmt.Sprintf(" · %d %s", r.Storybooks, plural(r.Storybooks, "storybook"))
+	}
 }
 
 // makiRoster is the maki half of the roster row: what the two reads found, or nothing at

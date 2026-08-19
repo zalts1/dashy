@@ -45,6 +45,8 @@ func main() {
 		err = jump(strings.Join(args[1:], " "))
 	case "todo":
 		err = todo(args[1:])
+	case "editor":
+		err = chooseEditor(args[1:])
 	case "install-hooks":
 		err = hooks.Install()
 	case "uninstall-hooks":

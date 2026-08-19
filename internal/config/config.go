@@ -27,6 +27,11 @@ type State struct {
 		IdleThresholdMinutes int    `json:"idle_threshold_minutes"`
 		PollSeconds          int    `json:"poll_seconds"`
 		NotifyCmd            string `json:"notify_cmd"`
+		// Editor names which editor a row's folder link opens — one of editor.Known's
+		// names, empty to let board pick. Deliberately a name and not a URL template: a
+		// template with a path substitution in it is one edit away from being a command,
+		// and board opens nothing (§8, §18).
+		Editor string `json:"editor"`
 	} `json:"config"`
 	Labels map[string]string `json:"labels"`
 	// Todos are the one thing here that cannot be derived from the fleet: work with no
@@ -101,6 +106,11 @@ func (s *State) Poll() time.Duration {
 	}
 	return defaultPoll
 }
+
+// SetEditor records or clears the editor folder links open. Clearing is how `board editor
+// auto` returns the choice to board, so an empty name deletes the key rather than writing
+// one board would then have to treat as meaning "none" (§18).
+func (s *State) SetEditor(name string) { s.Config.Editor = name }
 
 // SetLabel records or clears the label for a surface.
 func (s *State) SetLabel(surface, text string) {

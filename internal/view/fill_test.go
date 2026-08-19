@@ -87,7 +87,7 @@ func outlierFleet() board.Fleet {
 // Labels first, and in full while there is room for them: truncating is what the layout
 // does under pressure, never something it does to a window with columns to spare.
 func TestLabelColumnTakesTheWholeLabelWhenThereIsRoom(t *testing.T) {
-	if labelW, _, _ := columns(outlierFleet(), 300); labelW != 60 {
+	if labelW, _, _ := columns(outlierFleet(), 300, true); labelW != 60 {
 		t.Errorf("label column = %d, want 60: the window can afford the whole label", labelW)
 	}
 }
@@ -95,7 +95,7 @@ func TestLabelColumnTakesTheWholeLabelWhenThereIsRoom(t *testing.T) {
 // Only once the row stops fitting does one long title stop setting the column for the
 // nine rows that would otherwise cross it as padding.
 func TestLabelColumnFallsBackToP90WhenItDoesNotFit(t *testing.T) {
-	labelW, _, _ := columns(outlierFleet(), 80)
+	labelW, _, _ := columns(outlierFleet(), 80, true)
 	if labelW >= 60 {
 		t.Errorf("label column = %d: the outlier still sets it at a width that cannot hold it", labelW)
 	}
@@ -111,7 +111,7 @@ func TestLabelColumnStillFitsAFleetOfLongLabels(t *testing.T) {
 	for range 10 {
 		f.Rows = append(f.Rows, board.Row{Label: strings.Repeat("x", 60), Workspace: "WS", Rank: board.RankQuiet})
 	}
-	if labelW, _, _ := columns(f, 300); labelW != 60 {
+	if labelW, _, _ := columns(f, 300, true); labelW != 60 {
 		t.Errorf("label column = %d, want 60: every row needs it", labelW)
 	}
 }
@@ -120,8 +120,8 @@ func TestLabelColumnStillFitsAFleetOfLongLabels(t *testing.T) {
 // bar column sat at a fixed 12 cells and the surplus piled up to the right of the tail.
 func TestBarsSpendWhatTheLabelsDoNotUse(t *testing.T) {
 	f := narrowFleet()
-	_, _, narrow := columns(f, 60)
-	_, _, wide := columns(f, 200)
+	_, _, narrow := columns(f, 60, true)
+	_, _, wide := columns(f, 200, true)
 	if narrow != barCells {
 		t.Errorf("bar is %d cells at 60 columns, want the base %d — there is no surplus to spend", narrow, barCells)
 	}
@@ -136,7 +136,7 @@ func TestBarsSpendWhatTheLabelsDoNotUse(t *testing.T) {
 func TestARowSpendsTheWidthItIsGiven(t *testing.T) {
 	for _, f := range []board.Fleet{narrowFleet(), wideFleet(), outlierFleet()} {
 		for _, cols := range []int{70, 90, 120, 149, 200, 300} {
-			labelW, tailW, barW := columns(f, cols)
+			labelW, tailW, barW := columns(f, cols, true)
 			w := rowChrome(barW) + labelW + tailW
 			if w == cols-headMargin || barW == barMaxCells {
 				continue
@@ -151,7 +151,7 @@ func TestARowSpendsTheWidthItIsGiven(t *testing.T) {
 // mark is not. Exactly one element shouts and it is BLOCKED (DESIGN.md §6).
 func TestTheBarStopsGrowing(t *testing.T) {
 	for _, cols := range []int{200, 300, 400} {
-		if _, _, barW := columns(narrowFleet(), cols); barW != barMaxCells {
+		if _, _, barW := columns(narrowFleet(), cols, true); barW != barMaxCells {
 			t.Errorf("cols=%d: bar is %d cells, want the cap %d", cols, barW, barMaxCells)
 		}
 	}
@@ -160,7 +160,7 @@ func TestTheBarStopsGrowing(t *testing.T) {
 // A tab too narrow for a whole bar still gets none: a cut bar is the same glyph run
 // reporting a smaller number, on a scale that is supposed to be absolute.
 func TestANarrowTabStillGetsNoBarRatherThanACutOne(t *testing.T) {
-	if _, _, barW := columns(wideFleet(), 50); barW != 0 {
+	if _, _, barW := columns(wideFleet(), 50, true); barW != 0 {
 		t.Errorf("bar is %d cells at 50 columns, want none at all", barW)
 	}
 }

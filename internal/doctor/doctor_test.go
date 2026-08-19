@@ -28,13 +28,111 @@ func healthy() Report {
 		MakiReports:  2,
 		MakiSessions: 3,
 		MakiHooked:   true,
+		Previews:     1,
+		PreviewsSeen: 1,
+		Editor:       "cursor",
+		EditorFound:  true,
+	}
+}
+
+// The Storybook clause, and the one thing it must not do: appear on a machine where nobody
+// runs Storybook. board scans the port range every tick regardless, so a permanent
+// "0 storybooks" would be a clause every reader learns to skip (§9.13).
+func TestFormatReportsStorybooks(t *testing.T) {
+	cases := []struct {
+		name, want string
+		r          Report
+	}{
+		{"one placed", "1 storybook", func() Report { r := healthy(); r.Storybooks, r.StorybooksSeen = 1, 1; return r }()},
+		{"several", "3 storybooks", func() Report { r := healthy(); r.Storybooks, r.StorybooksSeen = 3, 3; return r }()},
+		// Listening and unplaceable — the process is not inside any session's worktree.
+		{"unplaceable", "2 storybook ports outside every worktree",
+			func() Report { r := healthy(); r.Storybooks, r.StorybooksSeen = 0, 2; return r }()},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := Format(c.r); !strings.Contains(got, c.want) {
+				t.Errorf("links row does not say %q:\n%s", c.want, got)
+			}
+		})
+	}
+	// Nothing listening: silent.
+	silent := healthy()
+	silent.Storybooks, silent.StorybooksSeen = 0, 0
+	if got := Format(silent); strings.Contains(got, "storybook") {
+		t.Errorf("a machine with no storybook still gets a clause:\n%s", got)
+	}
+}
+
+// The `links` row carries both halves of "can a row point anywhere": the preview read, and
+// the editor the folder half opens. Two halves on one row for the same reason `roster` has
+// two — one concern, two sources that fail independently (§14, §18).
+func TestFormatReportsTheEditor(t *testing.T) {
+	cases := []struct {
+		name string
+		r    Report
+		want string
+	}{
+		{"found", healthy(), "cursor"},
+		// The state that explains a missing glyph on every row at once.
+		{"none", func() Report { r := healthy(); r.Editor, r.EditorFound = "", false; return r }(),
+			"no editor"},
+		// Configured, honoured, and board cannot find the bundle: the glyph is drawn and the
+		// click may reach nothing, which is worth one clause.
+		{"configured but absent", func() Report { r := healthy(); r.Editor, r.EditorFound = "zed", false; return r }(),
+			"zed, not installed here"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := Format(c.r); !strings.Contains(got, c.want) {
+				t.Errorf("links row does not say %q:\n%s", c.want, got)
+			}
+		})
+	}
+}
+
+// The preview row is the third read, and it is the one whose failure is invisible in the
+// frame: a missing preview link costs a glyph, so nothing on screen says board looked and
+// found nothing. This row is where it says so (§18).
+func TestFormatReportsThePreviewRead(t *testing.T) {
+	cases := []struct {
+		name string
+		r    Report
+		want string
+	}{
+		{"one route", healthy(), "1 portless route"},
+		{"several", func() Report { r := healthy(); r.Previews, r.PreviewsSeen = 3, 3; return r }(),
+			"3 portless routes"},
+		{"none up", func() Report { r := healthy(); r.Previews, r.PreviewsSeen = 0, 0; return r }(),
+			"no routes up"},
+		// The interesting failure, and the reason the read has two halves: routes.json
+		// outlives the dev servers it names, so a file full of dead entries is a machine
+		// where no row will ever carry a link and portless still says three things are up.
+		{"listed but dead", func() Report { r := healthy(); r.Previews, r.PreviewsSeen = 0, 3; return r }(),
+			"3 portless routes, none live"},
+		{"no portless", func() Report { r := healthy(); r.NoPortless = true; return r }(),
+			"no portless"},
+		{"unreadable", func() Report {
+			r := healthy()
+			r.PreviewErr = errors.New("portless routes answered in an unknown shape")
+			return r
+		}(),
+			"unknown shape"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := Format(c.r)
+			if !strings.Contains(got, c.want) {
+				t.Errorf("preview row does not say %q:\n%s", c.want, got)
+			}
+		})
 	}
 }
 
 // Every label is present in every state. A diagnostic that silently omits a row is one
 // that answers a question the reader did not ask.
 func TestFormatAlwaysReportsEveryLabel(t *testing.T) {
-	labels := []string{"board", "claude", "cmux", "roster", "tabs", "hooks", "config", "notify"}
+	labels := []string{"board", "claude", "cmux", "roster", "tabs", "links", "hooks", "config", "notify"}
 	for _, c := range []struct {
 		name string
 		r    Report
@@ -121,6 +219,23 @@ func TestFormatNeverPrintsTheNotifyCommand(t *testing.T) {
 	}
 	if off := Format(Report{}); !strings.Contains(off, "off") {
 		t.Errorf("doctor does not say notifications are off:\n%s", off)
+	}
+}
+
+// The same rule as the notify command, for the same reason: this output is meant to be
+// pasted, and a preview hostname is derived from a branch name — which is somebody's work
+// (§18). doctor counts routes and never names one.
+func TestFormatNeverPrintsAPreviewURL(t *testing.T) {
+	r := healthy()
+	r.Previews, r.PreviewsSeen = 2, 2
+	got := Format(r)
+	for _, leak := range []string{"http", "://", ".localhost"} {
+		if strings.Contains(got, leak) {
+			t.Errorf("doctor's links row could carry a URL (%q):\n%s", leak, got)
+		}
+	}
+	if !strings.Contains(got, "2 portless routes") {
+		t.Errorf("doctor does not count the routes:\n%s", got)
 	}
 }
 

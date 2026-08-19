@@ -17,6 +17,7 @@ import (
 	"github.com/zalts1/dashy/internal/board"
 	"github.com/zalts1/dashy/internal/cmux"
 	"github.com/zalts1/dashy/internal/config"
+	"github.com/zalts1/dashy/internal/editor"
 	"github.com/zalts1/dashy/internal/view"
 )
 
@@ -37,11 +38,12 @@ func Run(interval time.Duration) {
 	if !isTTY(out) {
 		st := config.Load()
 		fmt.Fprint(out, view.Frame(board.Collect(), view.Screen{
-			Now:       time.Now(),
-			Interval:  interval,
-			Threshold: st.Threshold(),
-			Rows:      envInt("LINES", pipedRows),
-			Cols:      envInt("COLUMNS", pipedCols),
+			Now:          time.Now(),
+			Interval:     interval,
+			Threshold:    st.Threshold(),
+			Rows:         envInt("LINES", pipedRows),
+			Cols:         envInt("COLUMNS", pipedCols),
+			EditorScheme: editor.Scheme(st.Config.Editor),
 		}, view.UI{}))
 		return
 	}
@@ -84,14 +86,21 @@ func Run(interval time.Duration) {
 			Typing: typing, Input: input, QuietCollapsed: folded}
 	}
 
+	// Resolved once, outside draw: it is a stat over three app bundles, and unlike the
+	// threshold it cannot change while the tab is open in any way worth a redraw for —
+	// `board editor` writes the config, and picking the change up on the next `board watch`
+	// is the same deal `poll_seconds` gets.
+	scheme := editor.Scheme(config.Load().Config.Editor)
+
 	draw := func() {
 		rows, cols := termSize()
 		s := view.Frame(f, view.Screen{
-			Now:       lastFetch,
-			Interval:  interval,
-			Threshold: config.Load().Threshold(),
-			Rows:      rows,
-			Cols:      cols,
+			Now:          lastFetch,
+			Interval:     interval,
+			Threshold:    config.Load().Threshold(),
+			Rows:         rows,
+			Cols:         cols,
+			EditorScheme: scheme,
 		}, ui())
 		render(out, s)
 	}

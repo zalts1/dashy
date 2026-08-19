@@ -41,6 +41,7 @@ grep -n '^#\+ ' DESIGN.md        # § → line, then Read with offset/limit
 | 15 | `uninstall-hooks`: defined as install's inverse, and what it must not touch on the way | `hooks/`, anything editing `~/.claude/settings.json` or a maki `init.lua` |
 | 16 | the demo: a fixture fleet through the real join, recorded by hand | `internal/demo/`, `demo/`, the top of the README |
 | 17 | maki as the second agent: no roster command, so board installs one; two reads settle liveness | `maki/`, `hooks/maki.go`, `board/build.go` |
+| 18 | links: the three things a row points at besides its tab, joined on the worktree, opened by the terminal, and which editor answers | `preview/`, `editor/`, `host/worktree.go`, `view/link.go`, `board/build.go` |
 
 ---
 
@@ -513,6 +514,11 @@ Four more, each with a test or a documented refusal:
 - **cmux env vars are always stripped from child processes.** cmux treats
   `CMUX_SURFACE_ID`/`CMUX_WORKSPACE_ID` as the implicit target of every command, so a
   stale inherited value makes even a global query fail (§9.8).
+- **board opens nothing itself.** A row's preview and folder are hyperlinks; the URL goes
+  to the terminal and the terminal is what launches a browser or an editor. board gains no
+  opener, no `open(1)`, no second write action — `cmux surface.focus` is still the only
+  thing it does to the world (§18). This is what keeps the surface that must never end a
+  session from growing a way to start arbitrary processes.
 
 ---
 
@@ -635,6 +641,68 @@ person edits a few times a day, and each mechanism that closes it costs more tha
 keystroke — a hook, a daemon, or `$HOME` on a file-sync service. The last is the one to
 watch: sync makes the window as wide as its own interval, and it can resurrect a deleted
 todo as easily as drop a new one.
+
+### 10.10 A configurable editor — shipped as §18 (2026-08-19)
+
+Parked for one afternoon and then built, because the first reader of the feature used Cursor.
+The reasoning that parked it survived the build and shaped it: the key is a **name**, not a
+template. `{"config": {"editor": "cursor"}}` holds one of `editor.Known`'s names and board
+owns the URL's shape, because a template with a path substitution in it is one edit away from
+being a command, and board opens nothing (§8).
+
+What did not survive: "the URL has to be built before `view` sees it, so a config key means
+it moves onto `Fleet`". It moved onto `Screen` instead — beside `Threshold`, which comes from
+the same file and is the same kind of fact. `Fleet` never learns what an editor is, so
+`internal/board` was untouched by the change.
+
+### 10.11 The demo has no preview — deferred (2026-08-19)
+
+`internal/demo` renders a fleet with no dev servers up, so the recording shows the folder
+glyph on no row and the preview glyph nowhere. Adding either to the fixture is a frame
+change, and a frame change means re-recording `docs/board.gif` — which needs `vhs` and is
+a maintainer step by hand (§16).
+
+Left alone deliberately rather than left undone: a fixture that renders links while the
+committed GIF does not is a README that contradicts itself, and the honest intermediate
+state is the one where nothing disagrees.
+
+*Trigger:* the next re-record for any other reason. Two rows of the demo fleet want a
+`Folder`, and one of them a `Preview`, at which point the GIF shows what the prose above
+describes.
+
+### 10.12 The pull request, and the review CTA — deferred (2026-08-19)
+
+A fourth and fifth link were asked for: `⧖` to open the branch's PR, and `⧗` in its place once
+somebody has reviewed since the latest commit, which turns the glyph into a call to action.
+Both were designed and neither was built. The reason is §9.37, and it is worth reading before
+anyone tries again, because the obvious route looks open and is not.
+
+**cmux already correlates the PR** and will tell you — `pr=#20 open https://github.com/…` from
+`cmux sidebar-state`. But it answers for one tab per call, the tab has to be named with
+`--tab=<uuid>`, and **board has no tab ids**: `cmux top --json` is everything board knows about
+tabs and it contains no `kind: "tab"` node and no `tab_id` on any surface. There is no mapping
+from a row to a tab and no way to enumerate tabs to find one. cmux's badge also carries no
+review state at all, so `⧗` was never available from it whatever the addressing, and the
+session file board *can* read cheaply carries `gitBranch` and `listeningPorts` but no PR.
+
+**The route that works is GitHub.** One `gh api graphql --cache 3m` per worktree returns number,
+url, state, `latestReviews[].submittedAt` and the last commit's `committedDate` — both glyphs,
+one call — at 580ms cold and 30–60ms cached, with the cache in gh's own `~/.cache/gh`. Note what
+that does *not* cost: board would still write only `~/.board.json`, and would still run no
+daemon, because the caching and the refresh are gh's problem rather than board's. The single
+objection is the one in §2 and on the README's last line — **no network of its own** — and it is
+enough on its own. A reporting surface that quietly starts talking to github.com is a different
+tool from the one people installed.
+
+The shape it would take if built: a `github` key defaulting to false, so the property stays true
+on every machine that has not opted in, and the key is where the trade gets argued. Note also
+that "since the latest commit was **pushed**" is not measurable — GitHub's `pushedDate` is
+deprecated and usually null — so the honest comparison is against `committedDate`, which differs
+after a rebase.
+
+*Trigger:* cmux exposing `pr` in `top --json` or in its session file, which makes the whole thing
+free, local, and a read board already does. Failing that, somebody wanting it enough to accept
+the network line moving.
 
 ---
 
@@ -1071,3 +1139,203 @@ allowed, so naming only what board needs leaves every decision about Lua the use
 later to the user. A `plugin.toml` that is already there is never rewritten and never
 deleted: it is policy for everything in that directory, and `install-hooks` says what the
 block needs instead of taking the decision (§8).
+
+---
+
+## 18. Links — the three things a row points at besides its tab
+
+`Enter` focuses a session's tab, and for two years that was the only place a row went.
+Three more are worth reaching, and all three are properties of the same thing — the git
+worktree the session is working in:
+
+- **the preview**, a local dev server serving that worktree,
+- **the Storybook**, a component workbench listening in it, and
+- **the folder**, the worktree itself, opened in an editor to read the branch's diff.
+
+They are rendered as a five-column cell at the right-hand end of the row — `⧆` pink for the
+Storybook, `⧇` green for the preview, `⧉` cyan for the folder — and they are hyperlinks, not
+keys.
+
+**Order is by how often a row has one, rarest first.** The folder is on nearly every row, so
+putting it last anchors the cell's right-hand edge and keeps the trailing trim from firing;
+the Storybook is the rarest, so its empty column falls on the left where it costs nothing to
+look at. Grouping the two http links together instead — which is the arrangement that reads
+better as a sentence — spreads the gaps through the middle of the cell, and down a band of
+twenty rows that reads as ragged rather than as a column.
+
+### The worktree is the join, and a path prefix is not
+
+Claude Code creates its worktrees **inside** the main checkout, at
+`.claude/worktrees/<branch>`. So "the dev server's directory is below the session's" is
+true of a feature branch's server and the main checkout's row at the same time, and a rule
+built on it puts one branch's preview on another branch's row. A preview link on the wrong
+row is worse than no link: it is a URL that looks like this session's work and is not.
+
+`host.WorkTree` is what settles it — the nearest ancestor holding a `.git` entry, walking
+up. A linked worktree's `.git` is a *file* pointing at the repository's gitdir, so it
+answers itself and the main checkout answers the repository, and the two compare unequal
+even though one contains the other. Both sides of the join go through the same function,
+which is the only reason their answers are comparable.
+
+It is a stat walk and not `git rev-parse --show-toplevel`, because this runs on every tick
+for every session and a fork per row is the wrong shape for a reporting surface (§2).
+
+Within one worktree there can be several previews — a monorepo running a dev server per
+app. The nearest to the session's own directory wins, and the routes arrive URL-sorted so
+a tie resolves the same way on every tick rather than drifting with map order. One row
+shows one preview; a count of them would be a column reporting somebody's project layout.
+
+### portless is the mechanism, and it is optional
+
+`internal/preview` reads `~/.portless/routes.json`, which
+[portless](https://www.npmjs.com/package/portless) writes: a hostname, a target port and a
+pid per live route. Nothing in that file says where the pid is *working*, so the directory
+comes from a second read — one `lsof -d cwd` over every route pid at once — and that is
+what the join needs.
+
+Two reads rather than one is the same shape as maki's roster (§17), and for the same
+reason: **a route outlives the process it describes.** portless deletes nothing when a dev
+server exits, so a route with no live pid, like a `portless alias` entry with no pid at
+all, is not a link. `preview.Roster` therefore carries both halves — every route listed,
+and the ones board could place — and `doctor`'s `links` row states them apart. Neither read
+costs anything measurable: both hide behind `claude agents`, which is still the tick (§9.34).
+
+portless is optional exactly as maki is. Without it, `Available` is false, nothing is read,
+nothing complains, and every row still carries its folder.
+
+### Storybook is found by its port, because there is nothing to ask
+
+portless writes a state file and maki writes reports. Storybook does neither: no roster
+command, no proxy registration, nothing on disk. What it has instead is a **well-known default
+and a well-known way of leaving it** — 6006, then 6007, then 6008 as each is found busy — so
+the identification is a bounded scan of that range plus the same worktree join everything else
+here uses.
+
+**The range is closed at 6020, and that is the interesting part.** TensorBoard also defaults to
+6006 and also increments, so an open-ended "6006 and up" would eventually claim one and put a
+Storybook link on a row that has no Storybook — the failure this whole section is organised
+around. Fifteen ports is more than anyone runs at once. The second half of the identification
+is the process: a JS runtime (`node`, `bun`, `deno`) by prefix, which is what separates
+Storybook from the Python thing sharing its port range.
+
+One `lsof -iTCP -sTCP:LISTEN -P` for the whole machine, not one per row. And it shares the
+expensive half with the portless read: neither a route nor a listening socket says where its
+process is *working*, so both feed **one** cwd lookup over the union of their pids. That is why
+the second source costs nothing measurable on top of the first (§9.37).
+
+`http://localhost:<port>`, not https — Storybook serves plain http. A Storybook put behind TLS
+is a Storybook put behind portless, and it arrives through the other half of this package with
+its own hostname instead.
+
+### Hyperlinks, not keys — and this is the safety argument, not a shortcut
+
+The cell is OSC 8: the URL goes to the terminal, and the terminal opens it. board therefore
+gains **no opener** — no `open(1)`, no `code`, no second write action beyond
+`cmux surface.focus` (§8). For a tool whose first invariant is that it can never end a
+session, "the process on screen cannot start a browser" is worth more than a keystroke.
+
+It also lands somewhere good. Under cmux an `https://` link opens in a browser tab beside
+the fleet, and a `vscode://` link goes out through the OS to the editor — cmux routes any
+non-http scheme externally. And the mechanism is not a gamble the way it would be in a
+general-purpose tool: board requires cmux, cmux is built on Ghostty, and Ghostty honours
+OSC 8. On every machine board supports, the link works.
+
+**No legend line.** The keys are named at the bottom of the frame because a key you do not
+know does not exist. A hyperlink advertises itself — the terminal underlines it on hover
+and changes the cursor — so a legend entry would spend a scarce line restating what the
+glyph already does, and on a terminal without OSC 8 it would promise a click that never
+happens. That is §9.14 read forwards: name the route that exists, and do not name one that
+might not.
+
+### Which editor, and why the chooser is a command
+
+An editor is supportable exactly when it registers a URL scheme that takes a path, because
+board hands over a URL and runs nothing. Three do, in the same shape — the path is whatever
+follows `<scheme>://file`:
+
+| name | bundle | scheme | how the shape is known |
+|---|---|---|---|
+| `cursor` | `Cursor.app` | `cursor://` | verified by hand; a VS Code fork |
+| `vscode` | `Visual Studio Code.app` | `vscode://` | documented by VS Code |
+| `zed` | `Zed.app` | `zed://` | `open_listener.rs` strips exactly `zed://file` |
+
+So one template covers all three, and `internal/editor` only has to answer *which*.
+`{"config": {"editor": "cursor"}}` pins it and `board editor <name>` writes that. Until then
+board picks: the only installed one, or the first of `Known` when several are.
+
+**`Known` is alphabetical, deliberately.** board has no opinion about which editor is better,
+and any other order would be one — encoded in a table nobody reads, deciding for everybody
+who never runs the command. Alphabetical is arbitrary in a way that is honest about being
+arbitrary, and it is stable: a link cannot silently move because you installed something,
+unless the new editor sorts first, and `doctor` names the choice either way.
+
+A configured editor wins even when board cannot find its bundle. The user said so, `Lookup`
+has already rejected the typos, and an app installed somewhere board does not look is likelier
+than a lie. `board editor` and `doctor` both flag the mismatch — `zed, not installed here` —
+rather than overruling it.
+
+**The chooser is a command because the moment of the click is unreachable.** The obvious
+design is the one macOS itself uses: the first time you open something, pick the app. board
+cannot do that. The terminal opens the link and tells board nothing — no callback, no exit
+code, no file touched — so there is no "first time this was opened" for board to hook, and an
+editor board never launches cannot be chosen at launch time (§9.35). What board *can* observe
+is "several editors are installed and you have not chosen", which is a fact available at any
+time and therefore belongs in a command that answers it on demand:
+
+    $ board editor
+      folder links open  Cursor.app   cursor://   (automatically)
+
+      → cursor   Cursor.app
+        vscode   Visual Studio Code.app
+        zed      not installed
+
+      change it:  board editor vscode
+
+A prompt inside `board watch` was considered and declined. It would cost the loop a second
+mode — `watch` has exactly one, and §12 is the argument for keeping it that way — and it would
+interrupt an ambient dashboard on first run to ask a question nobody had yet. `doctor`'s
+`links` row carries the same answer without asking anything.
+
+**No editor found means no folder glyph**, not a glyph pointing at `vscode://` on a machine
+with no VS Code. `actionCols` and `actionCell` are held to the same predicate by a test, so
+the column is not reserved for a cell that will not be drawn.
+
+### The frame has links; the one-shot table does not
+
+`board` prints for a pipe, a scrollback and a bug report. Escape sequences do not belong in
+a file, and a preview hostname is derived from a branch name, which is work data — the same
+reason `doctor` never prints `notify_cmd` (§14) and the same reason the demo is a fixture
+(§16). So the derived fields live on `Row`, where both renderers can see them, and only the
+frame draws them. That is the rule working, not an exception to it: a derived quantity goes
+on `Fleet`/`Row` so the renderers cannot disagree about *what is true*; which of them draws
+it is still each one's own business (§3).
+
+### What the cell costs, and what it never costs
+
+`actionCols` is the single place that decides whether the column exists, read by both the
+arithmetic and the rendering so they cannot disagree:
+
+- **Nothing, on a fleet with nothing to point at.** No row with a `Preview` or a `Folder`
+  means no reserved columns and no padding, and the frame is byte-identical to the one
+  before links existed. Every golden frame in the suite still passes unblessed, which is
+  what says so.
+- **Nothing, on a terminal too narrow for a bare row beside it.** Shed whole, like the KPI
+  strip's cells: half a link cell is a glyph that no longer lines up with the one above it,
+  and that reads as a rendering fault rather than as an absent link.
+- **Never the label's floor.** The cell comes out of the surplus the bar would otherwise
+  take, after the label and the workspace column have theirs (§9.29).
+
+Two predicates decide whether the cell exists — `pointsSomewhere` for the arithmetic and
+`actionCell` for the rendering — and a test holds them to the same answer. Disagreeing either
+reserves a column nothing fills, or draws a glyph nothing reserved room for, and the second one
+wraps the frame.
+
+Colour is `inkSecondary`, already validated: these are affordances, not data, and exactly
+one element in the frame is allowed to shout (§6). The glyphs stay inside the Unicode
+blocks the rest of the frame draws from — a glyph that falls back to another font is a
+glyph whose width board guessed wrong, and the fit is a hard rule.
+
+One consequence worth naming: a hyperlink is the first escape sequence in the frame that
+is **not** SGR, and it is terminated differently. `printed` and `clampLine` now share one
+scanner, and a clamped line closes a link as well as a colour — an open one makes every
+cell after it part of the link (§9.34).

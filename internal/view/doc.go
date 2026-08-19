@@ -13,11 +13,17 @@
 //     inferred from rendered output.
 //   - order.go — navigation, which follows the screen rather than the data
 //   - palette.go, scale.go, format.go — colour, the idle scale, and cell padding
+//   - link.go — the two things a row points at besides its tab, as hyperlinks the
+//     terminal opens rather than anything board runs (DESIGN.md §18)
 //
 // The frame fits the terminal in both directions. A line wider than the screen
 // wraps, a wrapped line makes the frame taller than height() counted, and the
 // header is then the first thing to scroll away. clampLine is the backstop, not
 // the layout: the arithmetic is what makes lines fit.
+//
+// A hyperlink is the one escape here that is not SGR, and it is terminated differently.
+// printed and clampLine share one scanner for it, and a clamped line must close a link as
+// well as a colour: an open one annexes every cell after it (EVIDENCE.md §9.34).
 //
 // Colour is validated, never eyeballed — do not add or substitute a value without
 // re-validating it against both terminal backgrounds (DESIGN.md §6).
