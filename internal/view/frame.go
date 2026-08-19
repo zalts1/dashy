@@ -158,13 +158,32 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band, airy bool) string 
 		}
 		return out + strings.Repeat(" ", max(0, gutterW-width))
 	}
-	b.WriteString("\n   " + dim(strings.Repeat(" ", gutterW)+pad("LABEL", labelW)+
-		strings.Repeat(" ", midCols)+fmt.Sprintf("%*s", idleW, "IDLE")+"  "+
-		cut(wsHeader, tailW)) + "\n")
+	// Every column area is named, including the link cell, which had none. The names sit where
+	// their columns start, so RELATED is over the glyphs and not merely on the same line (§19).
+	colHead := strings.Repeat(" ", gutterW) + pad(sessionHeader, labelW) +
+		strings.Repeat(" ", midCols) + fmt.Sprintf("%*s", idleW, "IDLE") + "  " +
+		pad(cut(wsHeader, tailW), tailW)
+	if actW > 0 {
+		colHead += strings.Repeat(" ", actionsGap) + relatedHeader
+	}
+	b.WriteString("\n   " + dim(colHead) + "\n")
+	// The rule costs a line, so it is spent on the same budget as the blank lines between rows:
+	// air is a luxury and rows are information, so a tab too short for the airy frame gets its
+	// rows back before it gets a rule (§9.44).
+	if airy {
+		b.WriteString(columnRule(s.Cols))
+	}
 
 	// when and tail are passed rather than derived, because a todo row states a lifetime
 	// and belongs to no workspace, while a session row states a gap and does (§9.19).
-	line := func(state, label string, showBar bool, r board.Row, when, tail string) string {
+	line := func(state, label string, showBar bool, r board.Row, g board.Group, when, tail string) string {
+		// A grouped row nests under its header. The indent is taken out of the label column so
+		// nothing to its right moves (§19).
+		indent := 0
+		if g.Header() {
+			indent = groupIndent
+		}
+		labW := max(0, labelW-indent)
 		mid := " "
 		if bars {
 			// An empty cell, not a missing one: a working row has no bar but still has
@@ -178,9 +197,11 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band, airy bool) string 
 		// Three columns, as before: the rail, the caret, a space. The rail takes the outermost
 		// one — which was always blank — so grouping adds no width to a frame that has to fit
 		// (§6). The caret keeps its own column and the two never collide.
-		lead, text := rail(r.GroupColour)+"  ", body(pad(label, labelW))
+		bar := rail(r.GroupColour, g.Header())
+		lead, text := bar+"  "+strings.Repeat(" ", indent), body(pad(label, labW))
 		if u.Sel != "" && r.Key == u.Sel {
-			lead, text = rail(r.GroupColour)+fg(inkPrimary, "▸")+" ", fg(inkPrimary, pad(label, labelW))
+			lead = bar + fg(inkPrimary, "▸") + " " + strings.Repeat(" ", indent)
+			text = fg(inkPrimary, pad(label, labW))
 		}
 		// The workspace name is padded only when something follows it, so a row with nothing
 		// to point at — and every todo, which has no process and so no directory (§12) —
@@ -194,30 +215,37 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band, airy bool) string 
 			body(fmt.Sprintf("%*s", idleW, when)) + "  " + tailCell + "\n"
 	}
 	// row is the session form of line: idle time as a gap, and the place it lives in.
-	row := func(state, label string, showBar bool, r board.Row) string {
-		return line(state, label, showBar, r, humanize(r.Idle), r.Where())
+	row := func(state, label string, showBar bool, r board.Row, g board.Group) string {
+		return line(state, label, showBar, r, g, humanize(r.Idle), r.Where())
 	}
 	// emit draws a band's rows in their groups. Every band goes through it, so a header cannot
 	// appear in one band and not another — the same reason the join lives in board.Build (§3).
 	//
 	// The gap is reset after a header so the header and its first row read as one block, and
 	// spent between groups so two groups never run together.
-	emit := func(rows []board.Row, draw func(board.Row) string) {
-		first := true
-		for _, g := range board.Groups(rows) {
-			if g.Header() {
-				if !first {
-					b.WriteString(gap)
-				}
-				b.WriteString(groupHead(g, s.Cols))
-				first = true
+	// **Spacing is what makes a group read as one thing.** Rows inside a named group are
+	// adjacent and groups are separated by a blank, so the gap between siblings is smaller than
+	// the gap between groups. Equal gaps everywhere — which is what shipped first — left the
+	// header looking like it applied to the whole band (§19).
+	//
+	// It degrades exactly right: on a fleet with one session per workspace every row is its own
+	// group, so a blank falls between every row and the frame is the airy one it always was.
+	emit := func(rows []board.Row, draw func(board.Row, board.Group) string) {
+		b.WriteString(gap) // a blank under the band title, when the frame can afford one
+		for gi, g := range board.Groups(rows) {
+			if gi > 0 {
+				b.WriteString(gap)
 			}
-			for _, r := range g.Rows {
-				if !first {
+			if g.Header() {
+				b.WriteString(groupHead(g, s.Cols))
+			}
+			for ri, r := range g.Rows {
+				// Tight inside a named group; spaced otherwise, which is the run of rows that
+				// belong to no workspace at all — background agents share one nameless group.
+				if ri > 0 && !g.Header() {
 					b.WriteString(gap)
 				}
-				b.WriteString(draw(r))
-				first = false
+				b.WriteString(draw(r, g))
 			}
 		}
 	}
@@ -226,8 +254,8 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band, airy bool) string 
 		b.WriteString("\n  " + fg(statusCritical, "NEEDS YOU") + "\n")
 		// Blocked rows carry the bar too: the same quantity on the same absolute
 		// scale, so "waiting 3h" is comparable to anything in QUIET.
-		emit(blocked, func(r board.Row) string {
-			return row(mark(badge(inkPrimary, statusCritical, " BLOCKED "), 9, r.Stale), r.Label, true, r)
+		emit(blocked, func(r board.Row, g board.Group) string {
+			return row(mark(badge(inkPrimary, statusCritical, " BLOCKED "), 9, r.Stale), r.Label, true, r, g)
 		})
 	} else {
 		b.WriteString("\n  " + dim("NEEDS YOU") + "   " + dim("nothing blocked") + "\n")
@@ -236,8 +264,8 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band, airy bool) string 
 	if len(working) > 0 {
 		b.WriteString("\n  " + fg(statusGood, "WORKING") + " " + dim(fmt.Sprintf("· %d", len(working))) + "\n")
 		// No bar: for a working agent elapsed time is progress, not rot.
-		emit(working, func(r board.Row) string {
-			return row(mark(fg(statusGood, workingGlyph), 1, false), r.Label, false, r)
+		emit(working, func(r board.Row, g board.Group) string {
+			return row(mark(fg(statusGood, workingGlyph), 1, false), r.Label, false, r, g)
 		})
 	}
 
@@ -250,8 +278,8 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band, airy bool) string 
 			b.WriteString(head + dim(" · collapsed") + "\n")
 		} else {
 			b.WriteString(head + "\n")
-			emit(quiet.rows, func(r board.Row) string {
-				return row(mark(dim(quietGlyph), 1, r.Stale), r.Label, true, r)
+			emit(quiet.rows, func(r board.Row, g board.Group) string {
+				return row(mark(dim(quietGlyph), 1, r.Stale), r.Label, true, r, g)
 			})
 		}
 		// The count stays visible so the backlog can never hide by being collapsed. It is
@@ -291,7 +319,9 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band, airy bool) string 
 			// No bar, and no workspace: a bar means rot on the idle scale, and a todo's age
 			// is a lifetime that only grows rather than a gap that resets. The mark is an
 			// empty box — nothing is running, and nothing has been done.
-			b.WriteString(line(mark(fg(inkSecondary, todoGlyph), 1, false), r.Label, false, r, since(r.Idle), ""))
+			// A todo belongs to no workspace, so it joins no group: the zero Group draws no rail
+			// and no indent, which is what a row with no process should look like (§12).
+			b.WriteString(line(mark(fg(inkSecondary, todoGlyph), 1, false), r.Label, false, r, board.Group{}, since(r.Idle), ""))
 		}
 		if todo.hidden > 0 {
 			b.WriteString("   " + strings.Repeat(" ", gutterW) + dim(fmt.Sprintf("+%d todo", todo.hidden)) + "\n")

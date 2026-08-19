@@ -1571,6 +1571,41 @@ labels, stranding it nine columns from the rail that owns it.
 chrome (§9.10), so header lines are budgeted by construction and the shedding ladder converges on
 them like anything else.
 
+### The nest, the rules, and what spacing is carrying
+
+Three things were wrong on first contact with a real fleet, and all three were about the frame
+saying *which rows belong to what* (§9.50).
+
+**Grouped rows indent four columns under their header.** Without it a grouped row's state mark sat
+in the same column as an ungrouped one's, so the header looked like it applied to the whole band
+rather than to the two rows beneath it. **The indent comes out of the label's own width**, so the
+bar, IDLE, WHERE and RELATED columns do not move — and `columns` adds it to the label's measured
+width via `Fleet.Grouped()`, or the column would be sized to the longest label and then have four
+columns eaten out of it, truncating the very label it was measured for.
+
+**Spacing carries the grouping, and it was the real fault.** Equal blank lines inside and between
+groups meant a group never read as one thing however it was decorated. Rows inside a named group
+are now adjacent and a blank falls between groups — the gap between siblings is smaller than the
+gap between groups, which is the whole signal. It degrades exactly right: on a one-session-per-
+workspace fleet every row is its own group, so a blank falls between every row and the frame is
+the airy one it always was (§9.44).
+
+**The column header names all four areas, and rules anchor it.** `LABEL` was implementation
+vocabulary for a column that holds the *session*; `REPO` sat over a cell that shows
+`repo -> worktree` as often as a bare repository, and both are answers to *where*. The link cell
+had no name at all. So: `SESSION`, `IDLE`, `WHERE`, `RELATED`, and the one-shot table uses the same
+words, because two renderers inventing separate vocabularies for one column is how they come to
+disagree (§3).
+
+A faint rule sits under the column header and after each group's name — the first anchoring the
+header to the table, the second closing the group off to the right. Both are `linkAbsent`'s weight:
+a rule is structure and must never compete with anything that is information (§9.45).
+
+**The rules are drawn only when the frame is airy.** A rule costs a line, and it is spent on the
+same budget as the blank lines: a tab too short for the airy frame gets its rows back before it
+gets a rule. Shipping it unconditionally cost a line everywhere and pushed a todo off a short
+screen, which the suite caught.
+
 ### The colour is the user's, so the *function* is what gets validated
 
 §6 says colour is validated and never eyeballed, and every value in `palette.go` was measured by

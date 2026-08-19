@@ -66,6 +66,7 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.47 | The workspace was two mental models, not one bad column — and the pull request was joined on the wrong one | `board/build.go`, `board/board.go`, `host/branch.go`, `cmux/sidebar.go`, `DESIGN.md` §19 |
 | 9.48 | A colour board does not choose still has to clear the floor — so validate the function, not the value | `view/group.go`, `view/palette.go`, `DESIGN.md` §19 |
 | 9.49 | ⌘-click cannot focus a tab: cmux registers no deep link, and OSC 8 needs a URL | `view/link.go`, `DESIGN.md` §10.14 |
+| 9.50 | Grouping drawn but not *read*: the nest, the rules and the names, and why spacing was the real fault | `view/frame.go`, `view/group.go`, `view/layout.go`, `board/board.go` |
 
 ---
 
@@ -1849,3 +1850,52 @@ a click is exactly the opener that rule exists to prevent.
 *Trigger:* a cmux release that registers a focus deep link — `cmux://surface/<uuid>/focus` or
 similar. At that point this is a two-line change in `view/link.go`, because the row already knows
 its surface UUID. Recorded as `DESIGN.md` §10.14.
+
+
+### 9.50 A group that is drawn is not yet a group that reads (2026-08-19)
+
+§9.47 shipped grouping and it was correct: right rows, right order, right colour. On the first real
+fleet with a multi-session workspace it still did not **read** as a group. Four separate faults,
+found by looking at it rather than by any test.
+
+**The nest was missing.** A grouped row's state mark sat in the same column as an ungrouped one's,
+so the two were visibly the same level and the header looked like it applied to the whole band.
+Grouped rows now indent four columns.
+
+That had a consequence worth recording, because it was a bug the moment it was written: the label
+column is sized to the longest label, and the indent then ate four columns out of it — so every
+grouped row truncated the very label the column had been measured for. The sizing and the drawing
+were in two different places and disagreed. `Fleet.Grouped()` exists so they cannot: it is the set
+of row keys that sit under a header, derived once on the domain object, read by `columns` to size
+and by the frame to draw (§3).
+
+**Spacing was the real fault, and decoration would not have fixed it.** The blank line between two
+rows of one group was the same as the blank between groups, so the group never cohered no matter
+what marked it. Inside a named group rows are now adjacent; a blank falls between groups. The gap
+between siblings is smaller than the gap between strangers, which is the entire signal — and it
+falls out for free on a one-session-per-workspace fleet, where every row is its own group and a
+blank lands between every row exactly as before.
+
+**The column header named two of four columns, and named them wrong.** `LABEL` is implementation
+vocabulary for the column holding the *session*. `REPO` sat over a cell showing `repo -> worktree`
+about half the time — both halves answer *where*, and `REPO` was only the first. The link cell had
+no header at all, so four glyphs at the end of every row belonged to no column. Now `SESSION`,
+`IDLE`, `WHERE`, `RELATED`, in the frame and in the one-shot table, because one column with two
+names across two renderers is §3's failure mode.
+
+*Aside worth keeping:* the header was not actually misaligned, which is what it was reported as.
+`LABEL` sat exactly over the labels. What made it look broken was the wide empty span where the bar
+column falls plus the unnamed glyphs at the right — a gap and an orphan, read as misalignment.
+Fixing the alignment would have fixed nothing.
+
+**The rules cost a line, and one line was one too many.** A faint rule under the column header and
+after each group name is what anchors the header to the table and bounds the group. Drawn
+unconditionally it cost a line on every frame and pushed a todo off a short screen —
+`TestTodosSurviveTheCollapse` caught it. They are drawn only when the frame is already airy, on the
+same budget as the blank lines: air is a luxury, rows are information (§9.44).
+
+*Trap that cost time here:* two tests measured columns with `strings.Index`, which is a **byte**
+offset. The rail glyph is three bytes and one column, and an OSC 8 hyperlink is a whole escape
+sequence inside the line — so both read as enormous column numbers and looked like real layout
+bugs. Measure columns in runes, and strip hyperlinks as well as SGR before measuring. `plain()`
+only removes colour; links terminate with ST, not BEL.

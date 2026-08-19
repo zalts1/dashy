@@ -3,6 +3,7 @@ package view
 import (
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/zalts1/dashy/internal/board"
 )
@@ -17,6 +18,20 @@ const railGlyph = "▌"
 
 // groupLead is the rail plus the two columns after it: where a group's name starts.
 const groupLead = 3
+
+// groupIndent is how far a grouped row sits inside its header. Without it a grouped row's state
+// mark sat in the same column as an ungrouped one's, so the two read as the same level and the
+// header looked like it applied to the whole band rather than to the two rows under it.
+//
+// **The indent comes out of the label's own width, not off the front of the row**, so every
+// column to the right of the label — bar, IDLE, WHERE, RELATED — stays exactly where it was. A
+// nest that shifted the whole row would break the width invariant §9.12 is about.
+const groupIndent = 4
+
+// ruleGlyph draws the two rules: one under the column header, anchoring it to the table, and one
+// after a group's name, closing the block off to the right. Both are inkAbsent's weight, because
+// a rule is structure and must not compete with anything that is information (§9.45).
+const ruleGlyph = "─"
 
 // groupColour is the user's workspace colour, lifted until it is legible.
 //
@@ -116,12 +131,16 @@ func fromHSL(h, s, l float64) string {
 //
 // Blank and not white. A rail on every row would be ink spent on no information — most
 // workspaces have no accent, and a mark that is always there marks nothing (§9.13).
-func rail(colour string) string {
-	c := groupColour(colour)
-	if c == "" {
-		return " "
+func rail(colour string, inGroup bool) string {
+	if c := groupColour(colour); c != "" {
+		return fg(c, railGlyph)
 	}
-	return fg(c, railGlyph)
+	// A group the user never coloured still has to hold its rows together, so it rails in the
+	// faint weight. A row belonging to no group draws nothing: a mark on every row marks nothing.
+	if inGroup {
+		return fg(linkAbsent, railGlyph)
+	}
+	return " "
 }
 
 // groupHead is the line above a workspace holding more than one session.
@@ -136,11 +155,25 @@ func rail(colour string) string {
 // and a wrapped line makes the frame occupy a screen row the height measurement did not budget
 // for (§6, EVIDENCE.md §9.10).
 func groupHead(g board.Group, width int) string {
-	name := cut(g.Name, max(0, width-headMargin-groupLead))
+	count := fmt.Sprintf("· %d", len(g.Rows))
+	name := cut(g.Name, max(0, width-headMargin-groupLead-runes(count)-2))
 	c := groupColour(g.Colour)
-	mark, painted := " ", underline(fg(inkPrimary, name))
+	mark, painted := fg(linkAbsent, railGlyph), underline(fg(inkPrimary, name))
 	if c != "" {
 		mark, painted = fg(c, railGlyph), fg(c, name)
 	}
-	return mark + "  " + painted + " " + dim(fmt.Sprintf("· %d", len(g.Rows))) + "\n"
+	head := mark + "  " + painted + " " + dim(count)
+	// The rule runs from the count to the right margin, so the group reads as a bounded block
+	// rather than a name floating above some rows.
+	if fill := width - headMargin - groupLead - runes(name) - runes(count) - 2; fill > 0 {
+		head += " " + fg(linkAbsent, strings.Repeat(ruleGlyph, fill))
+	}
+	return head + "\n"
+}
+
+// columnRule underlines the column header. One line, and it is what turns four words floating
+// above a table into a header the table hangs from.
+func columnRule(width int) string {
+	return strings.Repeat(" ", headMargin) +
+		fg(linkAbsent, strings.Repeat(ruleGlyph, max(0, width-2*headMargin))) + "\n"
 }

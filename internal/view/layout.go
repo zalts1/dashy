@@ -41,9 +41,16 @@ const (
 	// it is a function of the fleet now and no longer a constant.
 	rowChromeBare = 3 + 1 + idleW + 2
 	// wsHeader names the location column, and it is the tail column's floor too: a column keeps
-	// room for its own label. `REPO` rather than `WORKSPACE` since §9.39 — cmux names a
-	// workspace per agent task, so its title repeated the row's own label.
-	wsHeader = "REPO"
+	// room for its own label. It was `WORKSPACE` until §9.39 and then `REPO`, and it is `WHERE`
+	// now: the cell shows `repo -> worktree` as often as a bare repository, and both are answers
+	// to *where*, which `REPO` was only half of (§19).
+	wsHeader = "WHERE"
+	// sessionHeader names the label column. `LABEL` was implementation vocabulary — what the
+	// column holds is the session, which is what the reader is looking for (§19).
+	sessionHeader = "SESSION"
+	// relatedHeader names the link cell. It had no name at all, which left four glyphs at the
+	// right-hand end of every row belonging to no column (§19).
+	relatedHeader = "RELATED"
 	// The quiet tail never shrinks below this: a QUIET band of one row reads as a
 	// quiet fleet, which is the opposite of the truth.
 	minQuietRows = 3
@@ -192,8 +199,15 @@ func pointsSomewhere(r board.Row, folders bool) bool {
 func columns(f board.Fleet, cols int, folders bool) (labelW, tailW, barW int) {
 	gutterW := gutterFor(f)
 	whole := 0
+	// A grouped row's label starts groupIndent columns further in, so the column has to be that
+	// much wider or it truncates the label it was sized for (§19).
+	grouped := f.Grouped()
 	for _, r := range f.Rows {
-		whole = max(whole, runes(r.Label))
+		w := runes(r.Label)
+		if grouped[r.Key] {
+			w += groupIndent
+		}
+		whole = max(whole, w)
 		// Where and not Workspace: the column prints a repository and the worktree inside it,
 		// and sizing on the field it no longer draws is how a column comes to truncate text it
 		// had room for (§9.39).

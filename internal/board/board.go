@@ -216,3 +216,26 @@ func Groups(rows []Row) []Group {
 	}
 	return out
 }
+
+// Grouped is the set of row keys that sit in a group with a header — exactly the rows a renderer
+// indents under a group name.
+//
+// Derived here rather than worked out in the renderer, for the reason §3 gives: the label column
+// has to be *sized* for the indent as well as drawn with it, and those are two different places in
+// the view. When they disagreed, the column was sized to the longest label and then the indent ate
+// four columns of it, so every grouped row truncated the very label the column was measured for.
+func (f Fleet) Grouped() map[string]bool {
+	out := map[string]bool{}
+	blocked, working, todo, quiet := f.Bands()
+	for _, band := range [][]Row{blocked, working, todo, quiet} {
+		for _, g := range Groups(band) {
+			if !g.Header() {
+				continue
+			}
+			for _, r := range g.Rows {
+				out[r.Key] = true
+			}
+		}
+	}
+	return out
+}
