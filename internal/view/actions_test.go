@@ -108,11 +108,30 @@ func TestActionCell(t *testing.T) {
 			}
 		}
 	}
-	if printed(previewOnly) != 1 {
-		t.Errorf("preview-only cell printed %d columns, want 1: %q", printed(previewOnly), previewOnly)
+	// The cell is the last thing on the line, so absent *trailing* glyphs are trimmed rather
+	// than spaced out: padding there would widen the frame's right edge on a row that has
+	// nothing in the column it widened for (§9.29). Absent *leading* ones still hold their
+	// column, which is what keeps the glyphs lined up down a band.
+	//
+	// The order is rarest first — Storybook, preview, folder — so a preview-only row keeps one
+	// leading blank and trims the two trailing ones.
+	if printed(previewOnly) != 3 {
+		t.Errorf("preview-only cell printed %d columns, want 3: %q", printed(previewOnly), previewOnly)
+	}
+	if !strings.HasPrefix(previewOnly, "  ") {
+		t.Errorf("preview-only cell did not keep the Storybook's column: %q", previewOnly)
 	}
 	if strings.HasSuffix(previewOnly, " ") {
 		t.Errorf("preview-only cell was padded rather than trimmed: %q", previewOnly)
+	}
+	// The leftmost slot alone is the smallest the cell gets: everything after it trims away.
+	storybookOnly := actionCell(board.Row{Storybook: "http://localhost:6006"}, "cursor")
+	if printed(storybookOnly) != 1 {
+		t.Errorf("storybook-only cell printed %d columns, want 1: %q",
+			printed(storybookOnly), storybookOnly)
+	}
+	if !strings.Contains(storybookOnly, storybookGlyph) {
+		t.Errorf("storybook-only cell is not the Storybook glyph: %q", storybookOnly)
 	}
 }
 

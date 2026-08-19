@@ -89,9 +89,12 @@ func TestGoldenFrames(t *testing.T) {
 func goldenLinkFleet() board.Fleet {
 	f := goldenFleet()
 	f.TodoCap = 10
-	f.Rows[0].Folder, f.Rows[0].Preview = "/Users/you/work/repo", "https://app.localhost"
+	// All three on one row, so the full cell is pinned and not just its combinations.
+	f.Rows[0].Folder = "/Users/you/work/repo"
+	f.Rows[0].Preview = "https://app.localhost"
+	f.Rows[0].Storybook = "http://localhost:6006"
 	f.Rows[2].Folder = "/Users/you/work/repo/.claude/worktrees/csv export"
-	f.Rows[2].Storybook = "http://localhost:6006"
+	f.Rows[2].Storybook = "http://localhost:6007"
 	f.Rows[3].Folder, f.Rows[3].Preview = "/Users/you/work/other", "https://api.localhost:8443"
 	f.Rows[4].Storybook = "http://localhost:6007"
 	f.Rows = append(f.Rows, board.Row{Key: "todo:t0", State: "todo",

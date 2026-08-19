@@ -102,17 +102,20 @@ belongs to.** The action is the same either way — `Enter` focuses the tab — 
 repeating the agent on every row would cost width and answer a question you do not have.
 `board doctor` counts the two rosters separately, which is where the difference matters.
 
-## Three links per row — `⧫`, `⧆` and `⧉`
+## Three links per row — `⧆`, `⧫` and `⧉`
 
 At the right-hand end of a row, `board watch` puts up to three clickable glyphs:
 
-    ○ migrate auth handlers to v2   ▇▇▇       9m  AUTH      ⧫   ⧉
-    ○ ship the component library    ▇▇        4m  UI        ⧫ ⧆ ⧉
+    ○ migrate auth handlers to v2   ▇▇▇       9m  AUTH        ⧫ ⧉
+    ○ ship the component library    ▇▇        4m  UI        ⧆ ⧫ ⧉
     ○ backfill the events table     ▇▇▇▇   7h20m  DATA          ⧉
 
-- **`⧫` green** — the local **preview** serving that session's branch
-- **`⧆` pink** — a **Storybook** listening in it
+- **`⧆` pink** — a **Storybook** listening in the session's worktree
+- **`⧫` green** — the local **preview** serving that branch
 - **`⧉` cyan** — its **folder**, the worktree, opened in your editor to see the branch's diff
+
+They are ordered by how often a row has one, rarest first, so the folder anchors the right
+edge and the gaps fall on the left.
 
 Click them; they are terminal hyperlinks, so cmux opens the http ones in a browser tab beside
 the fleet and hands the folder to your editor. **board itself opens nothing** — it only says

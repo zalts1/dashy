@@ -108,9 +108,12 @@ const (
 // band whichever of them a row happens to have. Empty when the row has none — an empty cell
 // would pad every row of a fleet that has nothing to point at.
 //
-// Order is the two running things first, then the folder: the folder is on nearly every row,
-// so anchoring it at the right-hand end gives the cell a consistent edge, and the two http
-// links sit together because that is what they have in common (§18).
+// Order is by how often a row has one, rarest first: Storybook, preview, folder. The folder is
+// on nearly every row, so putting it last anchors the cell's right-hand edge and keeps the
+// trailing trim from firing; the Storybook is the rarest, so its empty column falls on the
+// left where it costs nothing to look at. The alternative — grouping the two http links
+// together — spreads the gaps through the middle of the cell instead, which reads as ragged
+// down a band (§18).
 //
 // Green for the live thing and cyan for the editor, matched in measured contrast so neither
 // dominates the other (see linkPreview/linkFolder). Colour is what separates the two glyphs
@@ -119,7 +122,7 @@ const (
 // frame is allowed to shout (§6). Under cmux the terminal underlines them on hover, which is
 // what makes them findable without a legend line promising a click the reader cannot see.
 func actionCell(r board.Row, scheme string) string {
-	preview, storybook, folder := " ", " ", " "
+	storybook, preview, folder := " ", " ", " "
 	if r.Preview != "" {
 		preview = link(r.Preview, fg(linkPreview, previewGlyph))
 	}
@@ -130,6 +133,6 @@ func actionCell(r board.Row, scheme string) string {
 		folder = link(url, fg(linkFolder, folderGlyph))
 	}
 	// Right-trimmed because nothing follows it on the line: a row whose only link is the
-	// preview would otherwise end in four columns of padding.
-	return strings.TrimRight(preview+" "+storybook+" "+folder, " ")
+	// Storybook would otherwise end in four columns of padding.
+	return strings.TrimRight(storybook+" "+preview+" "+folder, " ")
 }

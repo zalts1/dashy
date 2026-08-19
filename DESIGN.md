@@ -1152,11 +1152,16 @@ worktree the session is working in:
 - **the Storybook**, a component workbench listening in it, and
 - **the folder**, the worktree itself, opened in an editor to read the branch's diff.
 
-They are rendered as a five-column cell at the right-hand end of the row — `⧫` green for the
-preview, `⧆` pink for the Storybook, `⧉` cyan for the folder — and they are hyperlinks, not
-keys. Order is the two running things first and the folder last: the folder is on nearly
-every row, so anchoring it at the right-hand end gives the cell a consistent edge, while the
-two http links sit together because that is what they have in common.
+They are rendered as a five-column cell at the right-hand end of the row — `⧆` pink for the
+Storybook, `⧫` green for the preview, `⧉` cyan for the folder — and they are hyperlinks, not
+keys.
+
+**Order is by how often a row has one, rarest first.** The folder is on nearly every row, so
+putting it last anchors the cell's right-hand edge and keeps the trailing trim from firing;
+the Storybook is the rarest, so its empty column falls on the left where it costs nothing to
+look at. Grouping the two http links together instead — which is the arrangement that reads
+better as a sentence — spreads the gaps through the middle of the cell, and down a band of
+twenty rows that reads as ragged rather than as a column.
 
 ### The worktree is the join, and a path prefix is not
 
