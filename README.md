@@ -400,7 +400,11 @@ board has no reports at all: run `board install-hooks`.
 
 ## Install
 
-    go install github.com/zalts1/dashy/cmd/board@latest
+    go install github.com/zalts1/dashy/cmd/board@v1.0.0-beta.1
+
+**Pinned, and deliberately not `@latest`.** Go's `@latest` skips pre-release tags whenever a
+release exists, so it would quietly hand you `v0.2.0` — a build with none of this. The pin comes
+off and `@latest` goes back in the moment `v1.0.0` is cut.
 
 Or from a clone:
 
@@ -421,11 +425,11 @@ No dependencies, no daemon, no port, no telemetry, and no network of its own —
 request board can make is a `notify_cmd` you wrote yourself. `board watch` in a dedicated
 tab is the whole runtime.
 
-Substitute a tag for `@latest` to pin one — `@v0.2.0`. Either way the binary knows what
+Substitute any other tag to pin a different one. Either way the binary knows what
 it is, with no build flags, and reports what it depends on beside it:
 
     $ board version
-    board  v0.2.0
+    board  v1.0.0-beta.1
     claude 2.1.235 (Claude Code)
     cmux   0.64.22 (102) [ddd4a01bc]
     maki   0.4.9
@@ -439,7 +443,7 @@ which says how it was built rather than hiding it.
 ## When the board looks wrong — `board doctor`
 
     $ board doctor
-    board  v0.2.0
+    board  v1.0.0-beta.1
     claude 2.1.235 (Claude Code)
     cmux   0.64.22 (102) [ddd4a01bc]
     maki   0.4.9
