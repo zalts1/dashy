@@ -108,9 +108,9 @@ One change per PR. `go vet ./... && go test ./...` clean before you open it.
 macOS only, and that is not an oversight: `watch/term.go` uses `TIOCGETA`, which is
 BSD-only, so a linux runner cannot compile board at all.
 
-The runner deliberately has **neither `cmux` nor `claude` on `$PATH`** — it is the
+The runner deliberately has **none of `cmux`, `claude` or `maki` on `$PATH`** — it is the
 outsider machine, which is what makes every degraded path a fact instead of an argument.
-The job asserts their absence, so an image that started shipping either tool fails
+The job asserts their absence, so an image that started shipping any of them fails
 loudly rather than quietly stopping being a test bed.
 
 ## The demo GIF

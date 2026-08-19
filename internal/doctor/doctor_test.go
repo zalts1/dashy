@@ -24,6 +24,10 @@ func healthy() Report {
 		ConfigPath:   "/Users/x/.board.json",
 		ConfigOnDisk: true,
 		NotifyOn:     true,
+		MakiProcs:    2,
+		MakiReports:  2,
+		MakiSessions: 3,
+		MakiHooked:   true,
 	}
 }
 
@@ -71,11 +75,11 @@ func TestFormatReportsTheRosterErrorVerbatim(t *testing.T) {
 // A working roster states its size, because "0 sessions" and "could not ask" are the
 // two answers this row exists to separate.
 func TestFormatCountsAReadableRoster(t *testing.T) {
-	if got := Format(healthy()); !strings.Contains(got, "16 sessions") {
+	if got := Format(healthy()); !strings.Contains(got, "16 claude sessions") {
 		t.Errorf("roster row does not state the count:\n%s", got)
 	}
 	got := Format(Report{Sessions: 0})
-	if !strings.Contains(got, "0 sessions") {
+	if !strings.Contains(got, "0 claude sessions") {
 		t.Errorf("an empty but readable roster does not say so:\n%s", got)
 	}
 }
@@ -151,7 +155,7 @@ func TestFormatAlignsEveryAnswer(t *testing.T) {
 // no tabs is the exact shape of the bug where board saw 21 of 31 sessions.
 func TestFormatReportsTabsSeparatelyFromTheRoster(t *testing.T) {
 	got := Format(Report{Sessions: 16, Tabs: 0, Workspaces: 0})
-	if !strings.Contains(got, "16 sessions") {
+	if !strings.Contains(got, "16 claude sessions") {
 		t.Errorf("roster row missing:\n%s", got)
 	}
 	if !strings.Contains(got, "0 tabs") {
@@ -159,5 +163,89 @@ func TestFormatReportsTabsSeparatelyFromTheRoster(t *testing.T) {
 	}
 	if missing := Format(Report{NoCmux: true}); !strings.Contains(missing, "not found") {
 		t.Errorf("a missing cmux is not reported on the tabs row:\n%s", missing)
+	}
+}
+
+// board reports on two agents, so every row that describes a read describes both. A
+// diagnostic that covers one of them is the same silence §9.26 fixed, one agent up.
+
+func TestFormatReportsTheMakiRosterBesideTheClaudeOne(t *testing.T) {
+	got := Format(healthy())
+	if !strings.Contains(got, "3 maki sessions in 2 tabs") {
+		t.Errorf("the maki roster is missing from the roster row:\n%s", got)
+	}
+}
+
+// Not installed is the ordinary case, not a fault: board reports on whichever agents are
+// here. So the rows that diagnose maki say nothing at all rather than crying wolf — the
+// version block above has already said it is absent.
+func TestFormatKeepsQuietAboutMakiWhenItIsNotInstalled(t *testing.T) {
+	r := healthy()
+	r.NoMaki = true
+	r.MakiProcs, r.MakiReports, r.MakiSessions, r.MakiHooked = 0, 0, 0, false
+	got := Format(r)
+	for _, line := range strings.Split(got, "\n") {
+		if strings.HasPrefix(line, "roster") || strings.HasPrefix(line, "hooks") {
+			if strings.Contains(line, "maki") {
+				t.Errorf("a machine without maki is nagged about it: %q", line)
+			}
+		}
+	}
+}
+
+// The interesting maki failure, and the one a reader can fix: maki is running and board
+// is seeing nothing from it. On the board that is one line saying so; here it is the two
+// reads side by side, which is what shows *which* half is missing.
+func TestFormatShowsAMakiRunningWithNoReports(t *testing.T) {
+	r := healthy()
+	r.MakiReports, r.MakiSessions, r.MakiHooked = 0, 0, false
+	got := Format(r)
+	if !strings.Contains(got, "2 maki") || !strings.Contains(got, "no reports") {
+		t.Errorf("a running maki with no reports does not say so:\n%s", got)
+	}
+	if !strings.Contains(got, "install-hooks") {
+		t.Errorf("the repair is not named:\n%s", got)
+	}
+}
+
+// The hooks row states both wirings, and a half install is its own state on this side
+// too: board's Lua block missing from init.lua is a maki that never reports.
+func TestFormatReportsBothHookInstalls(t *testing.T) {
+	if got := Format(healthy()); !strings.Contains(got, "maki init.lua") {
+		t.Errorf("the maki hook is not reported as installed:\n%s", got)
+	}
+	r := healthy()
+	r.MakiHooked = false
+	got := Format(r)
+	if !strings.Contains(got, "not wired") {
+		t.Errorf("a missing maki hook reads as installed:\n%s", got)
+	}
+	if !strings.Contains(got, "install-hooks") {
+		t.Errorf("the repair is not named:\n%s", got)
+	}
+}
+
+// An init.lua whose markers make no sense is the state install-hooks refuses on, exactly
+// as an unparseable settings.json is — so doctor has to tell it from "not installed" or
+// the reader keeps running a command that keeps refusing.
+func TestFormatDistinguishesARefusedInitFile(t *testing.T) {
+	r := healthy()
+	r.MakiHooked = false
+	r.MakiHooksErr = errors.New("refusing to rewrite /Users/x/.config/maki/init.lua: board's block is not closed")
+	got := Format(r)
+	if !strings.Contains(got, "refusing") {
+		t.Errorf("a refused init.lua reads as merely unwired:\n%s", got)
+	}
+}
+
+// The maki roster's own failure keeps its words, for the reason the claude roster's does:
+// the frame says "maki roster unreadable · board doctor", and inside doctor that is
+// circular.
+func TestFormatReportsTheMakiRosterErrorVerbatim(t *testing.T) {
+	r := healthy()
+	r.MakiErr = errors.New("maki reports answered in an unknown shape: invalid character 'o'")
+	got := Format(r)
+	if !strings.Contains(got, "invalid character 'o'") {
+		t.Errorf("the maki roster error lost its detail:\n%s", got)
 	}
 }

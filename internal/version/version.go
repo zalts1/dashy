@@ -1,7 +1,7 @@
 // Package version answers the first question asked of any bug report: what is
-// installed. board's own version is only a third of that — it reads a roster from
-// `claude` and tabs from `cmux`, neither of which is a documented contract, so a
-// report that names board alone cannot be acted on (§9.1, §9.3).
+// installed. board's own version is the smallest part of that — it reads rosters from
+// `claude` and from `maki`, and tabs from `cmux`, and none of the three is a documented
+// contract, so a report that names board alone cannot be acted on (§9.1, §9.3, §17).
 //
 // The split is the usual one: Report reads the world, Format is pure, and the
 // interesting cases are the missing tools (§11).
@@ -14,18 +14,21 @@ import (
 
 	"github.com/zalts1/dashy/internal/claude"
 	"github.com/zalts1/dashy/internal/cmux"
+	"github.com/zalts1/dashy/internal/maki"
 )
 
-// Info is the three answers, each empty when the tool could not be asked.
+// Info is one answer per tool, each empty when that tool could not be asked.
 type Info struct {
 	Board  string
 	Claude string
 	Cmux   string
+	Maki   string
 }
 
-// Report gathers the three. It is the impure half and holds no judgement.
+// Report gathers them. It is the impure half and holds no judgement.
 func Report() Info {
-	return Info{Board: buildVersion(), Claude: claude.Version(), Cmux: cmux.Version()}
+	return Info{Board: buildVersion(), Claude: claude.Version(), Cmux: cmux.Version(),
+		Maki: maki.Version()}
 }
 
 // buildVersion reads the version the toolchain stamped in. No -ldflags -X: since Go
@@ -41,16 +44,17 @@ func buildVersion() string {
 	return bi.Main.Version
 }
 
-// LabelWidth is the column the answers start in. Exported because `doctor` prints these
-// three lines above four more of its own and they have to line up as one block; a second
-// copy of the number is a second thing to change.
+// LabelWidth is the column the answers start in, and the widest label ("claude") is what
+// sets it. Exported because `doctor` prints these lines above five more of its own and
+// they have to line up as one block; a second copy of the number is a second thing to
+// change.
 const LabelWidth = 6
 
-// Format renders the report as three pasteable lines.
+// Format renders the report as one pasteable line per tool.
 //
 // The upstream strings are passed through verbatim rather than parsed down to a
-// number: both are undocumented surfaces that have changed shape before, and a parser
-// over them is a thing that breaks silently on someone else's machine.
+// number: all three are undocumented surfaces and two have changed shape before, and a
+// parser over them is a thing that breaks silently on someone else's machine.
 func Format(in Info) string {
 	var b strings.Builder
 	row := func(tool, got, absent string) {
@@ -60,10 +64,14 @@ func Format(in Info) string {
 		fmt.Fprintf(&b, "%-*s %s\n", LabelWidth, tool, got)
 	}
 	// "unknown" and "not found" are different facts: board is always installed, so its
-	// version can only be unreadable, while claude and cmux can genuinely be absent.
+	// version can only be unreadable, while the three tools it reads can genuinely be
+	// absent. maki's absence is the ordinary case rather than a fault — board reports on
+	// whichever agents are here — but it is still a line, because a report that omits it
+	// leaves the reader unsure whether board looked (§17).
 	row("board", in.Board, "unknown")
 	row("claude", in.Claude, "not found")
 	row("cmux", in.Cmux, "not found")
+	row("maki", in.Maki, "not found")
 	return b.String()
 }
 

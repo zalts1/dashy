@@ -310,3 +310,23 @@ func TestWorkspaceSpan(t *testing.T) {
 		t.Errorf("empty fleet workspaces = %d, want 0", got)
 	}
 }
+
+// A blocked session goes stale like any other. Elapsed time is only progress for a
+// *working* session — a question that has gone unanswered for three hours is exactly
+// the row the ⚠ is for, and the one-shot table's `blocked → ⚠` is this rule.
+func TestABlockedSessionStillGoesStale(t *testing.T) {
+	a := interactive()
+	a.Status = "waiting"
+	old := func(s *Snapshot) { s.Clock[a.SessionID] = now.Add(-3 * time.Hour) }
+	f := Build(snap(a, old), now)
+	r := f.Rows[0]
+	if r.Rank != RankBlocked {
+		t.Fatalf("rank = %d, want blocked", r.Rank)
+	}
+	if !r.Stale {
+		t.Error("a blocked session three hours past the threshold carries no ⚠")
+	}
+	if f.Stale != 1 {
+		t.Errorf("Stale = %d, want the blocked row counted", f.Stale)
+	}
+}

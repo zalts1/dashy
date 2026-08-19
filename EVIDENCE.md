@@ -48,6 +48,8 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.29 | Two elements disagreed about where the right edge was, and neither spent the surplus — the header follows the frame, the row fills the width | `view/layout.go`, `view/header.go`, `view/frame.go`, `view/scale.go` |
 | 9.30 | `notify` never failed the agent and blocked it instead — the invariant covered errors, not latency | `hooks/notify.go`, `DESIGN.md` §8 |
 | 9.31 | `-h` was not missing, it was a todo: the absent flag wrote to the one file board owns | `cmd/board/usage.go`, `cmd/board/main.go` |
+| 9.32 | The maki hook installed, ran, and was denied everything — an `init.lua` with no `plugin.toml` beside it gets no permissions at all | `hooks/maki.go`, `doctor/`, `DESIGN.md` §17 |
+| 9.33 | cmux counts a surface's whole process tree, so "a maki with no report" is not the same as "no hook" | `board/build.go`, `DESIGN.md` §14, §17 |
 
 ---
 
@@ -972,3 +974,104 @@ argument only for the bare word `help` — because a todo may legitimately be ab
 (`board todo "help sam with the migration"` must stay a todo). Usage goes to stdout with
 exit 0; an unrecognised command still fails on stderr with exit 2, because being asked a
 question and being given a wrong one are different events and only one is an error.
+
+---
+
+### 9.32 The maki hook installed, ran, and was denied everything (2026-08-19)
+
+**Believed:** a maki plugin is Lua in the `init.lua` maki loads, and that is the whole
+install. The API reference documents `maki.session.live()`, `maki.uv.os_getenv`,
+`maki.fs.atomic_write` and `maki.api.create_autocmd` with no mention of a permission a
+caller has to be granted, and the block used nothing else.
+
+**Found by running it.** maki 0.4.9 installed to a scratch directory, driven in a pty with
+`CMUX_SURFACE_ID` set and an isolated `$HOME`, with the block that `board install-hooks`
+writes. maki started, created a session, fired its startup `SessionFocusChanged` and shut
+down cleanly. **No report was written, and nothing anywhere said why** — not the frame, not
+`maki.log`, which carried no warning of any kind.
+
+Instrumenting the block one call at a time, with a probe that wrote a file per step, showed
+the failure was at the first line rather than the last: nothing ran at all. The cause is in
+maki's own source, one function away from the API it documents:
+
+    // maki-lua/src/plugin_permissions.rs
+    pub(crate) fn load_plugin_permissions(plugin_dir: Option<&Path>) -> PluginPermissions {
+        let Some(dir) = plugin_dir else {
+            return PluginPermissions::denied();
+        };
+        let manifest_path = dir.join(MANIFEST_FILE);   // plugin.toml
+        match std::fs::read_to_string(&manifest_path) {
+            ...
+            Err(_) => PluginPermissions::denied(),     // <- no plugin.toml
+        }
+    }
+
+**An `init.lua` with no `plugin.toml` beside it is denied every permission.** Not the ones
+it asks for — all five. `PluginPermissions::from_manifest` then defaults each *absent* key
+to `true`, so any manifest at all grants everything, and no manifest grants nothing. The
+guarded calls (`maki.uv.os_getenv`, `maki.fs.*`) throw, the `pcall` around the top-level
+reads swallowed it exactly as designed, and the block went quiet.
+
+Adding four lines fixed it, and the same probe then produced the report end to end:
+
+    {"sessions":[{"id":"CeBgomGnr5BgRQJVUybn3","updated_at":1787123334,
+      "title":"New session","status":"idle"}],"surface":"TEST-SURFACE-1","cwd":"..."}
+
+**Shipped:** the manifest is half the install. `install-hooks` writes a `plugin.toml`
+granting `env` and `fs_write` and denying nothing — an absent key is allowed, so board asks
+for what it uses and decides nothing about Lua the user adds later. An existing manifest is
+never rewritten and never deleted; `install-hooks` says what the block needs and leaves the
+file alone, because that file is policy for every plugin in its directory.
+
+**And the state got a name.** `MakiInstalled` returns the two halves separately, and
+`doctor` prints `maki init.lua without plugin.toml` for a block that is installed and inert.
+Reporting that as installed is what hid this for the length of a debugging session; it would
+have hidden it forever on somebody else's machine, which is §9.26's lesson arriving in a
+place nobody had looked.
+
+**Why no test caught it:** there was no test that ran maki. There still is not — the suite
+must not depend on a live agent (`CLAUDE.md`), and CI has neither agent installed on
+purpose (§9.24). What ships instead is a test that the manifest is written and that the
+checker sees both halves, plus this entry: the argument for those four lines is a
+measurement, and the measurement lives here.
+
+---
+
+### 9.33 cmux counts a surface's whole process tree (2026-08-19)
+
+**Believed:** `cmux_process_pids` is 1:1 with the agent process, as §3 has said since the
+join was written. So a maki pid that maps to a surface is *the* maki in that tab, and a
+surface with a live maki and no report means the hook is not installed — one line of
+trouble, one repair.
+
+**Found in the same session,** by accident. Two maki processes started in a pty from a
+shell inside a cmux tab both resolved to that tab's surface:
+
+    pids: [43510 43823]
+    pid 43510 -> surface "97D60CC4-…" ws "Dashy contribute" title "◐ Integrate Maki…"
+    pid 43823 -> surface "97D60CC4-…" ws "Dashy contribute" title "◐ Integrate Maki…"
+
+Neither was started by cmux. cmux lists a surface's descendants, not just the process it
+spawned, and the count is not fixed: the same tree had `cmux_process_pids: [64165]` and
+`resources.pids: [64165, 93007]` for another surface minutes earlier.
+
+For the claude join this changes nothing — the roster supplies the pids and cmux only
+answers about them. For maki it does: board walks the *process list*, so **any** maki
+inside a tab is a candidate, including a `maki --print` in a script, which has no UI event
+loop and can never report. On a correctly wired machine that would have printed `maki not
+reporting · board doctor` on every tick, forever, which is how a signal stops being read —
+the same argument §4 makes for keeping `blocked` rare.
+
+**Shipped:** the trouble needs both halves — a maki in a tab **and** not one report on the
+machine. Then the phrase means what it says (the hook was never installed) and a stray
+headless maki beside a working one is silent. `doctor` still shows the two counts side by
+side, which is where a per-tab discrepancy is visible without being shouted about.
+
+**The same finding bit a second time, in the join itself.** Walking pids and emitting each
+one's report meant the tab above produced its sessions **twice** — two rows sharing one
+key, and `Blocked`, `Stale` and `Workspaces` all counted double. Found by writing the test
+this entry made obvious rather than by seeing it, which is the only reason it did not ship:
+the same fixture that has two pids on one surface is the one that fails. A tab is now taken
+once, however many pids resolve to it.
+
+§3's "1:1 with the agent process" is corrected to "names the processes on a surface".

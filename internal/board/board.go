@@ -23,8 +23,9 @@ const (
 // ids. A collision would put the cursor on a row the user did not choose (§7).
 const todoKey = "todo:"
 
-// noWorkspace fills the workspace column for agents that have no cmux tab. It reads
-// the same as claude's Kind by coincidence, not by dependency.
+// noWorkspace fills the workspace column for agents that have no cmux tab — which since
+// §17 means Claude Code background agents and nothing else. It reads the same as claude's
+// Kind by coincidence, not by dependency.
 const noWorkspace = "background"
 
 type Row struct {

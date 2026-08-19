@@ -1,9 +1,10 @@
 // Package doctor answers "why is board not working" on a machine that is not the
-// author's. It reports the wiring: the two upstream versions, whether each of board's
-// two reads succeeded, whether the hooks are installed, and where its own state lives.
+// author's. It reports the wiring: every upstream version, whether each of board's reads
+// succeeded, whether the hooks are installed on both agents, and where its own state
+// lives.
 //
-// It is the escalation from `version` (§13), not a replacement for it: version is three
-// lines to paste into a bug report, doctor is the diagnosis. The overlap is real and
+// It is the escalation from `version` (§13), not a replacement for it: version is one line
+// per tool to paste into a bug report, doctor is the diagnosis. The overlap is real and
 // deliberate — a version mismatch is the likeliest cause of everything below it, so
 // doctor embeds version's Info and calls its Format rather than rendering its own.
 //
@@ -22,6 +23,7 @@ import (
 	"github.com/zalts1/dashy/internal/cmux"
 	"github.com/zalts1/dashy/internal/config"
 	"github.com/zalts1/dashy/internal/hooks"
+	"github.com/zalts1/dashy/internal/maki"
 	"github.com/zalts1/dashy/internal/version"
 )
 
@@ -42,8 +44,25 @@ type Report struct {
 	Workspaces int
 	NoCmux     bool
 
+	// The maki roster is two reads that fail together, so one error covers both: the
+	// processes running now, and the reports they wrote. MakiProcs above MakiReports of
+	// zero is the shape of a missing hook, which is the one maki failure a reader can fix.
+	MakiProcs    int
+	MakiReports  int
+	MakiSessions int
+	MakiErr      error
+	// NoMaki is not a fault. board reports on whichever agents are installed, so the rows
+	// below say nothing about maki when it is absent — the version block has already.
+	NoMaki bool
+
 	Hooks    []string // events with board's notify hook wired up
 	HooksErr error    // settings.json unreadable — the state install-hooks refuses on
+
+	// The maki hook is two files, and a block without a manifest is installed and inert:
+	// maki denies every permission to an init.lua with no plugin.toml beside it (§9.32).
+	MakiHooked   bool
+	MakiManifest bool
+	MakiHooksErr error // init.lua markers unbalanced — the state install-hooks refuses on
 
 	ConfigPath   string
 	ConfigOnDisk bool
@@ -59,6 +78,18 @@ func Gather() Report {
 	st := config.Load()
 	agents, rosterErr := claude.Agents()
 	titles := cmux.TitlesByPid()
+
+	noMaki := !maki.Available()
+	var roster maki.Roster
+	var makiErr error
+	if !noMaki {
+		roster, makiErr = maki.Read()
+	}
+	makiSessions := 0
+	for _, rep := range roster.Reports {
+		makiSessions += len(rep.Sessions)
+	}
+	makiHooked, makiManifest, makiHooksErr := hooks.MakiInstalled()
 
 	spans := map[string]bool{}
 	for _, t := range titles {
@@ -76,8 +107,16 @@ func Gather() Report {
 		Tabs:         len(titles),
 		Workspaces:   len(spans),
 		NoCmux:       !cmux.Available(),
+		MakiProcs:    len(roster.Pids),
+		MakiReports:  len(roster.Reports),
+		MakiSessions: makiSessions,
+		MakiErr:      makiErr,
+		NoMaki:       noMaki,
 		Hooks:        installed,
 		HooksErr:     hooksErr,
+		MakiHooked:   makiHooked,
+		MakiManifest: makiManifest,
+		MakiHooksErr: makiHooksErr,
 		ConfigPath:   config.Path(),
 		ConfigOnDisk: statErr == nil,
 		NotifyOn:     st.Config.NotifyCmd != "",
@@ -85,9 +124,13 @@ func Gather() Report {
 	}
 }
 
-// Format renders the report. The three version rows come from version.Format so there
-// is one place that knows how to print a version string, including the stutter rule
-// (§9.23); the rest align to the same label width.
+// Format renders the report. The version rows come from version.Format so there is one
+// place that knows how to print a version string, including the stutter rule (§9.23);
+// the rest align to the same label width.
+//
+// Two rows carry both agents rather than each agent getting a row of its own: `roster`
+// is what board read, `hooks` is how it was wired, and those are the concerns — splitting
+// them by agent would put the label `maki` on two different lines of a nine-line report.
 func Format(r Report) string {
 	var b strings.Builder
 	b.WriteString(version.Format(r.Versions))
@@ -98,11 +141,11 @@ func Format(r Report) string {
 	// The error's own words, not the frame's. The frame says "roster unreadable · board
 	// doctor", which inside doctor would be circular, and the wrapped error carries the
 	// detail a maintainer asks for next.
+	claudeRoster := fmt.Sprintf("%d claude %s", r.Sessions, plural(r.Sessions, "session"))
 	if r.RosterErr != nil {
-		row("roster", r.RosterErr.Error())
-	} else {
-		row("roster", fmt.Sprintf("%d %s", r.Sessions, plural(r.Sessions, "session")))
+		claudeRoster = r.RosterErr.Error()
 	}
+	row("roster", claudeRoster+makiRoster(r))
 
 	switch {
 	case r.NoCmux:
@@ -112,16 +155,22 @@ func Format(r Report) string {
 			r.Tabs, plural(r.Tabs, "tab"), r.Workspaces, plural(r.Workspaces, "workspace")))
 	}
 
+	claudeHooks, claudeOK := "not installed", false
 	switch {
 	case r.HooksErr != nil:
-		row("hooks", r.HooksErr.Error())
-	case len(r.Hooks) == 0:
-		row("hooks", "not installed — run board install-hooks")
-	default:
+		claudeHooks = r.HooksErr.Error()
+	case len(r.Hooks) > 0:
 		// Named individually because a half-install is its own state: one event wired and
 		// one not means a hook that never fires, and "installed" would hide it.
-		row("hooks", strings.Join(r.Hooks, ", "))
+		claudeHooks, claudeOK = strings.Join(r.Hooks, ", "), true
 	}
+	makiHooks, makiOK := makiHooks(r)
+	// The repair is named once, on the row that needs it, however many halves are missing.
+	repair := ""
+	if !claudeOK || !makiOK {
+		repair = " — run board install-hooks"
+	}
+	row("hooks", claudeHooks+makiHooks+repair)
 
 	cfg := r.ConfigPath
 	if cfg == "" {
@@ -140,6 +189,49 @@ func Format(r Report) string {
 		row("notify", "off — set notify_cmd to push")
 	}
 	return b.String()
+}
+
+// makiRoster is the maki half of the roster row: what the two reads found, or nothing at
+// all on a machine without maki.
+func makiRoster(r Report) string {
+	switch {
+	case r.NoMaki:
+		return ""
+	case r.MakiErr != nil:
+		// Verbatim, for the reason the claude roster error is: the frame's one-liner says
+		// "maki roster unreadable · board doctor", which inside doctor would be circular.
+		return " · " + r.MakiErr.Error()
+	case r.MakiProcs > 0 && r.MakiReports == 0:
+		// The two reads disagreeing is the diagnosis. Stated as both halves rather than as
+		// a conclusion, because "no reports" is also what a maki started this second looks
+		// like for the moment before its first turn.
+		return fmt.Sprintf(" · %d maki running, no reports", r.MakiProcs)
+	default:
+		return fmt.Sprintf(" · %d maki %s in %d %s",
+			r.MakiSessions, plural(r.MakiSessions, "session"),
+			r.MakiReports, plural(r.MakiReports, "tab"))
+	}
+}
+
+// makiHooks is the maki half of the hooks row, and whether it counts as wired. Naming
+// init.lua rather than an event list because that is the whole mechanism on this side:
+// one Lua block, present or not.
+func makiHooks(r Report) (string, bool) {
+	switch {
+	case r.NoMaki:
+		// Nothing to wire up is not an unfinished install, so it must not summon a repair.
+		return "", true
+	case r.MakiHooksErr != nil:
+		return " · " + r.MakiHooksErr.Error(), false
+	case r.MakiHooked && !r.MakiManifest:
+		// Installed and inert, which reads as installed everywhere else: the block is in
+		// the file, maki grants it nothing, and no report ever arrives (§9.32).
+		return " · maki init.lua without plugin.toml", false
+	case r.MakiHooked:
+		return " · maki init.lua", true
+	default:
+		return " · maki not wired", false
+	}
 }
 
 func plural(n int, word string) string {
