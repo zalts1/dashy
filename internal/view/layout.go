@@ -30,6 +30,14 @@ const (
 	// The quiet tail never shrinks below this: a QUIET band of one row reads as a
 	// quiet fleet, which is the opposite of the truth.
 	minQuietRows = 3
+	// actionsW is the trailing link cell: two glyphs on stable columns with a space between
+	// them, so a row carrying only one of them leaves the other's column empty rather than
+	// sliding into it. Fixed at two, because a row points at exactly two things — the
+	// preview serving its worktree, and the worktree itself (§18).
+	actionsW = 3
+	// actionsGap separates the cell from the workspace name, which is left-aligned and
+	// truncating: one space would read as part of the name it follows.
+	actionsGap = 2
 	// The todo list keeps fewer, because it gives way second and the count carries the
 	// rest — but never none: a list collapsed to a header is a reminder that stopped
 	// reminding (§12).
@@ -96,6 +104,35 @@ func clip(frame string, rows int) string {
 	return strings.Join(lines[:rows-1], "\n")
 }
 
+// actionCols is what the trailing link cell costs on this fleet at this width, and it is
+// the one place that decides — both the arithmetic and the rendering read it, so they
+// cannot disagree about whether the column exists.
+//
+// Nothing at all when no row has anything to point at: a fleet with no previews and no
+// resolvable folders renders the frame it did before links existed, escape for escape.
+// And nothing again when the terminal cannot hold a bare row beside it — shed whole, like
+// the KPI strip's cells, because half a link cell is a glyph that no longer lines up with
+// the one above it and that reads as a rendering fault rather than as an absent link (§18).
+func actionCols(rows []board.Row, cols int) int {
+	linked := false
+	for _, r := range rows {
+		if r.Preview != "" || r.Folder != "" {
+			linked = true
+			break
+		}
+	}
+	if !linked {
+		return 0
+	}
+	// The links come last, after both floors: a row that cannot hold its label and name its
+	// workspace has nothing to spare, and losing either of those to gain a glyph would be
+	// the wrong trade in a tool whose first job is to be read.
+	if rowChromeBare+minLabelW+runes(wsHeader)+actionsGap+actionsW > cols-headMargin {
+		return 0
+	}
+	return actionsGap + actionsW
+}
+
 // columns sizes the row's three elastic columns: the label, the tail — the workspace,
 // unbounded in the data and therefore the thing that used to overflow — and the bar.
 //
@@ -117,10 +154,14 @@ func columns(f board.Fleet, cols int) (labelW, tailW, barW int) {
 	// the same right-hand margin the header keeps, so the table's right edge and the
 	// header's are the same column.
 	barW = barCells
-	if cols-headMargin < rowChrome(barW)+minLabelW {
+	// Reserved before anything elastic is sized, and taken off avail rather than out of a
+	// column: the cell is a fixed width at the row's right-hand end, so every column left
+	// of it is sized inside what remains.
+	act := actionCols(f.Rows, cols)
+	if cols-headMargin-act < rowChrome(barW)+minLabelW {
 		barW = 0
 	}
-	avail := cols - headMargin - rowChrome(barW)
+	avail := cols - headMargin - rowChrome(barW) - act
 
 	// The whole label while the row can hold it, the p90 once it cannot: a column that
 	// truncates on a window with columns to spare is choosing to lose text it could have

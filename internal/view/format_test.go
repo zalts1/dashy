@@ -87,13 +87,19 @@ func TestPad(t *testing.T) {
 		// column out by its encoded length.
 		{"→ merge", 9, "→ merge  "},
 		{"日本語テキスト", 4, "日本語…"},
+		// A column squeezed to nothing. The tail is the column that gives way last and it
+		// really does reach zero on a narrow tab (§9.12), and pad panicked there for as long
+		// as only cut was called on it — cut guards `w < 2` and pad indexed r[:w-1] (§9.34).
+		{"APP", 0, ""},
+		{"APP", -1, ""},
+		{"", 0, ""},
 	}
 	for _, c := range cases {
 		got := pad(c.in, c.w)
 		if got != c.want {
 			t.Errorf("pad(%q, %d) = %q, want %q", c.in, c.w, got, c.want)
 		}
-		if n := len([]rune(got)); n != c.w {
+		if n := len([]rune(got)); n != max(c.w, 0) {
 			t.Errorf("pad(%q, %d) is %d runes wide", c.in, c.w, n)
 		}
 	}

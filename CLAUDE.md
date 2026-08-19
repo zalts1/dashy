@@ -12,7 +12,7 @@ one `§` away, in the section where a change to it gets recorded.
 | file | holds | authority for |
 |---|---|---|
 | `README.md` | the user contract | commands, states, config keys |
-| `DESIGN.md` | the settled record: §1–§8, §10–§17, with a `§` index at the top | why anything is the shape it is |
+| `DESIGN.md` | the settled record: §1–§8, §10–§18, with a `§` index at the top | why anything is the shape it is |
 | `EVIDENCE.md` | §9.x, append-only, with a `§` index at the top | what was believed, what falsified it |
 | `CONTRIBUTING.md` | the outside contributor's process | how a PR is opened, tested, and declined |
 | package docs | `go doc ./...` | what each package's job is |
@@ -54,11 +54,12 @@ Routing only; `DESIGN.md` §3 is why the tree is this shape.
 
     cmd/board/       dispatch and printing only
     internal/
-      host/          file paths, child processes (cmux env always stripped)
+      host/          file paths, worktree roots, child processes (cmux env always stripped)
       config/        ~/.board.json — the only file written
       claude/        roster + state: `claude agents --json`, jobs, transcript mtime
       maki/          roster + state: the reports its plugin writes, plus live pids (§17)
       cmux/          tab titles, hook clock, focus — enrichment, never the roster
+      preview/       portless's routes: the local URL serving a worktree (§18)
       board/         Fleet/Row; Build = pure join, Collect = impure gather
       view/          PURE: Frame, header, layout arithmetic, Table, palette, scale
       watch/         IMPURE: alternate screen, termios, signals, ticker
@@ -99,6 +100,9 @@ Two kinds, and the difference matters more than any single entry.
 - **board never rewrites or deletes a `plugin.toml` it did not write** — that file is the
   permission policy for every plugin in its directory (§8, §17).
 - **cmux env vars are always stripped from child processes** (§8).
+- **board opens nothing itself.** A row's preview and folder are hyperlinks handed to the
+  terminal; there is no `open`, no `code`, no opener of any kind. `cmux surface.focus`
+  stays the only thing board does to the world (§8, §18).
 - **The frame fits the terminal in both directions.** A wrapped line silently adds a
   screen row, which breaks the height measurement and scrolls the header away (§6,
   `EVIDENCE.md` §9.10 and §9.12).
@@ -124,6 +128,11 @@ one, record why in `EVIDENCE.md` §9.
   never formats (§3).
 - Derived quantities go on `Fleet`, not in a renderer, so the two renderers cannot
   disagree (§3).
+- Links live in the frame and not in the one-shot table: escapes do not belong in a pipe,
+  and a preview hostname is derived from a branch name (§18).
+- A row points at one preview, joined on the git worktree — never on directory
+  containment, which crosses worktrees (§18, `EVIDENCE.md` §9.34).
+- The folder link's scheme is fixed at `vscode://`; §10.10 is the trade.
 - One job per package, one concern per file; past ~250 lines, consider splitting (§2).
 
 A new command or band is worth a `DESIGN.md` entry — after it works, not before.

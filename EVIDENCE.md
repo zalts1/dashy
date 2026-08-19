@@ -50,6 +50,7 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.31 | `-h` was not missing, it was a todo: the absent flag wrote to the one file board owns | `cmd/board/usage.go`, `cmd/board/main.go` |
 | 9.32 | The maki hook installed, ran, and was denied everything — an `init.lua` with no `plugin.toml` beside it gets no permissions at all | `hooks/maki.go`, `doctor/`, `DESIGN.md` §17 |
 | 9.33 | cmux counts a surface's whole process tree, so "a maki with no report" is not the same as "no hook" | `board/build.go`, `DESIGN.md` §14, §17 |
+| 9.34 | A hyperlink is an OSC, not an SGR — one `m` in a URL cost 16 phantom columns, and a clamped link made the screen below it clickable | `view/format.go`, `view/link.go`, `host/worktree.go`, `preview/`, `DESIGN.md` §18 |
 
 ---
 
@@ -1075,3 +1076,73 @@ the same fixture that has two pids on one surface is the one that fails. A tab i
 once, however many pids resolve to it.
 
 §3's "1:1 with the agent process" is corrected to "names the processes on a surface".
+
+
+### 9.34 A hyperlink is not a colour, and a worktree is not a path prefix (2026-08-19)
+
+Four findings from one change — the link cell of §18. Three are about the frame's width
+invariant, which held for two years because every escape in it was an SGR colour; the
+fourth is about the join.
+
+**Believed:** "escape sequences cost no columns, so skip to the `m`". Both width functions
+were written that way and both were right, for as long as SGR was the only escape the frame
+contained (§9.10, §9.12).
+
+**Found:** OSC 8 is an OSC. It ends at ST (`ESC \\`) or BEL, not at `m`, and the `m` a
+scan-to-`m` stops at is whatever `m` the *URL* happens to contain:
+
+    printed(link("https://api.localhost", "↗"))        = 0    want 1
+    printed(link("https://team.localhost/admin", "↗")) = 16   want 1
+
+Zero is the harmless failure — a column undercounted is a frame that fits with room to
+spare. Sixteen is the one that matters: the fit loop believed a row was sixteen columns
+wider than it was, and a row wider than the terminal wraps, and a wrapped line makes the
+frame taller than `height()` counted, and the header is then the first thing to scroll away.
+The identical bug as §9.12, arriving through a door that did not exist when §9.12 was fixed.
+
+**Shipped:** one `escape()` scanner, shared by `printed` and `clampLine`. Two scanners
+disagreeing about where a sequence ends is two answers to one question, which is the same
+argument §3 makes for derived state living on `Fleet`.
+
+**Second finding, from writing the clamp test.** A colour left open at a truncation bleeds
+into the next line, which is why `clampLine` already emitted a reset. A **hyperlink** left
+open does not bleed — it *annexes*: every cell written after it joins the link, so one
+clipped row would make the whole screen below it click through to somebody else's dev
+server. Truncation now closes the link as well as the colour, and only when it opened one.
+
+**Third finding, a panic.** `pad("APP", 0)` indexed `r[:w-1]` backwards. It had been
+unreachable because the tail column was only ever passed to `cut`, which guards `w < 2` —
+and the link cell pads that same column so the glyphs line up. Found by
+`TestLinkedFrameNeverWraps`, sweeping 40 to 200 columns, at the width where the tail gives
+way to nothing (§9.12 says it really does reach zero). The tail is the column that gives way
+last, so a renderer touching it must survive a width of none.
+
+**Fourth finding, and the one that would have shipped wrong quietly.** The obvious join for
+"is there a preview for this session" is directory containment: the dev server's cwd is the
+session's, or below it. Claude Code puts its worktrees **inside** the main checkout:
+
+    /Users/you/work/repo                                  ← main checkout, one session
+    /Users/you/work/repo/.claude/worktrees/feature-a      ← another session, another branch
+
+A dev server in `feature-a` is below `repo`, so containment puts a feature branch's preview
+on the main checkout's row — a URL that looks like this session's work and is not. The join
+is the nearest ancestor holding a `.git` entry instead, which separates them because a
+linked worktree's `.git` is a *file* and answers itself. Pinned by
+`TestPreviewJoinsOnTheWorktree` over a fixture with all three directories in it, which is
+§9.1's rule doing its job: derived state pinned by a fixture, not by reading the function.
+
+**Measured, and the reason there is no §2 argument to have here.** Two new reads per tick —
+one `lsof` over the route pids, one stat walk per unique directory — cost nothing:
+
+    baseline    0.32  0.30  0.32
+    with links  0.33  0.32  0.31
+
+Both hide behind `claude agents`, which has been the tick since §9.3. The `lsof` runs
+concurrently with it and the stat walk is a handful of syscalls over a memoised set of
+directories.
+
+**One structure borrowed wholesale.** `routes.json` outlives the dev servers it names —
+portless deletes nothing when a process exits — so a route with no live pid is not a link,
+exactly as a maki report with no live process is not a row (§17). `preview.Roster` carries
+both halves for the same reason `maki.Roster` does, and `doctor`'s `links` row states them
+apart: `3 portless routes, none live` is a diagnosis, and `no routes up` is a quiet machine.

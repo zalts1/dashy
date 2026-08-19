@@ -37,9 +37,17 @@ type Row struct {
 	Label     string
 	Workspace string
 	Surface   string // cmux surface id; empty for background agents, which have no tab
-	Idle      time.Duration
-	Stale     bool // quiet past the threshold
-	Rank      int
+	// Folder is the worktree this session is working in — what an editor opens to show
+	// the branch's changed files. Empty when board could not resolve the directory, and
+	// for a todo, which has no process and so no directory (§18).
+	Folder string
+	// Preview is the URL a local dev server is serving this worktree at, or "" when
+	// nothing is up. One row shows one preview: the nearest, resolved in Build so the
+	// two renderers cannot disagree about which (§18).
+	Preview string
+	Idle    time.Duration
+	Stale   bool // quiet past the threshold
+	Rank    int
 }
 
 // Jumpable reports whether this row has a tab to focus. Selectable and jumpable are

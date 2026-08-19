@@ -41,6 +41,7 @@ grep -n '^#\+ ' DESIGN.md        # § → line, then Read with offset/limit
 | 15 | `uninstall-hooks`: defined as install's inverse, and what it must not touch on the way | `hooks/`, anything editing `~/.claude/settings.json` or a maki `init.lua` |
 | 16 | the demo: a fixture fleet through the real join, recorded by hand | `internal/demo/`, `demo/`, the top of the README |
 | 17 | maki as the second agent: no roster command, so board installs one; two reads settle liveness | `maki/`, `hooks/maki.go`, `board/build.go` |
+| 18 | links: the two things a row points at besides its tab, joined on the worktree and opened by the terminal | `preview/`, `host/worktree.go`, `view/link.go`, `board/build.go` |
 
 ---
 
@@ -513,6 +514,11 @@ Four more, each with a test or a documented refusal:
 - **cmux env vars are always stripped from child processes.** cmux treats
   `CMUX_SURFACE_ID`/`CMUX_WORKSPACE_ID` as the implicit target of every command, so a
   stale inherited value makes even a global query fail (§9.8).
+- **board opens nothing itself.** A row's preview and folder are hyperlinks; the URL goes
+  to the terminal and the terminal is what launches a browser or an editor. board gains no
+  opener, no `open(1)`, no second write action — `cmux surface.focus` is still the only
+  thing it does to the world (§18). This is what keeps the surface that must never end a
+  session from growing a way to start arbitrary processes.
 
 ---
 
@@ -635,6 +641,38 @@ person edits a few times a day, and each mechanism that closes it costs more tha
 keystroke — a hook, a daemon, or `$HOME` on a file-sync service. The last is the one to
 watch: sync makes the window as wide as its own interval, and it can resurrect a deleted
 todo as easily as drop a new one.
+
+### 10.10 A configurable editor — deferred (2026-08-19)
+
+The folder link is `vscode://file/<path>`, hardcoded. Cursor answers `cursor://`, Zed
+`zed://`, and a JetBrains IDE something else again, so on a machine without VS Code the
+glyph reaches whatever else claimed the scheme, or nothing.
+
+Not built as config, for two reasons that pull the same way. Growing the config surface is
+a trade §2 argues against, and this one would grow it by a *template* — a string with a
+`{path}` in it — which is the shape that invites a shell command next. And the URL has to
+be built before `view` sees it, because `view` is pure and reads neither `$HOME` nor a
+config file (§3): a config key here means the URL moves onto `Fleet`, where it stops being
+a rendering detail and becomes derived state two renderers can disagree about.
+
+*Trigger:* somebody whose editor is not VS Code, saying so. The narrow fix at that point is
+an `editor_scheme` key holding a scheme name and nothing else — `cursor`, `zed` — so board
+still owns the URL's shape and only the first token comes from the file.
+
+### 10.11 The demo has no preview — deferred (2026-08-19)
+
+`internal/demo` renders a fleet with no dev servers up, so the recording shows the folder
+glyph on no row and the preview glyph nowhere. Adding either to the fixture is a frame
+change, and a frame change means re-recording `docs/board.gif` — which needs `vhs` and is
+a maintainer step by hand (§16).
+
+Left alone deliberately rather than left undone: a fixture that renders links while the
+committed GIF does not is a README that contradicts itself, and the honest intermediate
+state is the one where nothing disagrees.
+
+*Trigger:* the next re-record for any other reason. Two rows of the demo fleet want a
+`Folder`, and one of them a `Preview`, at which point the GIF shows what the prose above
+describes.
 
 ---
 
@@ -1071,3 +1109,112 @@ allowed, so naming only what board needs leaves every decision about Lua the use
 later to the user. A `plugin.toml` that is already there is never rewritten and never
 deleted: it is policy for everything in that directory, and `install-hooks` says what the
 block needs instead of taking the decision (§8).
+
+---
+
+## 18. Links — the two things a row points at besides its tab
+
+`Enter` focuses a session's tab, and for two years that was the only place a row went.
+Two more are worth reaching, and both are properties of the same thing — the git worktree
+the session is working in:
+
+- **the preview**, a local dev server serving that worktree, and
+- **the folder**, the worktree itself, opened in an editor to read the branch's diff.
+
+They are rendered as a three-column cell at the right-hand end of the row — `↗` for the
+preview, `▤` for the folder — and they are hyperlinks, not keys.
+
+### The worktree is the join, and a path prefix is not
+
+Claude Code creates its worktrees **inside** the main checkout, at
+`.claude/worktrees/<branch>`. So "the dev server's directory is below the session's" is
+true of a feature branch's server and the main checkout's row at the same time, and a rule
+built on it puts one branch's preview on another branch's row. A preview link on the wrong
+row is worse than no link: it is a URL that looks like this session's work and is not.
+
+`host.WorkTree` is what settles it — the nearest ancestor holding a `.git` entry, walking
+up. A linked worktree's `.git` is a *file* pointing at the repository's gitdir, so it
+answers itself and the main checkout answers the repository, and the two compare unequal
+even though one contains the other. Both sides of the join go through the same function,
+which is the only reason their answers are comparable.
+
+It is a stat walk and not `git rev-parse --show-toplevel`, because this runs on every tick
+for every session and a fork per row is the wrong shape for a reporting surface (§2).
+
+Within one worktree there can be several previews — a monorepo running a dev server per
+app. The nearest to the session's own directory wins, and the routes arrive URL-sorted so
+a tie resolves the same way on every tick rather than drifting with map order. One row
+shows one preview; a count of them would be a column reporting somebody's project layout.
+
+### portless is the mechanism, and it is optional
+
+`internal/preview` reads `~/.portless/routes.json`, which
+[portless](https://www.npmjs.com/package/portless) writes: a hostname, a target port and a
+pid per live route. Nothing in that file says where the pid is *working*, so the directory
+comes from a second read — one `lsof -d cwd` over every route pid at once — and that is
+what the join needs.
+
+Two reads rather than one is the same shape as maki's roster (§17), and for the same
+reason: **a route outlives the process it describes.** portless deletes nothing when a dev
+server exits, so a route with no live pid, like a `portless alias` entry with no pid at
+all, is not a link. `preview.Roster` therefore carries both halves — every route listed,
+and the ones board could place — and `doctor`'s `links` row states them apart. Neither read
+costs anything measurable: both hide behind `claude agents`, which is still the tick (§9.34).
+
+portless is optional exactly as maki is. Without it, `Available` is false, nothing is read,
+nothing complains, and every row still carries its folder.
+
+### Hyperlinks, not keys — and this is the safety argument, not a shortcut
+
+The cell is OSC 8: the URL goes to the terminal, and the terminal opens it. board therefore
+gains **no opener** — no `open(1)`, no `code`, no second write action beyond
+`cmux surface.focus` (§8). For a tool whose first invariant is that it can never end a
+session, "the process on screen cannot start a browser" is worth more than a keystroke.
+
+It also lands somewhere good. Under cmux an `https://` link opens in a browser tab beside
+the fleet, and a `vscode://` link goes out through the OS to the editor — cmux routes any
+non-http scheme externally. And the mechanism is not a gamble the way it would be in a
+general-purpose tool: board requires cmux, cmux is built on Ghostty, and Ghostty honours
+OSC 8. On every machine board supports, the link works.
+
+**No legend line.** The keys are named at the bottom of the frame because a key you do not
+know does not exist. A hyperlink advertises itself — the terminal underlines it on hover
+and changes the cursor — so a legend entry would spend a scarce line restating what the
+glyph already does, and on a terminal without OSC 8 it would promise a click that never
+happens. That is §9.14 read forwards: name the route that exists, and do not name one that
+might not.
+
+### The frame has links; the one-shot table does not
+
+`board` prints for a pipe, a scrollback and a bug report. Escape sequences do not belong in
+a file, and a preview hostname is derived from a branch name, which is work data — the same
+reason `doctor` never prints `notify_cmd` (§14) and the same reason the demo is a fixture
+(§16). So the derived fields live on `Row`, where both renderers can see them, and only the
+frame draws them. That is the rule working, not an exception to it: a derived quantity goes
+on `Fleet`/`Row` so the renderers cannot disagree about *what is true*; which of them draws
+it is still each one's own business (§3).
+
+### What the cell costs, and what it never costs
+
+`actionCols` is the single place that decides whether the column exists, read by both the
+arithmetic and the rendering so they cannot disagree:
+
+- **Nothing, on a fleet with nothing to point at.** No row with a `Preview` or a `Folder`
+  means no reserved columns and no padding, and the frame is byte-identical to the one
+  before links existed. Every golden frame in the suite still passes unblessed, which is
+  what says so.
+- **Nothing, on a terminal too narrow for a bare row beside it.** Shed whole, like the KPI
+  strip's cells: half a link cell is a glyph that no longer lines up with the one above it,
+  and that reads as a rendering fault rather than as an absent link.
+- **Never the label's floor.** The cell comes out of the surplus the bar would otherwise
+  take, after the label and the workspace column have theirs (§9.29).
+
+Colour is `inkSecondary`, already validated: these are affordances, not data, and exactly
+one element in the frame is allowed to shout (§6). The glyphs stay inside the Unicode
+blocks the rest of the frame draws from — a glyph that falls back to another font is a
+glyph whose width board guessed wrong, and the fit is a hard rule.
+
+One consequence worth naming: a hyperlink is the first escape sequence in the frame that
+is **not** SGR, and it is terminated differently. `printed` and `clampLine` now share one
+scanner, and a clamped line closes a link as well as a colour — an open one makes every
+cell after it part of the link (§9.34).

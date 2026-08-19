@@ -10,6 +10,7 @@ import (
 	"github.com/zalts1/dashy/internal/cmux"
 	"github.com/zalts1/dashy/internal/config"
 	"github.com/zalts1/dashy/internal/maki"
+	"github.com/zalts1/dashy/internal/preview"
 )
 
 // Snapshot is everything read from the outside world for one tick. Build is a pure
@@ -23,6 +24,14 @@ type Snapshot struct {
 	Labels    map[string]string    // surface id -> user label
 	Todos     []config.Todo        // work with no session behind it (§12)
 	Threshold time.Duration
+	// Trees maps every directory either side of the link join — each session's cwd and
+	// each preview's — to the git worktree it belongs to. Resolved impurely in Collect
+	// because it is a walk over the filesystem; Build is pure over the answer, which is
+	// what lets §18's join be pinned by a fixture rather than by a real repository.
+	Trees map[string]string
+	// Previews are the local dev servers up on this machine, each with the directory it
+	// is serving. Enrichment, never a row: a preview with no session is nobody's work.
+	Previews []preview.Route
 	// Maki is the second agent's roster: the processes running now and the reports they
 	// wrote. Two reads rather than one because a report outlives its process (§17).
 	Maki maki.Roster
@@ -81,6 +90,8 @@ func Build(s Snapshot, now time.Time) Fleet {
 			Label:     label(s.Labels[t.ID], s.JobLabels[a.SessionID], t.Surface, a.Cwd),
 			Workspace: ws,
 			Surface:   t.ID,
+			Folder:    s.Trees[a.Cwd],
+			Preview:   previewFor(s, s.Trees[a.Cwd], a.Cwd),
 			Idle:      idle,
 			Rank:      RankQuiet,
 		}
@@ -130,6 +141,8 @@ func Build(s Snapshot, now time.Time) Fleet {
 				Label:     label(s.Labels[t.ID], sess.Title, t.Surface, rep.Cwd),
 				Workspace: ws,
 				Surface:   t.ID,
+				Folder:    s.Trees[rep.Cwd],
+				Preview:   previewFor(s, s.Trees[rep.Cwd], rep.Cwd),
 				Idle:      idle,
 				Rank:      RankQuiet,
 			}

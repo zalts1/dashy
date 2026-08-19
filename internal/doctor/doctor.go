@@ -24,6 +24,7 @@ import (
 	"github.com/zalts1/dashy/internal/config"
 	"github.com/zalts1/dashy/internal/hooks"
 	"github.com/zalts1/dashy/internal/maki"
+	"github.com/zalts1/dashy/internal/preview"
 	"github.com/zalts1/dashy/internal/version"
 )
 
@@ -54,6 +55,21 @@ type Report struct {
 	// NoMaki is not a fault. board reports on whichever agents are installed, so the rows
 	// below say nothing about maki when it is absent — the version block has already.
 	NoMaki bool
+
+	// The preview read, in the two halves preview.Roster carries: PreviewsSeen is every
+	// route portless names, Previews are the ones with a live process behind them. Seen
+	// above Previews of zero is the shape of a stale routes.json — no row will carry a link
+	// and portless still lists three things as up.
+	//
+	// This row exists because a failed preview read is invisible in the frame. A missing
+	// roster costs every row and takes the header's own slot (§14); a missing preview costs
+	// one glyph, so nothing on screen would say board looked (§18).
+	Previews     int
+	PreviewsSeen int
+	PreviewErr   error
+	// NoPortless is not a fault, for the reason NoMaki is not: previews are optional and a
+	// machine without portless still gets a folder link on every row.
+	NoPortless bool
 
 	Hooks    []string // events with board's notify hook wired up
 	HooksErr error    // settings.json unreadable — the state install-hooks refuses on
@@ -89,6 +105,13 @@ func Gather() Report {
 	for _, rep := range roster.Reports {
 		makiSessions += len(rep.Sessions)
 	}
+	noPortless := !preview.Available()
+	var previews preview.Roster
+	var previewErr error
+	if !noPortless {
+		previews, previewErr = preview.Read()
+	}
+
 	makiHooked, makiManifest, makiHooksErr := hooks.MakiInstalled()
 
 	spans := map[string]bool{}
@@ -112,6 +135,10 @@ func Gather() Report {
 		MakiSessions: makiSessions,
 		MakiErr:      makiErr,
 		NoMaki:       noMaki,
+		Previews:     len(previews.Routes),
+		PreviewsSeen: previews.Listed,
+		PreviewErr:   previewErr,
+		NoPortless:   noPortless,
 		Hooks:        installed,
 		HooksErr:     hooksErr,
 		MakiHooked:   makiHooked,
@@ -155,6 +182,12 @@ func Format(r Report) string {
 			r.Tabs, plural(r.Tabs, "tab"), r.Workspaces, plural(r.Workspaces, "workspace")))
 	}
 
+	// `links`, not `preview`: the row answers "can a row point anywhere", and both of its
+	// halves are stated in those terms. It is also six characters, which is what keeps the
+	// answer column where version.LabelWidth puts it — widening a documented constant to
+	// fit a label is the tail wagging the dog (§13).
+	row("links", previewRow(r))
+
 	claudeHooks, claudeOK := "not installed", false
 	switch {
 	case r.HooksErr != nil:
@@ -189,6 +222,32 @@ func Format(r Report) string {
 		row("notify", "off — set notify_cmd to push")
 	}
 	return b.String()
+}
+
+// previewRow says what the preview read found. It gets a row of its own rather than a half
+// of `roster`, because a preview is not a session: the roster row answers "how much work is
+// there", and this one answers "can a row point at it" (§18).
+func previewRow(r Report) string {
+	switch {
+	case r.NoPortless:
+		// Optional, like maki, and stated as what the reader still has rather than as an
+		// absence: without portless every row still carries its folder.
+		return "no portless — rows link to folders only"
+	case r.PreviewErr != nil:
+		// Verbatim, for the reason the roster errors are: the wrapped error carries the
+		// detail a maintainer asks for next.
+		return r.PreviewErr.Error()
+	case r.Previews == 0 && r.PreviewsSeen > 0:
+		// Both halves rather than a conclusion. routes.json outlives the dev servers it
+		// names, so this is a file full of processes that have exited — and it is also what
+		// a machine with nothing but `portless alias` entries looks like.
+		return fmt.Sprintf("%d portless %s, none live",
+			r.PreviewsSeen, plural(r.PreviewsSeen, "route"))
+	case r.Previews == 0:
+		return "portless installed, no routes up"
+	default:
+		return fmt.Sprintf("%d portless %s", r.Previews, plural(r.Previews, "route"))
+	}
 }
 
 // makiRoster is the maki half of the roster row: what the two reads found, or nothing at

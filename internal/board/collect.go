@@ -7,7 +7,9 @@ import (
 	"github.com/zalts1/dashy/internal/claude"
 	"github.com/zalts1/dashy/internal/cmux"
 	"github.com/zalts1/dashy/internal/config"
+	"github.com/zalts1/dashy/internal/host"
 	"github.com/zalts1/dashy/internal/maki"
+	"github.com/zalts1/dashy/internal/preview"
 )
 
 // Collect gathers one Snapshot and builds a Fleet from it. This is the only impure
@@ -35,9 +37,47 @@ func Collect() Fleet {
 		close(makiDone)
 	}()
 
+	// The third optional agent-adjacent tool, asked the same way and for the same reason:
+	// on a machine without portless the answer is "no previews", which is not a fault
+	// (§18). Its error is dropped rather than carried into Trouble — a missing preview
+	// costs one glyph on one row, and the trouble line is ordered by how much of the board
+	// a fact costs (§14). `doctor` is where this read is reported.
+	var previews preview.Roster
+	previewDone := make(chan struct{})
+	go func() {
+		if preview.Available() {
+			previews, _ = preview.Read()
+		}
+		close(previewDone)
+	}()
+
 	titles := cmux.TitlesByPid()
 	<-done
 	<-makiDone
+	<-previewDone
+
+	// Every directory either side of the link join, resolved to its worktree once. Both
+	// sides go through the same function so the two answers are comparable — that is the
+	// whole join (§18) — and the memo matters because a fleet routinely has several
+	// sessions in one worktree.
+	trees := map[string]string{}
+	resolve := func(dir string) {
+		if dir == "" {
+			return
+		}
+		if _, seen := trees[dir]; !seen {
+			trees[dir] = host.WorkTree(dir)
+		}
+	}
+	for _, a := range agents {
+		resolve(a.Cwd)
+	}
+	for _, rep := range roster.Reports {
+		resolve(rep.Cwd)
+	}
+	for _, rt := range previews.Routes {
+		resolve(rt.Dir)
+	}
 
 	clock := cmux.HookClock()
 	jobs := map[string]string{}
@@ -72,6 +112,8 @@ func Collect() Fleet {
 		Labels:    st.Labels,
 		Todos:     st.Todos,
 		Threshold: st.Threshold(),
+		Trees:     trees,
+		Previews:  previews.Routes,
 		Maki:      roster,
 		RosterErr: rosterErr,
 		MakiErr:   makiErr,

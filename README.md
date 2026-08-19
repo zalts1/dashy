@@ -101,6 +101,40 @@ belongs to.** The action is the same either way — `Enter` focuses the tab — 
 repeating the agent on every row would cost width and answer a question you do not have.
 `board doctor` counts the two rosters separately, which is where the difference matters.
 
+## Two links per row — `↗` and `▤`
+
+At the right-hand end of a row, `board watch` puts up to two clickable glyphs:
+
+    ○ migrate auth handlers to v2   ▇▇▇       9m  AUTH        ↗ ▤
+    ○ backfill the events table     ▇▇▇▇   7h20m  DATA          ▤
+
+`↗` opens the **local preview** serving that session's branch. `▤` opens its **folder** —
+the worktree the session is working in, so the editor shows the branch's changed files.
+Click them; they are terminal hyperlinks, so cmux opens the preview in a browser tab beside
+the fleet and hands the folder to your editor. **board itself opens nothing** — it only
+says where the two things are.
+
+Both are properties of the same thing, the **git worktree** the session is in. A session in
+`.claude/worktrees/csv-export` gets that worktree's folder and that branch's preview; one in
+the main checkout gets the repository and the preview running against `main`. A worktree
+lives inside the main checkout on disk, so board resolves each side to its nearest `.git`
+rather than comparing paths — otherwise a feature branch's dev server would show up on
+`main`'s row.
+
+`▤` appears whenever board can resolve the directory, which is nearly always. `↗` needs a
+dev server actually up, found through [portless](https://www.npmjs.com/package/portless):
+board reads `~/.portless/routes.json` and asks where each route's process is working. Run
+your dev server under portless and the link appears on the matching row within a tick.
+
+    $ cd ~/work/repo && portless run npm run dev
+    🌐 https://repo.localhost
+
+portless is optional, exactly as maki is — without it every row still carries its folder.
+Two dev servers inside one worktree resolve to the one nearest the session's own directory,
+and a row shows one preview, never a list. The links are in the dashboard only: plain
+`board` output goes into pipes and bug reports, and a branch-derived hostname is work data.
+`board doctor`'s `links` row is where to look when `↗` is missing.
+
 ## Todos
 
 A todo is work with **no session behind it** — the customer request you have not
@@ -204,6 +238,7 @@ Or from a clone:
 Requires macOS, [cmux](https://github.com/manaflow-ai/cmux), and at least one of Claude
 Code and [maki](https://github.com/tontinton/maki) — board reads its rows from the agents
 and its tabs from cmux, so it has nothing to report without cmux and something to report on.
+[portless](https://www.npmjs.com/package/portless) is optional and adds only the `↗` link.
 
 **Verified against Claude Code 2.1.235, cmux 0.64.22 and maki 0.4.9** — the versions this
 release was cut against. None of the three is a documented contract, so a patch release on
@@ -238,11 +273,12 @@ which says how it was built rather than hiding it.
     maki   0.4.9
     roster 16 claude sessions · 3 maki sessions in 2 tabs
     tabs   22 tabs in 7 workspaces
+    links  2 portless routes
     hooks  Stop, Notification · maki init.lua
     config /Users/you/.board.json
     notify off — set notify_cmd to push
 
-Nine lines saying what board can and cannot read here. `roster` is both agents' rosters —
+Ten lines saying what board can and cannot read here. `roster` is both agents' rosters —
 `claude agents --json`, then what maki has reported — and `tabs` is cmux. **`16 claude
 sessions` with `0 tabs` is the interesting failure**: board joins the two on pid and drops
 any interactive session with no tab, so a fleet that looks too small usually means the tabs
@@ -254,6 +290,14 @@ maki halves worth recognising:
 
     roster 16 claude sessions · 2 maki running, no reports    ← install-hooks was never run
     hooks  Stop, Notification · maki init.lua without plugin.toml   ← installed and inert
+
+`links` is the preview read, and it is the row to check when `↗` is missing from a row you
+expected it on. It has the same two-halves shape, because `routes.json` outlives the dev
+servers it names:
+
+    links  no portless — rows link to folders only    ← portless is not installed here
+    links  portless installed, no routes up           ← nothing is running
+    links  3 portless routes, none live               ← the file is stale; no row gets a link
 
 It reads and never writes, so it works on a machine where `install-hooks` refuses. It
 **never prints `notify_cmd`**, only whether one is set: this output is meant to be

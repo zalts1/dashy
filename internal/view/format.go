@@ -4,12 +4,17 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"unicode/utf8"
 )
 
 // pad truncates with an ellipsis rather than wrapping: a row must stay one line,
 // or the bands stop being scannable. Width is counted in runes, not bytes.
 func pad(s string, w int) string {
+	// A column can be squeezed to nothing — the tail gives way last and reaches zero on a
+	// narrow tab (§9.12) — and a column of no width holds no text. Without this, r[:w-1]
+	// indexed backwards and the frame panicked instead of rendering (§9.34).
+	if w <= 0 {
+		return ""
+	}
 	r := []rune(s)
 	if len(r) > w {
 		return string(r[:w-1]) + "…"
@@ -39,31 +44,37 @@ func cut(s string, w int) string {
 // rows than height() counted, so the fit loop under-reports and the terminal scrolls
 // the header away (EVIDENCE.md §9.10, §9.12). The arithmetic has been wrong before; this
 // makes the consequence impossible rather than unlikely.
+//
+// A truncated line closes what it cut into. A colour left open bleeds onto the next line;
+// a hyperlink left open is worse, because it is not a colour — every cell written after it
+// joins the link, so one clipped row would make the rest of the screen click through to
+// somebody else's dev server (§9.34).
 func clampLine(s string, w int) string {
 	if w < 0 {
 		w = 0
 	}
 	r := []rune(s)
 	var b strings.Builder
-	col := 0
+	col, linked := 0, false
 	for i := 0; i < len(r); {
-		// Frame lines carry SGR colour codes and nothing else; \033[K is added by the
-		// writer, after this.
 		if r[i] == '\033' {
-			j := i
-			for j < len(r) && r[j] != 'm' {
-				j++
+			j := escape(r, i)
+			seq := string(r[i:j])
+			// The only escape here with state to unwind. Its close is the same sequence with
+			// an empty URI, so "did this open one" is "was there a URI".
+			if strings.HasPrefix(seq, linkOpen) {
+				linked = seq != linkClose
 			}
-			if j < len(r) {
-				j++
-			}
-			b.WriteString(string(r[i:j]))
+			b.WriteString(seq)
 			i = j
 			continue
 		}
 		if col == w {
-			// Reset, or the colour of the run we cut into bleeds onto the next line.
-			return b.String() + "\033[0m"
+			out := b.String() + "\033[0m"
+			if linked {
+				out += linkClose
+			}
+			return out
 		}
 		b.WriteRune(r[i])
 		col++
@@ -72,27 +83,63 @@ func clampLine(s string, w int) string {
 	return b.String()
 }
 
+// escape returns the index just past the escape sequence beginning at r[i]. Two families
+// reach the frame and they end differently: SGR colour is a CSI, terminated by one byte in
+// 0x40–0x7E, and a hyperlink is an OSC, terminated by ST or BEL. Scanning to the first `m`
+// covered the first and mangled the second — an `m` inside a URL ended the sequence early
+// and the rest of the URL was then counted as visible text (§9.34).
+//
+// A sequence that runs off the end of the line consumes the remainder rather than
+// resuming as text: half an escape is not something to guess at.
+func escape(r []rune, i int) int {
+	j := i + 1
+	if j >= len(r) {
+		return j
+	}
+	switch r[j] {
+	case '[':
+		for j++; j < len(r) && (r[j] < '@' || r[j] > '~'); j++ {
+		}
+		if j < len(r) {
+			j++
+		}
+	case ']':
+		for j++; j < len(r); j++ {
+			if r[j] == '\a' {
+				j++
+				break
+			}
+			if r[j] == '\033' && j+1 < len(r) && r[j+1] == '\\' {
+				j += 2
+				break
+			}
+		}
+	default:
+		// A two-byte sequence — ST itself, when an OSC was terminated by something this
+		// scanner already consumed.
+		j++
+	}
+	return j
+}
+
 // runes is the printed width of unpainted text.
 func runes(s string) int { return len([]rune(s)) }
 
 // printed is the same measurement for a line that has already been painted: the width
 // clampLine would count. Measuring a rendered line beats re-deriving its width from the
-// arithmetic that produced it — that is two places to get one number wrong.
+// arithmetic that produced it — that is two places to get one number wrong. It shares
+// escape() with clampLine for exactly that reason: two scanners disagreeing about where a
+// sequence ends is two answers to one question (§9.34).
 func printed(s string) int {
+	r := []rune(s)
 	n := 0
-	for i := 0; i < len(s); {
-		if s[i] == '\033' {
-			for i < len(s) && s[i] != 'm' {
-				i++
-			}
-			if i < len(s) {
-				i++
-			}
+	for i := 0; i < len(r); {
+		if r[i] == '\033' {
+			i = escape(r, i)
 			continue
 		}
-		_, w := utf8.DecodeRuneInString(s[i:])
-		i += w
 		n++
+		i++
 	}
 	return n
 }

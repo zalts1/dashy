@@ -52,6 +52,12 @@ func TestGoldenFrames(t *testing.T) {
 		// shows — the background agent has no tab to lose (§9.26).
 		{"frame-trouble.txt", goldenTroubleFleet(),
 			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118}, UI{}},
+		// The link cell, pinned with the escapes in it: one row pointing at both a preview
+		// and a folder, one at only a folder, one at neither, and a todo — which has no
+		// process and so no directory. Nothing else in the suite would catch a hyperlink
+		// that stopped being closed (§18, §9.34).
+		{"frame-links.txt", goldenLinkFleet(),
+			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118}, UI{}},
 	}
 	for _, c := range cases {
 		t.Run(c.file, func(t *testing.T) {
@@ -71,6 +77,20 @@ func TestGoldenFrames(t *testing.T) {
 			}
 		})
 	}
+}
+
+// goldenLinkFleet is the awkward fleet with links on it. The directories are deliberately
+// the two shapes the join has to tell apart: a repository, and a linked worktree inside it
+// (§18).
+func goldenLinkFleet() board.Fleet {
+	f := goldenFleet()
+	f.TodoCap = 10
+	f.Rows[0].Folder, f.Rows[0].Preview = "/Users/you/work/repo", "https://app.localhost"
+	f.Rows[2].Folder = "/Users/you/work/repo/.claude/worktrees/csv export"
+	f.Rows[3].Folder, f.Rows[3].Preview = "/Users/you/work/other", "https://api.localhost:8443"
+	f.Rows = append(f.Rows, board.Row{Key: "todo:t0", State: "todo",
+		Label: "book the quarterly review", Idle: 26 * time.Hour, Rank: board.RankTodo})
+	return f
 }
 
 // goldenTroubleFleet is a partially-read world: cmux is gone, so the interactive
