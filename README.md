@@ -206,6 +206,10 @@ The state comes with it, and the three read differently:
 | `⧭` blue, filled | **merged** — it landed; the link is context now |
 | `⧬` red | **closed** — a branch somebody abandoned |
 
+A slot the row has nothing for shows `⧅` in a very faint grey, so a cell with two of its four links
+reads as sparse rather than broken. It is not clickable, and a row with no links at all shows no
+cell.
+
 Shape carries *has it landed* and colour carries *did it land anywhere*, so missing one cue still
 leaves the other. A draft shows as open: GitHub keeps draft-ness in a separate field that cmux does
 not read (`DESIGN.md` §10.13).

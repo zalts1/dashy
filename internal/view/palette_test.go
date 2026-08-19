@@ -27,6 +27,10 @@ const (
 )
 
 func TestPaletteContrast(t *testing.T) {
+	// linkAbsent is absent deliberately too, and asserted the other way round below: it is a
+	// placeholder whose whole job is to be sub-legible, so holding it to the floor would break the
+	// thing it is for (§9.45).
+	//
 	// statusCritical is absent deliberately: bare #d03b3b measures 2.91 and is the finding
 	// §9.4 records, which is why it may only ever appear as a filled badge with white text.
 	// A test that let it through here would be asserting the opposite of the finding.
@@ -69,6 +73,16 @@ func TestIdleRampIsOrdinal(t *testing.T) {
 				i-1, i, step, rampStep)
 		}
 	}
+	// The placeholder, asserted as staying *under* the floor. Written as a test rather than a
+	// comment because the obvious "fix" on reading the contrast table is to raise it, and raising it
+	// is what would make it compete with the marks that mean something (§9.45).
+	for _, bg := range []string{bgLightest, bgDarkest} {
+		if r := contrast(linkAbsent, bg); r >= inkFloor {
+			t.Errorf("linkAbsent measures %.2f against %s — at or above the floor %.2f, so it is "+
+				"legible enough to compete with the real glyphs", r, bg, inkFloor)
+		}
+	}
+
 	// And the badge's own guarantee, which is what makes it theme-independent: white on its
 	// fill, measured against the fill rather than against the terminal.
 	if r := contrast(inkPrimary, statusCritical); r < 4.5 {

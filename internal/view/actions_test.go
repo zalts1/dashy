@@ -71,97 +71,79 @@ func byKey(t *testing.T, key string) board.Row {
 // actionsSpace instead of having to be found and edited when it changes (§9.44).
 func slotEnd(n int) int { return n + (n-1)*actionsSpace }
 
+// openedLinks counts the hyperlinks in a painted string that actually carry a URL. The closing
+// sequence is the opening one with an empty URI, so counting linkOpen alone counts both halves.
+func openedLinks(s string) int {
+	n := 0
+	for i := 0; i+len(linkOpen) < len(s); i++ {
+		if strings.HasPrefix(s[i:], linkOpen) && !strings.HasPrefix(s[i+len(linkOpen):], "\x1b") {
+			n++
+		}
+	}
+	return n
+}
+
 func TestActionCell(t *testing.T) {
-	both := actionCell(byKey(t, "K-1"), "cursor")
+	// Every cell on a row that has *any* link is the full width, because absent slots are filled
+	// with a placeholder rather than a blank: a cell with two of its four links should read as
+	// sparse, not broken (§9.45). So the glyphs line up down the band whatever a row has.
+	for _, key := range []string{"K-1", "K-2", "K-4", "K-5", "K-6"} {
+		cell := actionCell(byKey(t, key), "cursor")
+		if printed(cell) != actionsW {
+			t.Errorf("%s: cell printed %d columns, want %d: %q", key, printed(cell), actionsW, cell)
+		}
+	}
+
+	both := actionCell(byKey(t, "K-1"), "cursor") // a preview and a folder, no storybook, no PR
 	if !strings.Contains(both, linkOpen+"https://api.localhost"+st) {
 		t.Errorf("preview glyph is not a link to the preview: %q", both)
 	}
 	if !strings.Contains(both, linkOpen+"cursor://file/Users/you/work/repo"+st) {
 		t.Errorf("folder glyph is not a link to the chosen editor: %q", both)
 	}
-	// Five, not actionsW: the slots are fixed, so an absent *leading* glyph holds its column and an
-	// absent *trailing* one is trimmed. This row has the middle two, so it keeps the Storybook's
-	// blank on the left and loses the PR's on the right.
-	if printed(both) != slotEnd(3) {
-		t.Errorf("cell with preview+folder printed %d columns, want %d: %q",
-			printed(both), slotEnd(3), both)
+	// The two it does not have are placeholders, in the muted grey and *not* clickable — a
+	// placeholder that opened something would be the §9.14 failure with a new coat of paint.
+	if n := strings.Count(both, fg(linkAbsent, absentGlyph)); n != 2 {
+		t.Errorf("cell has %d placeholders, want 2: %q", n, both)
+	}
+	// Exactly as many hyperlinks as real links: a placeholder is never clickable, or it would be
+	// §9.14's chevron again — a mark promising something that is not there.
+	if n := openedLinks(both); n != 2 {
+		t.Errorf("cell opened %d hyperlinks for 2 real links: %q", n, both)
 	}
 
-	folderOnly := actionCell(byKey(t, "K-2"), "cursor")
-	if strings.Contains(folderOnly, "https://") {
-		t.Errorf("row with no preview got a preview link: %q", folderOnly)
+	// Slot order is fixed, so a glyph is always in its own column: storybook, preview, folder, pr.
+	all := actionCell(byKey(t, "K-5"), "cursor")
+	if printed(all) != actionsW {
+		t.Errorf("cell with all four printed %d columns, want %d: %q", printed(all), actionsW, all)
 	}
-	// The folder sits in the second column, so it lines up with the row above it.
-	if !strings.HasPrefix(folderOnly, "  ") {
-		t.Errorf("folder glyph did not keep the preview's column: %q", folderOnly)
+	order := []string{storybookGlyph, previewGlyph, folderGlyph, prGlyph}
+	at := make([]int, len(order))
+	for i, g := range order {
+		at[i] = strings.Index(all, g)
+		if at[i] < 0 {
+			t.Fatalf("cell with all four is missing %q: %q", g, all)
+		}
 	}
-	if printed(folderOnly) != slotEnd(3) {
-		t.Errorf("folder-only cell printed %d columns, want %d: %q",
-			printed(folderOnly), slotEnd(3), folderOnly)
+	for i := 1; i < len(at); i++ {
+		if at[i] < at[i-1] {
+			t.Errorf("slot %d (%q) is left of slot %d: %q", i, order[i], i-1, all)
+		}
+	}
+	// The pull request is rightmost, because it is the only one that does not point at this
+	// machine (§18).
+	if strings.Index(all, prGlyph) < strings.Index(all, folderGlyph) {
+		t.Errorf("the PR glyph is not right of the folder: %q", all)
 	}
 
-	// Nothing to point at is no cell at all, not an empty one — that is what keeps a row
-	// with no links byte-identical to the frame before links existed.
+	// Nothing to point at is still no cell at all. The placeholder makes a partly filled cell read
+	// as sparse; on a row with nothing it would be four marks saying nothing, on every filler row
+	// and every todo.
 	if got := actionCell(byKey(t, "K-3"), "cursor"); got != "" {
-		t.Errorf("row with neither link got a cell: %q", got)
+		t.Errorf("row with no links got a cell: %q", got)
 	}
 	if got := actionCell(byKey(t, "todo:t1"), "cursor"); got != "" {
 		t.Errorf("todo row got a cell: %q", got)
-	}
-
-	// The cell is the last thing on the line, so the absent second glyph is trimmed rather
-	// than spaced out: padding there would widen the frame's right edge on a row that has
-	// nothing in the column it widened for (§9.29).
-	previewOnly := actionCell(byKey(t, "K-4"), "cursor")
-	// All four, for the row that has them: the cell is exactly its width, no more.
-	if all := actionCell(byKey(t, "K-5"), "cursor"); printed(all) != actionsW {
-		t.Errorf("cell with all four printed %d columns, want %d: %q", printed(all), actionsW, all)
-	} else {
-		for _, g := range []string{storybookGlyph, previewGlyph, folderGlyph, prGlyph} {
-			if !strings.Contains(all, g) {
-				t.Errorf("cell with all four is missing %q: %q", g, all)
-			}
-		}
-		// The pull request is the rightmost thing on the row, because it is the only one that
-		// does not point at this machine (§18).
-		if strings.Index(all, prGlyph) < strings.Index(all, folderGlyph) {
-			t.Errorf("the PR glyph is not right of the folder: %q", all)
-		}
-	}
-	// A pull request alone still fills the whole cell, because its column is the last one: the
-	// three blanks in front of it are what keep it under the same header as everybody else's.
-	prOnly := actionCell(byKey(t, "K-6"), "cursor")
-	if printed(prOnly) != actionsW {
-		t.Errorf("PR-only cell printed %d columns, want %d: %q", printed(prOnly), actionsW, prOnly)
-	}
-	if !strings.HasPrefix(prOnly, strings.Repeat(" ", slotEnd(3)+actionsSpace)) {
-		t.Errorf("PR-only cell did not keep the three columns before it: %q", prOnly)
-	}
-	// The cell is the last thing on the line, so absent *trailing* glyphs are trimmed rather
-	// than spaced out: padding there would widen the frame's right edge on a row that has
-	// nothing in the column it widened for (§9.29). Absent *leading* ones still hold their
-	// column, which is what keeps the glyphs lined up down a band.
-	//
-	// The order is rarest first — Storybook, preview, folder — so a preview-only row keeps one
-	// leading blank and trims the two trailing ones.
-	if printed(previewOnly) != slotEnd(2) {
-		t.Errorf("preview-only cell printed %d columns, want %d: %q",
-			printed(previewOnly), slotEnd(2), previewOnly)
-	}
-	if !strings.HasPrefix(previewOnly, strings.Repeat(" ", 1+actionsSpace)) {
-		t.Errorf("preview-only cell did not keep the Storybook's column: %q", previewOnly)
-	}
-	if strings.HasSuffix(previewOnly, " ") {
-		t.Errorf("preview-only cell was padded rather than trimmed: %q", previewOnly)
-	}
-	// The leftmost slot alone is the smallest the cell gets: everything after it trims away.
-	storybookOnly := actionCell(board.Row{Storybook: "http://localhost:6006"}, "cursor")
-	if printed(storybookOnly) != slotEnd(1) {
-		t.Errorf("storybook-only cell printed %d columns, want 1: %q",
-			printed(storybookOnly), storybookOnly)
-	}
-	if !strings.Contains(storybookOnly, storybookGlyph) {
-		t.Errorf("storybook-only cell is not the Storybook glyph: %q", storybookOnly)
 	}
 }
 

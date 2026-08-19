@@ -60,6 +60,15 @@ const (
 	// badge (§9.4).
 	linkPR       = "#b0b0ff" // ⧬ open, ⧭ merged
 	linkPRClosed = "#ff7b72" // ⧬ closed without merging
+	// linkAbsent fills a slot the row has nothing for, and it is **deliberately below the palette
+	// floor** — 1.68 against #282c34 and 2.46 against #040404, where inkMuted is 3.90.
+	//
+	// Every other value in this file is information and has to be legible. This one is the opposite:
+	// it exists so a cell with two of its four links reads as sparse rather than broken, and the
+	// moment it is legible enough to *identify* it starts competing with the marks that mean
+	// something. Texture, not a mark. TestPaletteContrast exempts it by name and asserts it stays
+	// under the floor, so nobody raises it as a fix (§9.45).
+	linkAbsent = "#4e4e4c"
 )
 
 // idleRamp is the ordinal ramp for idle magnitude: dim = fresh, bright = rotting.

@@ -372,6 +372,7 @@ func helpLine(bars bool, cols int) string {
 	glyphs += "  " + fg(linkFolder, folderGlyph) + dim(" folder")
 	glyphs += "  " + fg(linkPR, prGlyph) + dim(" pr")
 	glyphs += "  " + fg(linkPR, prMergedGlyph) + dim(" merged")
+	glyphs += "  " + fg(linkAbsent, absentGlyph) + dim(" none")
 	gesture, out := dim("   ⌘-click"), dim("   esc")
 
 	ladder := []string{glyphs + gesture + out, glyphs + out}

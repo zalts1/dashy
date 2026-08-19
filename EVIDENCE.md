@@ -61,6 +61,7 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.42 | The flag is `--workspace`, not `--tab` — a mistyped flag became an architecture. cmux's PR badge was always readable | `cmux/pr.go`, `view/link.go`, `DESIGN.md` §18, §10.12 |
 | 9.43 | Colours that are alternatives need not match colours that are neighbours | `view/palette.go`, `DESIGN.md` §6 |
 | 9.44 | Four boxes one space apart read as one run of ink; and the frame can afford air it should give back when short | `view/link.go`, `view/frame.go`, `view/layout.go`, `DESIGN.md` §6 |
+| 9.45 | A half-empty cell reads as broken, not sparse — the fix is a glyph too faint to be information | `view/link.go`, `view/palette.go`, `DESIGN.md` §6, §18 |
 
 ---
 
@@ -1623,3 +1624,47 @@ frame board actually drew shows the whole fleet — whichever form it chose.
 A first attempt at that second test compared row counts between a tall tab and a short one and
 "failed" correctly: an 18-line tab shows fewer rows than a 120-line one, which is the fit loop
 working. The invariant only means anything **at one height**, which is what it asserts now.
+
+### 9.45 A half-empty cell reads as broken, not sparse (2026-08-19)
+
+**Believed:** an absent link should draw nothing. The slot holds its column with a blank so the
+glyphs line up, trailing blanks are trimmed, and the cell says exactly what the row has and no more.
+That is §9.14's rule applied to a cell: do not draw a mark for something that is not there.
+
+**Found:** with four slots it stops looking sparse and starts looking broken. `⧆     ⧉  ⧭` — one
+gap in the middle and one at the end — reads as a rendering fault rather than as two absences,
+because a row of aligned marks with holes in it is a pattern the eye completes and then finds wrong.
+The rule was right about *information* and wrong about *form*.
+
+**Shipped:** every empty slot on a row that has any link draws `⧅` in `#4e4e4c`, which measures
+**1.68** against `#282c34` and 2.46 against `#040404` — deliberately below the palette floor of
+3.90, and the only value in the file that is.
+
+That inversion is the whole point and it is worth being explicit about, because every other value in
+`view/palette.go` exists to be legible. This one exists to be *sub*-legible: the moment it is clear
+enough to identify, it competes with the marks that mean something, and the cell goes back to
+looking wrong in a different way. `TestPaletteContrast` therefore exempts it by name **and asserts
+it stays under the floor**, because the obvious reading of a contrast table is that a low number
+wants raising.
+
+Three things fell out of it.
+
+**The trim went away.** Every populated cell is now the full width, which is what makes the column a
+column — the glyphs line up down a band whatever each row happens to have, and there is nothing left
+to right-trim. Three test assertions that had encoded per-shape widths (`slotEnd(3)`, `slotEnd(2)`,
+1) collapsed into one: any row with a link has a cell of `actionsW`.
+
+**A row with *nothing* still draws nothing.** Four placeholders on every filler row and every todo
+would be ink saying nothing, which is the failure this was fixing, one level up. The placeholder
+makes a partly-filled cell read as sparse; it cannot make an empty one read as anything.
+
+**And the placeholder is never a link.** It would be §9.14's chevron again — a mark promising
+something that is not there — so it is painted and not wrapped, and a test counts hyperlinks
+carrying a URL against the number of real links. The first version of that test asserted
+`!strings.Contains(cell, linkOpen+st)` and failed, correctly: `linkOpen+st` *is* the closing
+sequence, so it appears after every real link. The assertion was wrong, not the code.
+
+`?` names it too — `⧅ none` — because a legend that names six glyphs and omits the seventh is a
+legend with a hole in it, which is the same complaint one level up again. It pushed the fullest rung
+to 126 columns, so at 118 the ladder now sheds the scale's values; that is the ladder working, and
+§9.44 is why it exists.

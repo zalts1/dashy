@@ -57,52 +57,56 @@ func TestAmbientLineNamesTheRoutes(t *testing.T) {
 // three glyphs by name, the gesture, and the way out. All three glyphs whether or not this fleet
 // has them — a help line that hid a feature would be answering a different question.
 func TestHelpLineSpellsEverythingOut(t *testing.T) {
-	got := bottom(linkFleet(), UI{Help: true}, true, true, 118)
+	// The fullest rung, on a tab wide enough for it: the scale's values, every glyph by name, the
+	// gesture and the way back.
+	full := bottom(linkFleet(), UI{Help: true}, true, true, 140)
 	for _, want := range []string{
 		"1h", "3h", "12h", "2d", "7d",
-		previewGlyph, storybookGlyph, folderGlyph, prGlyph, staleGlyph,
-		"storybook", "preview", "folder", "pr", "merged", "quiet a while", "⌘-click", "esc",
+		previewGlyph, storybookGlyph, folderGlyph, prGlyph, prMergedGlyph, absentGlyph, staleGlyph,
+		"storybook", "preview", "folder", "pr", "merged", "none", "quiet a while", "⌘-click", "esc",
 	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("help line does not say %q:\n%q", want, got)
+		if !strings.Contains(full, want) {
+			t.Errorf("the full help line does not say %q:\n%q", want, full)
 		}
 	}
-	// It fits the terminal it was asked for, which is the bar that matters: this is the one line a
-	// reader opened deliberately, and a legend clipped mid-word is worse than a shorter one.
-	if w := printed(got) + 2*headMargin; w > 118 {
-		t.Errorf("help line needs %d columns at 118:\n%q", w, got)
-	}
-	// It sheds in a ladder rather than clipping, and the glyph meanings never give way — they are
-	// the question `?` is answering. The scale goes first, then the gesture.
-	for _, cols := range []int{118, 100, 90, 80} {
-		narrow := bottom(linkFleet(), UI{Help: true}, true, true, cols)
-		if w := printed(narrow) + 2*headMargin; w > cols {
-			t.Errorf("help line needs %d columns at %d:\n%q", w, cols, narrow)
+
+	// It sheds in a ladder as the tab narrows — the scale's values first, then the gesture — and
+	// what it never sheds is the glyph meanings, because they are the question `?` is answering.
+	widths := []int{140, 130, 118, 100, 90}
+	prev := 0
+	for _, cols := range widths {
+		line := bottom(linkFleet(), UI{Help: true}, true, true, cols)
+		if w := printed(line) + 2*headMargin; w > cols {
+			t.Errorf("help line needs %d columns at %d:\n%q", w, cols, line)
 		}
+		if w := printed(line); prev != 0 && w > prev {
+			t.Errorf("at %d cols the line grew to %d from %d", cols, w, prev)
+		}
+		prev = printed(line)
 		for _, g := range []string{staleGlyph, storybookGlyph, previewGlyph, folderGlyph,
-			prGlyph, prMergedGlyph} {
-			if !strings.Contains(narrow, g) {
+			prGlyph, prMergedGlyph, absentGlyph} {
+			if !strings.Contains(line, g) {
 				t.Errorf("at %d cols the legend dropped %q, which is what it is for:\n%q",
-					cols, g, narrow)
+					cols, g, line)
 			}
 		}
 	}
-	narrow := bottom(linkFleet(), UI{Help: true}, true, true, 80)
-	for _, g := range []string{staleGlyph, storybookGlyph, previewGlyph, folderGlyph,
-		prGlyph, prMergedGlyph} {
-		if !strings.Contains(narrow, g) {
-			t.Errorf("the narrow help line dropped %q, which is the part it is for:\n%q", g, narrow)
-		}
+
+	// Below the shortest rung there is nothing left to shed, and clampLine takes it — the one case
+	// this line is allowed to be cut. helpLine itself must still return the shortest rung whole,
+	// rather than cutting it and hiding the fact.
+	shortest := bottom(linkFleet(), UI{Help: true}, true, true, 90)
+	if got := bottom(linkFleet(), UI{Help: true}, true, true, 40); got != shortest {
+		t.Errorf("at 40 cols helpLine returned something other than its shortest rung:\n%q", got)
 	}
-	if strings.Contains(narrow, "12h") {
-		t.Errorf("the narrow help line kept the scale rungs instead of shedding them:\n%q", narrow)
-	}
+
 	// A fleet with no links still gets the whole legend: it is help, not a status line.
 	bare := linkFleet()
 	for i := range bare.Rows {
-		bare.Rows[i].Preview, bare.Rows[i].Storybook, bare.Rows[i].Folder = "", "", ""
+		bare.Rows[i].Preview, bare.Rows[i].Storybook = "", ""
+		bare.Rows[i].Folder, bare.Rows[i].PR = "", ""
 	}
-	if h := bottom(bare, UI{Help: true}, true, false, 118); !strings.Contains(h, "storybook") {
+	if h := bottom(bare, UI{Help: true}, true, false, 140); !strings.Contains(h, "storybook") {
 		t.Errorf("help hid a feature the fleet is not using:\n%q", h)
 	}
 }
