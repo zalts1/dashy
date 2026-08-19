@@ -61,7 +61,7 @@ func TestHelpLineSpellsEverythingOut(t *testing.T) {
 	for _, want := range []string{
 		"1h", "3h", "12h", "2d", "7d",
 		previewGlyph, storybookGlyph, folderGlyph, prGlyph, staleGlyph,
-		"storybook", "preview", "folder", "pr", "quiet a while", "⌘-click", "esc",
+		"storybook", "preview", "folder", "pr", "merged", "quiet a while", "⌘-click", "esc",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("help line does not say %q:\n%q", want, got)
@@ -72,12 +72,24 @@ func TestHelpLineSpellsEverythingOut(t *testing.T) {
 	if w := printed(got) + 2*headMargin; w > 118 {
 		t.Errorf("help line needs %d columns at 118:\n%q", w, got)
 	}
-	// On a narrow tab it sheds the scale rather than clipping, and keeps every glyph.
-	narrow := bottom(linkFleet(), UI{Help: true}, true, true, 80)
-	if w := printed(narrow) + 2*headMargin; w > 80 {
-		t.Errorf("help line needs %d columns at 80:\n%q", w, narrow)
+	// It sheds in a ladder rather than clipping, and the glyph meanings never give way — they are
+	// the question `?` is answering. The scale goes first, then the gesture.
+	for _, cols := range []int{118, 100, 90, 80} {
+		narrow := bottom(linkFleet(), UI{Help: true}, true, true, cols)
+		if w := printed(narrow) + 2*headMargin; w > cols {
+			t.Errorf("help line needs %d columns at %d:\n%q", w, cols, narrow)
+		}
+		for _, g := range []string{staleGlyph, storybookGlyph, previewGlyph, folderGlyph,
+			prGlyph, prMergedGlyph} {
+			if !strings.Contains(narrow, g) {
+				t.Errorf("at %d cols the legend dropped %q, which is what it is for:\n%q",
+					cols, g, narrow)
+			}
+		}
 	}
-	for _, g := range []string{staleGlyph, storybookGlyph, previewGlyph, folderGlyph, prGlyph} {
+	narrow := bottom(linkFleet(), UI{Help: true}, true, true, 80)
+	for _, g := range []string{staleGlyph, storybookGlyph, previewGlyph, folderGlyph,
+		prGlyph, prMergedGlyph} {
 		if !strings.Contains(narrow, g) {
 			t.Errorf("the narrow help line dropped %q, which is the part it is for:\n%q", g, narrow)
 		}

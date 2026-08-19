@@ -68,12 +68,14 @@ type Row struct {
 	// field and not a second Preview, because they are two different things to open and a row
 	// can carry both.
 	Storybook string
-	// PR is the open pull request for this worktree's branch, or "" — including whenever the
-	// `github` key is off, which is the default and means board asked nothing (§10.12).
-	PR    string
-	Idle  time.Duration
-	Stale bool // quiet past the threshold
-	Rank  int
+	// PR is the pull request cmux has correlated for this row's tab, and PRState is what cmux
+	// found it in — open, merged or closed. Both empty when the tab has none, and for a row with
+	// no tab at all, which is a background agent (§18).
+	PR      string
+	PRState string
+	Idle    time.Duration
+	Stale   bool // quiet past the threshold
+	Rank    int
 }
 
 // Where is the location column in plain text: the repository, and the worktree inside it when

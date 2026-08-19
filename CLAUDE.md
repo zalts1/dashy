@@ -61,7 +61,6 @@ Routing only; `DESIGN.md` §3 is why the tree is this shape.
       cmux/          tab titles, hook clock, focus — enrichment, never the roster
       preview/       local URLs for a worktree: portless routes + a Storybook port scan (§18)
       editor/        which editor a folder link opens, and `board editor` (§18)
-      github/        the open PR for a worktree's branch — the one networked read (§10.12)
       board/         Fleet/Row; Build = pure join, Collect = impure gather
       view/          PURE: Frame, header, layout arithmetic, Table, palette, scale
       watch/         IMPURE: alternate screen, termios, signals, ticker
@@ -102,9 +101,9 @@ Two kinds, and the difference matters more than any single entry.
 - **board never rewrites or deletes a `plugin.toml` it did not write** — that file is the
   permission policy for every plugin in its directory (§8, §17).
 - **cmux env vars are always stripped from child processes** (§8).
-- **board reaches the network only behind the `github` key, and never with a credential of its
-  own** — `gh` makes the request and owns the cache. Unset, nothing in `internal/github` runs
-  (§10.12).
+- **board makes no network request at all.** The pull request on a row comes from cmux, which
+  already polls GitHub for its sidebar — `cmux sidebar-state --workspace <uuid>`, and the flag is
+  `--workspace`, not `--tab` (§18, `EVIDENCE.md` §9.42).
 - **board opens nothing itself.** A row's preview and folder are hyperlinks handed to the
   terminal; there is no `open`, no `code`, no opener of any kind. `cmux surface.focus`
   stays the only thing board does to the world (§8, §18).

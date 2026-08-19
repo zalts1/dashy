@@ -33,10 +33,10 @@ type Snapshot struct {
 	// Separate from Trees because they are two questions: which worktree is this work in, and
 	// which repository is that worktree part of (§18).
 	Repos map[string]string
-	// PRs maps a worktree to the URL of the open pull request for its branch. Empty unless the
-	// `github` key is set — the one read board makes over the network, and the only one that is
-	// off by default (§10.12).
-	PRs map[string]string
+	// PRs maps a cmux workspace UUID to the pull request cmux has already correlated for that
+	// tab. Keyed by workspace and not by worktree, because that is the question cmux answers:
+	// one badge per tab (§18).
+	PRs map[string]cmux.PR
 	// Previews are the local dev servers up on this machine, each with the directory it
 	// is serving. Enrichment, never a row: a preview with no session is nobody's work.
 	Previews []preview.Route
@@ -111,7 +111,8 @@ func Build(s Snapshot, now time.Time) Fleet {
 			Surface:   t.ID,
 			Repo:      repo,
 			Tree:      tree,
-			PR:        s.PRs[s.Trees[a.Cwd]],
+			PR:        s.PRs[t.WorkspaceID].URL,
+			PRState:   s.PRs[t.WorkspaceID].State,
 			Folder:    s.Trees[a.Cwd],
 			Preview:   nearest(s.Previews, s.Trees, s.Trees[a.Cwd], a.Cwd),
 			Storybook: nearest(s.Storybooks, s.Trees, s.Trees[a.Cwd], a.Cwd),
@@ -167,7 +168,8 @@ func Build(s Snapshot, now time.Time) Fleet {
 				Surface:   t.ID,
 				Repo:      makiRepo,
 				Tree:      makiTree,
-				PR:        s.PRs[s.Trees[rep.Cwd]],
+				PR:        s.PRs[t.WorkspaceID].URL,
+				PRState:   s.PRs[t.WorkspaceID].State,
 				Folder:    s.Trees[rep.Cwd],
 				Preview:   nearest(s.Previews, s.Trees, s.Trees[rep.Cwd], rep.Cwd),
 				Storybook: nearest(s.Storybooks, s.Trees, s.Trees[rep.Cwd], rep.Cwd),

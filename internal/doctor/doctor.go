@@ -23,9 +23,7 @@ import (
 	"github.com/zalts1/dashy/internal/cmux"
 	"github.com/zalts1/dashy/internal/config"
 	"github.com/zalts1/dashy/internal/editor"
-	"github.com/zalts1/dashy/internal/github"
 	"github.com/zalts1/dashy/internal/hooks"
-	"github.com/zalts1/dashy/internal/host"
 	"github.com/zalts1/dashy/internal/maki"
 	"github.com/zalts1/dashy/internal/preview"
 	"github.com/zalts1/dashy/internal/version"
@@ -87,13 +85,11 @@ type Report struct {
 	Editor      string
 	EditorFound bool
 
-	// The pull-request half. GitHubOn is the config key; PRs is how many worktrees have one open;
-	// NoGh is gh missing from PATH, which is the one failure with an obvious repair. Reported only
-	// when the key is on, since off is the default and a permanent "pr off" is a clause every
-	// reader learns to skip (§9.13).
-	GitHubOn bool
-	PRs      int
-	NoGh     bool
+	// The pull requests cmux has correlated: PRs is how many of the fleet's tabs have one, Open
+	// how many of those still want something done about them. Reported only when there is one,
+	// the same exception rule the Storybook clause follows (§9.13).
+	PRs     int
+	OpenPRs int
 	// LinksInCmux is where a ⌘-click lands: a cmux browser tab, or the system browser. cmux's
 	// preference, never board's — reported because "why did that open there" has no other answer
 	// in board's output (§9.42).
@@ -142,12 +138,22 @@ func Gather() Report {
 
 	ed := editor.Gather(st.Config.Editor, config.Path())
 
-	prs := 0
-	noGh := false
-	if st.Config.GitHub {
-		noGh = !github.Available()
-		if !noGh {
-			prs = len(github.Read(github.Targets(treesOf(previews))))
+	// The same read board's frame makes, over the workspaces cmux knows about.
+	wsIDs := map[string]bool{}
+	for _, t := range titles {
+		if t.WorkspaceID != "" {
+			wsIDs[t.WorkspaceID] = true
+		}
+	}
+	ids := make([]string, 0, len(wsIDs))
+	for id := range wsIDs {
+		ids = append(ids, id)
+	}
+	pulls := cmux.PullRequests(ids)
+	openPRs := 0
+	for _, pr := range pulls {
+		if pr.Open() {
+			openPRs++
 		}
 	}
 
@@ -182,9 +188,8 @@ func Gather() Report {
 		NoPortless:     noPortless,
 		Editor:         ed.Chosen.Name,
 		EditorFound:    ed.Installed[ed.Chosen.Name],
-		GitHubOn:       st.Config.GitHub,
-		PRs:            prs,
-		NoGh:           noGh,
+		PRs:            len(pulls),
+		OpenPRs:        openPRs,
 		LinksInCmux:    cmux.OpensLinksInternally(),
 		Hooks:          installed,
 		HooksErr:       hooksErr,
@@ -316,34 +321,6 @@ func editorRow(r Report) string {
 	}
 }
 
-// treesOf is the worktree-to-repository map the pull-request read needs, rebuilt here from the
-// preview roster's directories. doctor gathers independently of board.Collect on purpose: it has
-// to work when the join does not (§14).
-func treesOf(previews preview.Roster) map[string]string {
-	out := map[string]string{}
-	for _, dirs := range [][]preview.Route{previews.Routes, previews.Storybooks} {
-		for _, rt := range dirs {
-			if t := host.WorkTree(rt.Dir); t != "" {
-				out[t] = host.Repository(t)
-			}
-		}
-	}
-	// The directory doctor itself was run from, so a machine with nothing serving still reports a
-	// pull request when there is one.
-	if t := host.WorkTree(cwd()); t != "" {
-		out[t] = host.Repository(t)
-	}
-	return out
-}
-
-func cwd() string {
-	d, err := os.Getwd()
-	if err != nil {
-		return ""
-	}
-	return d
-}
-
 // storybookRow is the Storybook clause of the `links` row, and it is silent when nothing is
 // listening in the range: board scans every tick whether or not anybody uses Storybook, and a
 // permanent "0 storybooks" would be noise on most machines (§9.13).
@@ -361,21 +338,17 @@ func storybookRow(r Report) string {
 	}
 }
 
-// prRow is the pull-request clause, and it is silent unless the `github` key is on: off is the
-// default, and a permanent "pr off" would be noise on every machine that never wants it. The
-// README is where the key is documented (§10.12).
+// prRow is the pull-request clause, silent when the fleet's tabs have none — the same exception
+// rule the Storybook clause follows, since board asks on every tick whether or not anybody is
+// using pull requests (§9.13).
+//
+// Both numbers, because they are different facts: how many tabs cmux found a pull request for, and
+// how many of those are still open. A fleet of merged PRs is a fleet with nothing to do.
 func prRow(r Report) string {
-	switch {
-	case !r.GitHubOn:
+	if r.PRs == 0 {
 		return ""
-	case r.NoGh:
-		// The one PR failure with an obvious repair, and the only one worth telling apart: not
-		// logged in, offline and invisible-repository all look the same from here and all mean
-		// "no glyph".
-		return " · github on, no gh on PATH"
-	default:
-		return fmt.Sprintf(" · %d open %s", r.PRs, plural(r.PRs, "pr"))
 	}
+	return fmt.Sprintf(" · %d %s, %d open", r.PRs, plural(r.PRs, "pr"), r.OpenPRs)
 }
 
 // browserRow says where a ⌘-click lands. It is cmux's preference and board only reports it —

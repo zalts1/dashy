@@ -689,24 +689,38 @@ state is the one where nothing disagrees.
 `Folder`, and one of them a `Preview`, at which point the GIF shows what the prose above
 describes.
 
-### 10.12 The pull request — the link shipped, the review CTA did not (2026-08-19)
+### 10.12 The review CTA — deferred, and not for the reason first recorded (2026-08-19)
 
 Two glyphs were asked for: one to open the branch's pull request, one to replace it once somebody
-has reviewed since the latest commit. **The link shipped as §18; the CTA did not, and will not in
-this shape.**
+has reviewed since the latest commit. **The link shipped as §18, from cmux. The CTA did not.**
 
-The CTA is not measurable. "Since the latest commit was **pushed**" needs a push time, and GitHub's
-`pushedDate` is deprecated and usually null — so the honest comparison is against `committedDate`,
-which differs after a rebase and would put a call to action on a row nobody had touched. A glyph
-that shouts on the wrong row is worse than no glyph, which is the rule §18 is organised around.
+The first version of this entry said the whole thing needed GitHub and deferred the CTA on cost.
+That was wrong about the link — cmux had it all along (§9.42) — and it is still right about the
+CTA, for a different reason: cmux's badge carries `open | merged | closed` and nothing about
+reviews, so the CTA is the one half cmux cannot answer.
 
-*Trigger:* GitHub exposing a usable push time, or a definition of "your turn" that does not need
-one — `reviewDecision` alone would do it, since CHANGES_REQUESTED is your turn whenever it arrived.
+Nor is it measurable even with GitHub. "Since the latest commit was **pushed**" needs a push time,
+and GitHub's `pushedDate` is deprecated and usually null — so the honest comparison is against
+`committedDate`, which differs after a rebase and would put a call to action on a row nobody had
+touched. A glyph that shouts on the wrong row is worse than no glyph, which is the rule §18 is
+organised around.
 
-*Note on the glyphs:* `⧗` is not available — it is the stale mark since §9.41, where an hourglass
-turned out to describe "has been sitting" better than a warning triangle did. The CTA picks
-something else from U+29xx, which is a real constraint: §9.36 records why the set cannot span
-blocks.
+*Trigger:* cmux carrying review state in its badge, which would make it free the way the link now
+is. Failing that, `reviewDecision` alone would do — CHANGES_REQUESTED is your turn whenever it
+arrived — but that needs the network back, and §9.42 is the argument against reaching for it.
+
+### 10.13 Draft pull requests — deferred, cmux does not carry it (2026-08-19)
+
+A muted `⧬` for a draft was asked for alongside the three states that shipped. cmux cannot supply
+it: `PullRequestStatus` maps GitHub's `state`, which is `OPEN` for a draft — draft-ness lives in a
+separate `isDraft` field cmux does not read. So a draft arrives as open and renders as open.
+
+Not built as dead code waiting for data that never comes, and not built by asking GitHub, which is
+the dependency §9.42 just removed.
+
+*Trigger:* cmux reading `isDraft` into its badge. The rendering is already decided — a muted `⧬`,
+since a draft is a pull request nobody is being asked to look at yet — so it would be one case in
+`prMark` and one line in the legend.
 
 ---
 
@@ -1366,34 +1380,35 @@ way deliberately for one release: it is a true statement about how far the fleet
 changing it to count repositories is a separate decision about what "spread" means. It is the
 first thing to revisit if the header and the column start reading as contradictions.
 
-### The pull request, and the one time board leaves the machine
+### The pull request comes from cmux, not from GitHub
 
-`⧭` opens the pull request the worktree's branch has open. It is the fourth link and the only one
-that does not point at this machine — a port, a port and a directory, then github.com — which is
-why it sits beyond the other three at the far right rather than where its frequency would put it.
+`⧬` opens the pull request the row's branch has open. It is the fourth link and the only one that
+does not point at this machine — a port, a port and a directory, then github.com — which is why it
+sits beyond the other three at the far right rather than where its frequency would put it.
 
-**It is off by default**, behind `{"config": {"github": true}}`, and that key is the whole of the
-trade. board is described as having no network of its own; with the key unset nothing in
-`internal/github` runs and the README's claim is literally true. Turning it on is somebody
-deciding, once, in the one place a decision like that belongs.
+**cmux has already correlated it.** It polls GitHub itself and shows a badge per tab in its
+sidebar; `cmux sidebar-state --workspace <uuid>` hands the same thing over. So this is enrichment
+from cmux exactly as tab titles and the idle clock are (§3): board makes no request, needs no
+credential, holds no cache and gains no config key. One call per workspace the fleet occupies,
+run concurrently, hiding behind `claude agents` like everything else.
 
-board does not make the request. `gh api graphql --cache 3m` does, and that matters three times:
-gh already holds the credentials, so there is no token in board's config to leak into a pasted
-report; gh owns the cache, so board still writes only `~/.board.json`; and a cached answer costs
-~40ms against ~580ms cold, which decouples the 10s poll from GitHub's rate limit. One query per
-worktree, four at a time.
+The flag is `--workspace` and this is worth writing down because getting it wrong cost a day:
+`--tab` is not a flag `sidebar-state` accepts, so passing it is silently ignored and the app
+answers about the *selected* tab. That makes every workspace look like it returns one tab's data,
+which reads as an addressing dead end and led to a whole networked package being built and thrown
+away (§9.42).
 
-Every failure is the same outcome — no glyph, no complaint: no `gh`, not logged in, no network, a
-repository you cannot see, a detached HEAD, a remote that is not GitHub. `doctor`'s `links` row is
-where they are told apart, and only when the key is on.
+Keyed by workspace UUID rather than by worktree, because that is the question cmux answers: one
+badge per tab. Two maki sessions in one tab therefore share a pull request, correctly — it is the
+tab's branch. A background agent has no tab and so has none.
 
-**cmux already knows this and cannot be asked**, which is worth stating because it is the obvious
-objection. cmux polls api.github.com itself and shows the badge in its sidebar — and holds it in
-the running process. `cmux sidebar-state` answers only for the tab it is called from, ignores
-`--tab` for every value including nonsense, and returns nothing at all once cmux's env is
-stripped, which board always does (§9.8). Nothing is on disk: no cmux file, no sqlite row and no
-user default mentions a pull request. So board fetches a second time what one process on the
-machine already has, which is a thing to fix upstream rather than here (§9.42).
+**Three states, and the difference is the point.** cmux reports `open`, `merged` or `closed`, and
+the frame draws them apart: `⧬` hollow in blue for open, `⧭` filled in blue for merged, `⧬` in
+GitHub's own red for closed. Shape carries "has it landed" and colour carries "did it land
+anywhere", so a reader who misses one cue still has the other. An open pull request is something to
+go and look at; a merged one is context; a closed one is a branch somebody abandoned. A state cmux
+has not had yet draws as open, because a glyph board cannot classify is still a pull request worth
+reaching.
 
 ### Where a ⌘-click lands is cmux's decision
 

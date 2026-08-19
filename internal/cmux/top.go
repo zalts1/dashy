@@ -10,6 +10,9 @@ type Titles struct {
 	ID        string // surface UUID, the handle Focus needs
 	Surface   string // tab title
 	Workspace string
+	// WorkspaceID is the workspace UUID, which is what `sidebar-state --workspace` is addressed
+	// by — and which cmux calls a *tab* in that command's output. Same identity, two names (§18).
+	WorkspaceID string
 }
 
 // node is one surface plus the context its ancestors carry. cmux puts the pane id on
@@ -49,7 +52,7 @@ func parseTop(b []byte) map[int]Titles {
 	out := map[int]Titles{}
 	for _, n := range parseNodes(b) {
 		for _, pid := range n.Pids {
-			out[pid] = Titles{n.ID, StripSpinner(n.Title), n.WsTitle}
+			out[pid] = Titles{n.ID, StripSpinner(n.Title), n.WsTitle, n.Ws}
 		}
 	}
 	return out

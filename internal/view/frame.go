@@ -326,33 +326,41 @@ func bottom(f board.Fleet, u UI, bars, links bool, cols int) string {
 }
 
 // helpLine is `?`: everything the ambient line abbreviates, spelled out. Every mark the frame
-// draws that is not a word — the stale mark, the four link glyphs — plus the scale's rungs, the
-// gesture, and the way back.
+// draws that is not a word — the stale mark, the four link glyphs, and the two shapes the pull
+// request takes — plus the scale's rungs, the gesture, and the way back.
 //
 // All of them whether or not this fleet has any: this is help rather than a status line, and a
 // legend that hid a feature nobody happened to be using that minute would answer a different
 // question than the one asked.
 //
-// It sheds the scale's rungs when the terminal cannot hold the whole line, because the glyphs are
-// what `?` is mostly for and the rungs are the part with a label already on the ambient line. Shed
-// rather than clipped: a legend cut mid-word is worse than a shorter legend (§9.42).
+// It **sheds** rather than clips, in a ladder from most complete to least, because a legend cut
+// mid-word is worse than a shorter legend and this is the one line a reader opened deliberately.
+// What gives way is ordered by what `?` is for: the scale's rungs first, since the ambient line
+// already labels the bar; then the gesture, which the README also carries. The glyph meanings
+// never give way — they are the question being asked (§9.42).
 func helpLine(bars bool, cols int) string {
-	glyphs := "   " + fg(statusWarning, staleGlyph) + dim(" quiet a while")
+	glyphs := fg(statusWarning, staleGlyph) + dim(" quiet a while")
 	glyphs += "   " + fg(linkStorybook, storybookGlyph) + dim(" storybook")
 	glyphs += "  " + fg(linkPreview, previewGlyph) + dim(" preview")
 	glyphs += "  " + fg(linkFolder, folderGlyph) + dim(" folder")
 	glyphs += "  " + fg(linkPR, prGlyph) + dim(" pr")
-	tail := dim("   ⌘-click") + dim("   esc")
+	glyphs += "  " + fg(linkPR, prMergedGlyph) + dim(" merged")
+	gesture, out := dim("   ⌘-click"), dim("   esc")
 
+	ladder := []string{glyphs + gesture + out, glyphs + out}
 	if bars {
-		full := scaleLegend() + glyphs + tail
-		// headMargin twice: the two columns compose() indents this line by, and the same margin
-		// on the right that every other line keeps.
-		if printed(full)+2*headMargin <= cols {
-			return full
+		ladder = append([]string{scaleLegend() + "   " + glyphs + gesture + out}, ladder...)
+	}
+	for _, line := range ladder {
+		// headMargin twice: the two columns compose() indents by, and the same right-hand margin
+		// every other line keeps.
+		if printed(line)+2*headMargin <= cols {
+			return line
 		}
 	}
-	return strings.TrimPrefix(glyphs, "   ") + tail
+	// Narrower than the shortest rung. clampLine takes it from here, which is the one case where
+	// this line is allowed to be cut: there is nothing left to shed.
+	return ladder[len(ladder)-1]
 }
 
 // whereCell paints the location column. The repository is dim, like every other piece of

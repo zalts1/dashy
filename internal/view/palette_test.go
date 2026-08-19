@@ -40,6 +40,7 @@ func TestPaletteContrast(t *testing.T) {
 		"linkFolder":    linkFolder,
 		"linkStorybook": linkStorybook,
 		"linkPR":        linkPR,
+		"linkPRClosed":  linkPRClosed,
 	}
 	for name, hex := range values {
 		for _, bg := range []string{bgLightest, bgDarkest} {
@@ -80,6 +81,13 @@ func TestIdleRampIsOrdinal(t *testing.T) {
 // the match is the thing worth pinning — and the pink was the value that made this hard, so
 // it is the one this test is really guarding (§9.36).
 func TestLinkGlyphColoursAreMatched(t *testing.T) {
+	// The four *slots*, which is the rule: these are the colours the eye compares side by side in
+	// one cell, and a mark heavier than its neighbours reads as the only one that matters.
+	//
+	// linkPRClosed is deliberately not here. Open, merged and closed are alternatives — exactly
+	// one is ever on a row — so nothing compares them to each other, and holding a red to this
+	// band would make it a pale salmon nobody reads as red (§9.43). It is held to the floor by
+	// TestPaletteContrast instead.
 	set := map[string]string{
 		"linkPreview": linkPreview, "linkFolder": linkFolder,
 		"linkStorybook": linkStorybook, "linkPR": linkPR,
@@ -108,7 +116,7 @@ func TestEachGlyphGetsItsOwnColour(t *testing.T) {
 		"preview":   fg(linkPreview, previewGlyph),
 		"storybook": fg(linkStorybook, storybookGlyph),
 		"folder":    fg(linkFolder, folderGlyph),
-		"pr":        fg(linkPR, prGlyph),
+		"pr":        fg(linkPR, prGlyph), // K-5's is open, so the hollow mark
 	} {
 		if !strings.Contains(cell, want) {
 			t.Errorf("the %s glyph is not painted its own colour:\n%q", name, cell)

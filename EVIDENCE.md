@@ -58,7 +58,8 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.39 | The widest column repeated the label: cmux names a workspace per agent task. It shows the repository and worktree now — and a silent edit shipped the map unwired | `board/`, `view/frame.go`, `view/table.go`, `host/worktree.go`, `DESIGN.md` §18 |
 | 9.40 | `StripSpinner` knew two spinner families and cmux uses a third — every busy row's label changed on every redraw | `cmux/top.go` |
 | 9.41 | The gutter was sized for a badge most fleets do not have, and `⚠` claimed a waiting session was broken | `view/layout.go`, `view/frame.go`, `DESIGN.md` §6 |
-| 9.42 | cmux's PR badge is unreachable, proven three ways; and navy at a legible weight is not navy | `github/`, `cmux/links.go`, `view/palette.go`, `DESIGN.md` §10.12, §18 |
+| 9.42 | The flag is `--workspace`, not `--tab` — a mistyped flag became an architecture. cmux's PR badge was always readable | `cmux/pr.go`, `view/link.go`, `DESIGN.md` §18, §10.12 |
+| 9.43 | Colours that are alternatives need not match colours that are neighbours | `view/palette.go`, `DESIGN.md` §6 |
 
 ---
 
@@ -1511,59 +1512,78 @@ of the old chrome arithmetic. Rewritten as the invariants they meant (the label 
 its floor; the bar is never cut below its base), which is what they should have been.
 
 
-### 9.42 cmux knows the pull request and cannot be asked — the proof (2026-08-19)
+### 9.42 The flag was `--workspace`, and a typo became an architecture (2026-08-19)
 
-§9.37 concluded that board cannot reach cmux's pull-request badge and deferred the glyph. Asked
-again — reasonably: *why can board not use what cmux already stores?* — the conclusion held, and
-the second look produced the evidence the first one was missing.
+**Believed, and written into this file:** cmux correlates each tab's pull request but board cannot
+reach it. `cmux sidebar-state` answers only for the tab it is called from; `--tab` is accepted and
+ignored for every value; with cmux's env stripped it returns nothing at all. Therefore the glyph
+needs GitHub, behind a config key, with `gh` making the request. That was §10.12's deferral, and
+then a whole package — `internal/github` — plus a `github` config key, a qualifier on the README's
+*"no network of its own"*, and an EVIDENCE section arguing it was unavoidable.
 
-**cmux does not store it.** It polls api.github.com and holds the badge in the running process.
-Everything on disk was checked:
+**All of it rested on a flag that does not exist.** `sidebar-state` takes `--workspace`, not
+`--tab`. Its own help says so:
 
-    session-com.cmuxterm.app.json          gitBranch, listeningPorts — no pull request
-    closed-item-history-…json              1 "pull" hit: the word "Pulled" in a transcript
-    notification-feed-history-…json        1 "pull" hit: "pull 0.64.22" in scrollback
-    search.db (+ wal)                      0 occurrences of "pull", no PR columns
-    defaults read com.cmuxterm.app         0 hits
-    github URLs across all of the above    0
+    Flags:
+      --workspace <id|ref|index>   Target workspace (default: $CMUX_WORKSPACE_ID)
+      --window <id|ref|index>      Window context for workspace refs and indexes
 
-**And the one live surface cannot be pointed anywhere.** `cmux sidebar-state` prints exactly what
-was wanted, for the caller's own tab only:
+`--tab` is not in that list, so passing it was silently ignored and the app fell back to the
+selected tab. Seven real tab UUIDs returned one tab's data, garbage returned the same, and refs
+returned the same — which read exactly like an addressing dead end and was in fact a mistyped
+flag being dropped on the floor. The correct call works first time, per tab, **with cmux's env
+stripped**:
 
-    cmux sidebar-state --tab=<a real surface id>   → the caller's tab
-    cmux sidebar-state --tab=NOT-A-REAL-ID        → the caller's tab
-    cmux sidebar-state --tab=tab:2                → the caller's tab
+    workspace:35  →  pr=#21 open     https://github.com/zalts1/dashy/pull/21
+    workspace:24  →  pr=#1709 merged https://github.com/you/app/pull/1709
+    workspace:31  →  pr=none
 
-`--tab` is accepted and ignored for every value. And board never has a caller's tab, because it
-strips cmux's env from every child (§9.8) — with those vars blanked the command returns **nothing
-at all**, not even the focused tab.
+**Shipped:** `internal/github` deleted, the `github` key deleted, the network qualifier removed,
+and the badge read from cmux like every other thing cmux tells board. It also gives *more* than
+GitHub did — the state comes with it, so open, merged and closed render differently.
 
-So the premise is right and the conclusion is unavoidable: cmux knows, and there is no addressing
-path. board fetches a second time what one process on the machine already has. **That is the thing
-to fix upstream** — cmux putting `pr` into `top --json`, which it could do for free, would make
-the glyph local and delete `internal/github` entirely. Recorded as §10.12's trigger.
+Three things went wrong in the reasoning and each has a lesson worth more than the fix.
 
-**Shipped anyway, behind a key.** `gh api graphql --cache 3m` per worktree, off unless
-`{"config": {"github": true}}`. The shape of the compromise is that board makes no request and
-holds no credential and writes no cache: gh does all three. What board owns is one query, two file
-reads per worktree — `HEAD` for the branch, `.git/config` for the remote — and the decision to ask.
+**The evidence was gathered against the wrong hypothesis.** Every test was "does `--tab` work",
+and each negative result made the conclusion feel better supported. Nobody checked what flags the
+command actually takes until the fourth time of asking — `cmux sidebar-state --help` would have
+ended it in one command.
 
-Reading those two files is worth a note. A linked worktree's `HEAD` is not beside its files; it
-lives in the gitdir its `.git` pointer names, which is the same indirection §9.39 followed for the
-repository. Verified on four real worktrees, including both remote spellings git writes.
+**A correct earlier result was discarded.** `--workspace 0`, `1` and `2` were tried at the very
+start of the investigation and returned *three different tabs*. That is the answer, in the
+transcript, before the wrong turn. It was read as "only the selected tab per workspace" and
+abandoned.
 
-**And navy is not a colour a dark terminal can show.** Asked for navy, measured it, and true navy
-`#000080` is **1.14** against `#282c34` — a third of the bare red §9.4 rejected as unreadable.
-Claude Code's own accent `#4C8DFF` is 4.37, below the link set's ~7.0, and only 5.1° of hue from
-the idle ramp, so it would read as a bar colour in a frame full of blue bars.
+**Being asked twice was the signal.** The reader said "cmux already knows this" three times, and
+twice the response was to re-assert the conclusion with more evidence rather than re-test the
+premise. The third time came with a screenshot of the sidebar showing every tab's badge at once,
+which is not a thing a dead end can produce. **A premise defended twice should be re-tested, not
+re-argued** — and it was reading the *installed* commit, at the reader's insistence, that finally
+surfaced the CLI's own help text.
 
-`#b0b0ff` is navy's *hue* — 240.0°, exactly — lightened until it clears the set: 7.00 against
-`#282c34`, and 26.9° clear of the ramp's 213°. So the answer to "use navy" is navy's hue at the
-only luminance that works, which is a sentence worth having written down the next time somebody
-asks for a dark colour on a dark surface.
+The cost of the mistake was one afternoon and one abandoned package. The cost of shipping it would
+have been a permanent networked dependency, a config key, a `gh` requirement and a weakened claim
+in the README, all to fetch something already on the machine.
 
-**One thing board declined to build.** A config key to make ⌘-click open the system browser
-instead of cmux's own. Where a link lands is cmux's preference
-(`browserOpenTerminalLinksInCmuxBrowser`), and board reporting it is `doctor`'s job while board
-*writing* it would be one tool silently reconfiguring another — the line §8 already draws around a
-`plugin.toml` board did not create. The README carries the `defaults write` instead.
+### 9.43 Colours that are alternatives need not match colours that are neighbours (2026-08-19)
+
+§18 has the four link glyphs matched by measurement — 7.02, 6.98, 7.04, 7.00 — because they sit
+side by side in one cell and a mark heavier than its neighbours reads as the only one that matters.
+`TestLinkGlyphColoursAreMatched` enforces it.
+
+Then the pull-request slot needed three colours, one per state, and red was asked for. At the set's
+7.0 a red is a pale salmon: `#f5a29a`, saturation 0.28, 25° from the storybook pink and not
+recognisable as red at one column wide.
+
+**The rule was too broad.** What must match is colours the eye compares *simultaneously* — the
+four slots. Open, merged and closed are **alternatives**: exactly one is ever on a row, so nothing
+compares them to each other, and matching them to the set buys nothing while costing the hue.
+
+So the band applies to the slots and the state variants only have to clear the palette floor and
+read as themselves. `#ff7b72` — GitHub's own closed red — measures 5.55, well above inkMuted's
+3.90, at saturation 0.55. Not `statusCritical`: bare `#d03b3b` is 2.91 and may only ever be a
+filled badge (§9.4).
+
+The test now says which rule it is enforcing, which it did not before: the four slots are held to
+0.25 of each other, and the state colours are held to the floor.
+

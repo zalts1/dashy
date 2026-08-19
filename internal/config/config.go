@@ -32,11 +32,6 @@ type State struct {
 		// template with a path substitution in it is one edit away from being a command,
 		// and board opens nothing (§8, §18).
 		Editor string `json:"editor"`
-		// GitHub turns the pull-request glyph on, and with it the one thing board does that
-		// touches the network. Off by default and deliberately a switch rather than a token or a
-		// url: board asks `gh`, which already holds the credentials, so there is nothing here to
-		// leak into a pasted config (§10.12).
-		GitHub bool `json:"github"`
 	} `json:"config"`
 	Labels map[string]string `json:"labels"`
 	// Todos are the one thing here that cannot be derived from the fleet: work with no

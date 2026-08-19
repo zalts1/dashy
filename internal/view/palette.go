@@ -44,12 +44,22 @@ const (
 	linkPreview   = "#51cf66" // ⧇ a dev server is serving this worktree
 	linkFolder    = "#3bc9db" // ⧉ the worktree, in an editor
 	linkStorybook = "#ff99bb" // ⧆ a component workbench listening in this worktree
-	// ⧭ the open pull request for this worktree's branch. Navy's own hue — 240° exactly —
-	// lightened until a dark terminal can show it: true navy #000080 measures 1.14 against
-	// #282c34, a third of the bare red §9.4 rejected, so "navy" at this weight is this. Chosen
-	// 27° clear of the idle ramp's 213° as well, because a blue in the frame that is not a bar
-	// has to be unmistakably not a bar (§9.42).
-	linkPR = "#b0b0ff"
+	// The pull-request slot, which is three colours rather than one because cmux tells board the
+	// state and the three want different things from the reader.
+	//
+	// linkPR is navy's own hue — 240° exactly — lightened until a dark terminal can show it: true
+	// navy #000080 measures 1.14 against #282c34, a third of the bare red §9.4 rejected, so "navy"
+	// at this weight is this. 27° clear of the idle ramp's 213° as well, because a blue in the
+	// frame that is not a bar has to be unmistakably not a bar.
+	//
+	// linkPRClosed is GitHub's own closed red, and it deliberately does **not** match the set's
+	// weight. The four slot colours sit side by side in one cell and must match so none dominates;
+	// open, merged and closed are *alternatives* that never appear together, so this one only has
+	// to clear the floor and read as red. At the set's 7.0 a red is a pale salmon, which does not
+	// (§9.43). It is not statusCritical: bare #d03b3b measures 2.91 and may only ever be a filled
+	// badge (§9.4).
+	linkPR       = "#b0b0ff" // ⧬ open, ⧭ merged
+	linkPRClosed = "#ff7b72" // ⧬ closed without merging
 )
 
 // idleRamp is the ordinal ramp for idle magnitude: dim = fresh, bright = rotting.

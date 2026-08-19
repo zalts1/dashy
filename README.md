@@ -110,14 +110,14 @@ repeating the agent on every row would cost width and answer a question you do n
 
 At the right-hand end of a row, `board watch` puts up to four clickable glyphs:
 
-    ○ migrate auth handlers to v2   ▇▇▇       9m  AUTH        ⧇ ⧉ ⧭
+    ○ migrate auth handlers to v2   ▇▇▇       9m  AUTH        ⧇ ⧉ ⧬
     ○ ship the component library    ▇▇        4m  UI        ⧆ ⧇ ⧉
     ○ backfill the events table     ▇▇▇▇   7h20m  DATA          ⧉
 
 - **`⧆` pink** — a **Storybook** listening in the session's worktree
 - **`⧇` green** — the local **preview** serving that branch
 - **`⧉` cyan** — its **folder**, the worktree, opened in your editor to see the branch's diff
-- **`⧭` blue** — the **pull request** that branch has open (off by default; see below)
+- **`⧬` blue** — the **pull request** that branch has open (`⧭` filled once merged, red if closed)
 
 The first three are ordered by how often a row has one, rarest first, so the folder anchors that
 run and the gaps fall on the left. `⧭` sits beyond all of them because it is the only one that does
@@ -136,11 +136,12 @@ the destination more exactly than the glyph can.
 The frame says so too. The bottom line carries `⌘-click opens` whenever any row has a link, and
 **`?` swaps that line for the legend** — the idle scale's rungs, and each glyph by name:
 
-    ▇ 1h  ▇ 3h  ▇ 12h  ▇ 2d  ▇ 7d   ⧗ quiet a while   ⧆ storybook  ⧇ preview  ⧉ folder  ⧭ pr   ⌘-click   esc
+    ▇ 1h  ▇ 3h  ▇ 12h  ▇ 2d  ▇ 7d   ⧗ quiet a while   ⧆ storybook  ⧇ preview  ⧉ folder  ⧬ pr  ⧭ merged   ⌘-click   esc
 
 `?` again or `Esc` puts the keys back. It is the same line either way, so the frame never changes
-height, and the refresh keeps running while you read it. On a narrow tab it drops the scale's rungs
-rather than clipping, since the glyphs are what you opened it for.
+height, and the refresh keeps running while you read it. On a narrow tab it sheds in order — the
+scale's rungs first, then the ⌘-click reminder — rather than clipping, because the glyph meanings
+are what you opened it for.
 
 **Where a ⌘-click lands is cmux's decision, not board's.** An http link opens in a browser tab
 inside cmux by default. To use your own browser instead:
@@ -186,28 +187,26 @@ TLS is one you have put behind portless, and it shows up as `⧇` instead.
 Nothing to install and nothing to configure — run `npm run storybook` and the glyph appears on
 the matching row within a tick.
 
-### `⧭` — the pull request
+### `⧬` — the pull request
 
-Off by default, because it is the one thing board does that touches the network:
+Nothing to install and nothing to configure: **cmux has already worked this out.** It polls GitHub
+and shows a badge per tab in its sidebar, and board reads the same badge — so no network request of
+board's own, no credential, no `gh`, no config key.
 
-```json
-{ "config": { "github": true } }
-```
+The state comes with it, and the three read differently:
 
-With it on, board asks `gh` whether the worktree's branch has an open pull request — one
-`gh api graphql --cache 3m` per worktree, four at a time. **board makes no request itself and holds
-no credential:** `gh` already has your login, and `gh` owns the cache, so nothing new is written and
-a cached answer costs ~40ms rather than ~580ms. That is also what keeps a 10-second poll from
-becoming a rate-limit problem.
+| glyph | means |
+|---|---|
+| `⧬` blue, hollow | **open** — somebody still has to do something about it |
+| `⧭` blue, filled | **merged** — it landed; the link is context now |
+| `⧬` red | **closed** — a branch somebody abandoned |
 
-Every way it can fail is the same outcome — no glyph, no complaint: no `gh`, not logged in, no
-network, a repository you cannot see, a detached HEAD, a remote that is not GitHub. `board doctor`
-tells them apart.
+Shape carries *has it landed* and colour carries *did it land anywhere*, so missing one cue still
+leaves the other. A draft shows as open: GitHub keeps draft-ness in a separate field that cmux does
+not read (`DESIGN.md` §10.13).
 
-cmux knows this too, and board cannot ask it: cmux polls GitHub itself and keeps the badge inside
-the running process, where `cmux sidebar-state` will only answer about the tab it is called from.
-So board asks a second time. If cmux ever puts `pr` into `top --json`, this key stops being needed
-— `DESIGN.md` §10.12.
+It is keyed by tab, not by directory, because that is the question cmux answers — so two sessions
+in one tab share its pull request, correctly, and a background agent with no tab has none.
 
 ### `⧉` — the folder, in your editor
 
@@ -362,9 +361,7 @@ release was cut against. None of the three is a documented contract, so a patch 
 any of them can move what board reads; `board doctor` reports what is on your machine, and
 a mismatch is the first thing to check.
 
-No dependencies, no daemon, no port, no telemetry, and — unless you set `github` — no network of
-its own. With that key on, board asks `gh` about your open pull requests and nothing else; the only
-other
+No dependencies, no daemon, no port, no telemetry, and no network of its own — the only
 request board can make is a `notify_cmd` you wrote yourself. `board watch` in a dedicated
 tab is the whole runtime.
 
@@ -392,7 +389,7 @@ which says how it was built rather than hiding it.
     maki   0.4.9
     roster 16 claude sessions · 3 maki sessions in 2 tabs
     tabs   22 tabs in 7 workspaces
-    links  2 portless routes · 1 storybook · vscode · 1 open pr · cmux browser
+    links  2 portless routes · 1 storybook · vscode · 3 prs, 1 open · cmux browser
     hooks  Stop, Notification · maki init.lua
     config /Users/you/.board.json
     notify off — set notify_cmd to push
@@ -420,7 +417,6 @@ names:
     links  3 portless routes, none live · cursor               ← stale file; no row gets ⧇
     links  1 portless route · no editor — board editor         ← no ⧉ on any row
     links  1 portless route · zed, not installed here          ← ⧉ is drawn and may miss
-    links  1 route · github on, no gh on PATH · cmux browser   ← no ⧭; install gh
     links  1 route · 2 storybook ports outside every worktree · cursor   ← no ⧆ on any row
 
 The storybook clause appears only when something is listening in the range, since board scans
@@ -449,8 +445,7 @@ reporting — board has a fleet on screen, and the tool you did not install was 
     "idle_threshold_minutes": 45,
     "poll_seconds": 10,
     "notify_cmd": "curl -sS -d @- https://ntfy.sh/my-topic",
-    "editor": "cursor",
-    "github": false
+    "editor": "cursor"
   },
   "labels": { "<cmux surface id>": "<label>" },
   "todos": [

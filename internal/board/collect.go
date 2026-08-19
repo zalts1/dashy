@@ -1,13 +1,13 @@
 package board
 
 import (
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/zalts1/dashy/internal/claude"
 	"github.com/zalts1/dashy/internal/cmux"
 	"github.com/zalts1/dashy/internal/config"
-	"github.com/zalts1/dashy/internal/github"
 	"github.com/zalts1/dashy/internal/host"
 	"github.com/zalts1/dashy/internal/maki"
 	"github.com/zalts1/dashy/internal/preview"
@@ -92,15 +92,22 @@ func Collect() Fleet {
 		resolve(sb.Dir)
 	}
 
-	// The pull requests, and the only read here that leaves the machine. Asked last because it
-	// needs the worktrees the loop above resolved, and asked at all only when the `github` key is
-	// set: unset — the default — nothing runs and no row carries the glyph (§10.12).
-	prs := map[string]string{}
-	if st.Config.GitHub {
-		for tree, pr := range github.Read(github.Targets(repos)) {
-			prs[tree] = pr.URL
+	// The pull requests cmux has already correlated, one per workspace. Nothing here leaves the
+	// machine: cmux polls GitHub and board reads the badge, the same way it reads tab titles
+	// (§18). Asked for the workspaces the fleet actually occupies rather than all of them.
+	spans := map[string]bool{}
+	for _, t := range titles {
+		if t.WorkspaceID != "" {
+			spans[t.WorkspaceID] = true
 		}
 	}
+	ids := make([]string, 0, len(spans))
+	for id := range spans {
+		ids = append(ids, id)
+	}
+	// Sorted so the calls, and anything that ever depends on their order, are the same on every tick.
+	sort.Strings(ids)
+	prs := cmux.PullRequests(ids)
 
 	clock := cmux.HookClock()
 	jobs := map[string]string{}

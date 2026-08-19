@@ -25,10 +25,11 @@ func linkFleet() board.Fleet {
 				Folder:    "/Users/you/work/repo",
 				Preview:   "https://ui.localhost",
 				Storybook: "http://localhost:6006",
-				PR:        "https://github.com/you/repo/pull/7"},
+				PR:        "https://github.com/you/repo/pull/7",
+				PRState:   "open"},
 			{Key: "K-6", State: "done", Label: "a pull request and nothing else", Repo: "OPS",
 				Surface: "S-6", Idle: 8 * time.Minute, Rank: board.RankQuiet,
-				PR: "https://github.com/you/repo/pull/9"},
+				PR: "https://github.com/you/repo/pull/9", PRState: "merged"},
 			{Key: "K-3", State: "done", Label: "no directory at all", Repo: "OPS",
 				Surface: "S-3", Idle: 90 * time.Minute, Rank: board.RankQuiet, Stale: true},
 			{Key: "K-4", State: "done", Label: "a preview and no folder", Repo: "WEB",
@@ -289,5 +290,39 @@ func TestEditorURLPerScheme(t *testing.T) {
 	}
 	if got := editorURL("vscode", ""); got != "" {
 		t.Errorf("editorURL with no folder = %q, want empty", got)
+	}
+}
+
+// cmux tells board which state the pull request is in, and the three want different things from
+// the reader: an open one is something to go and look at, a merged one is context, a closed one is
+// a branch somebody abandoned. Shape carries the first distinction and colour the second, so
+// neither has to be read alone (§18).
+func TestPRMarkByState(t *testing.T) {
+	cases := map[string]struct{ glyph, colour string }{
+		"open":   {prGlyph, linkPR},
+		"merged": {prMergedGlyph, linkPR},
+		"closed": {prGlyph, linkPRClosed},
+		// A state cmux has not had yet draws as open, because a glyph board cannot classify is
+		// still a pull request worth reaching.
+		"":         {prGlyph, linkPR},
+		"reopened": {prGlyph, linkPR},
+	}
+	for state, want := range cases {
+		got := prMark(state)
+		if got != fg(want.colour, want.glyph) {
+			t.Errorf("prMark(%q) = %q, want %q in %s", state, got, want.glyph, want.colour)
+		}
+		// Whatever the state, it is one column: the slot's width does not depend on it.
+		if printed(got) != 1 {
+			t.Errorf("prMark(%q) printed %d columns, want 1", state, printed(got))
+		}
+	}
+	// Merged and closed must not be told apart by colour alone or by shape alone — each pair
+	// differs in at least one, so a reader who misses one cue still has the other.
+	if prMark("merged") == prMark("closed") {
+		t.Error("merged and closed render identically")
+	}
+	if prMark("open") == prMark("merged") || prMark("open") == prMark("closed") {
+		t.Error("open is indistinguishable from a landed pull request")
 	}
 }

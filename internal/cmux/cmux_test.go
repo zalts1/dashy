@@ -34,6 +34,11 @@ func TestParseTop(t *testing.T) {
 	if s := got[101]; s.ID != "S-1" || s.Workspace != "APP" {
 		t.Errorf("pid 101 = %+v, want S-1 in APP", s)
 	}
+	// The workspace UUID is threaded down from the workspace node, because it is what
+	// `sidebar-state --workspace` is addressed by (§18).
+	if got[101].WorkspaceID != "WS-1" {
+		t.Errorf("pid 101 workspace id = %q, want WS-1", got[101].WorkspaceID)
+	}
 	// The spinner glyph must be gone, or the label changes on every redraw.
 	if got[101].Surface != "merge app#1497" {
 		t.Errorf("title = %q, want the spinner stripped", got[101].Surface)

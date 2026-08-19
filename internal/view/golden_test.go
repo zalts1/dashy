@@ -98,10 +98,14 @@ func goldenLinkFleet() board.Fleet {
 	f.Rows[0].Preview = "https://app.localhost"
 	f.Rows[0].Storybook = "http://localhost:6006"
 	f.Rows[0].PR = "https://github.com/you/repo/pull/1497"
+	f.Rows[0].PRState = "open"
 	f.Rows[2].Folder = "/Users/you/work/repo/.claude/worktrees/csv export"
 	f.Rows[2].Storybook = "http://localhost:6007"
 	f.Rows[3].Folder, f.Rows[3].Preview = "/Users/you/work/other", "https://api.localhost:8443"
 	f.Rows[3].PR = "https://github.com/you/repo/pull/1502"
+	f.Rows[3].PRState = "merged"
+	// A branch somebody abandoned, so all three states are pinned.
+	f.Rows[4].PR, f.Rows[4].PRState = "https://github.com/you/repo/pull/1301", "closed"
 	f.Rows[4].Storybook = "http://localhost:6007"
 	f.Rows = append(f.Rows, board.Row{Key: "todo:t0", State: "todo",
 		Label: "book the quarterly review", Idle: 26 * time.Hour, Rank: board.RankTodo})

@@ -122,9 +122,11 @@ const (
 	previewGlyph   = "⧇"
 	storybookGlyph = "⧆"
 	folderGlyph    = "⧉"
-	// ⧭ is a circle with a down arrow, which is literally a *pull* mark — and a circle, so it is
-	// the one link glyph that cannot be mistaken for the three squares at a glance.
-	prGlyph = "⧭"
+	// A circle with a down arrow, which is literally a *pull* mark — and a circle, so the one link
+	// glyph that cannot be mistaken for the three squares at a glance. Hollow while the pull
+	// request is still a request; filled once it has landed.
+	prGlyph       = "⧬"
+	prMergedGlyph = "⧭"
 )
 
 // actionCell is the row's trailing links, each on its own column so they line up down the
@@ -161,9 +163,28 @@ func actionCell(r board.Row, scheme string) string {
 		folder = link(url, fg(linkFolder, folderGlyph))
 	}
 	if r.PR != "" {
-		pr = link(r.PR, fg(linkPR, prGlyph))
+		pr = link(r.PR, prMark(r.PRState))
 	}
 	// Right-trimmed because nothing follows it on the line: a row whose only link is the
 	// Storybook would otherwise end in six columns of padding.
 	return strings.TrimRight(storybook+" "+preview+" "+folder+" "+pr, " ")
+}
+
+// prMark paints the pull-request glyph for the state cmux found it in. Three readings, and the
+// difference is what the glyph is for: an open pull request is something to go and look at, a
+// merged one is context, and a closed one is a branch somebody abandoned (§18).
+//
+// Shape carries the first distinction and colour the second, so neither has to be read alone:
+// hollow while it is still a request, filled once it has landed, and red when it landed nowhere.
+// An unknown state — cmux gaining a fourth — draws as open rather than not at all, because a
+// glyph board cannot classify is still a pull request worth reaching.
+func prMark(state string) string {
+	switch state {
+	case "merged":
+		return fg(linkPR, prMergedGlyph)
+	case "closed":
+		return fg(linkPRClosed, prGlyph)
+	default:
+		return fg(linkPR, prGlyph)
+	}
 }

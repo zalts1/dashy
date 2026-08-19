@@ -30,6 +30,8 @@ func healthy() Report {
 		MakiHooked:   true,
 		Previews:     1,
 		PreviewsSeen: 1,
+		PRs:          1,
+		OpenPRs:      1,
 		Editor:       "cursor",
 		EditorFound:  true,
 	}
@@ -365,28 +367,31 @@ func TestFormatReportsTheMakiRosterErrorVerbatim(t *testing.T) {
 	}
 }
 
-// The pull-request clause is silent unless the key is on, because off is the default and a
-// permanent "pr off" is a clause every reader learns to skip (§9.13). When it is on, the one
-// failure worth telling apart is the one with an obvious repair.
+// The pull-request clause is silent when the fleet's tabs have none, since board asks on every
+// tick whether or not anybody is using pull requests (§9.13). When there are some, both numbers
+// are stated: how many tabs have one, and how many of those are still open. A fleet of merged
+// pull requests is a fleet with nothing to do.
 func TestFormatReportsPullRequests(t *testing.T) {
-	off := healthy()
-	if got := Format(off); strings.Contains(got, "pr") && strings.Contains(got, "github") {
-		t.Errorf("the key is off and doctor still talks about pull requests:\n%s", got)
-	}
-	on := healthy()
-	on.GitHubOn, on.PRs = true, 2
-	if got := Format(on); !strings.Contains(got, "2 open prs") {
-		t.Errorf("links row does not count open pull requests:\n%s", got)
-	}
 	none := healthy()
-	none.GitHubOn, none.PRs = true, 0
-	if got := Format(none); !strings.Contains(got, "0 open prs") {
-		t.Errorf("links row is silent about a fleet with no open PR:\n%s", got)
+	none.PRs, none.OpenPRs = 0, 0
+	if got := Format(none); strings.Contains(got, " pr") {
+		t.Errorf("a fleet with no pull requests still gets a clause:\n%s", got)
 	}
-	missing := healthy()
-	missing.GitHubOn, missing.NoGh = true, true
-	if got := Format(missing); !strings.Contains(got, "no gh on PATH") {
-		t.Errorf("links row does not name the one repairable PR failure:\n%s", got)
+	some := healthy()
+	some.PRs, some.OpenPRs = 3, 1
+	if got := Format(some); !strings.Contains(got, "3 prs, 1 open") {
+		t.Errorf("links row does not state both numbers:\n%s", got)
+	}
+	one := healthy()
+	one.PRs, one.OpenPRs = 1, 1
+	if got := Format(one); !strings.Contains(got, "1 pr, 1 open") {
+		t.Errorf("links row does not singularise one pull request:\n%s", got)
+	}
+	// All merged is worth distinguishing from all open: nothing to act on.
+	done := healthy()
+	done.PRs, done.OpenPRs = 2, 0
+	if got := Format(done); !strings.Contains(got, "2 prs, 0 open") {
+		t.Errorf("links row hides that nothing is open:\n%s", got)
 	}
 }
 
