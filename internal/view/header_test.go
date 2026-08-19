@@ -19,7 +19,7 @@ func plain(s string) string { return ansi.ReplaceAllString(s, "") }
 func spanFleet(sessions, workspaces int) board.Fleet {
 	f := board.Fleet{Workspaces: workspaces}
 	for i := 0; i < sessions; i++ {
-		f.Rows = append(f.Rows, board.Row{Label: "x", Workspace: "WS"})
+		f.Rows = append(f.Rows, board.Row{Label: "x", Repo: "WS"})
 	}
 	return f
 }

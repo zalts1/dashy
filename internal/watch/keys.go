@@ -18,6 +18,7 @@ const (
 	keyAdd
 	keyList
 	keyFold
+	keyHelp
 	keyBackspace
 )
 
@@ -124,6 +125,10 @@ func command(r rune) key {
 	// dangerous documented action and it is called `close` (§10.6).
 	case 'z', 'ז':
 		return keyFold
+	// `?` is the one key that is not a letter, and so the one with no Hebrew twin: it is the
+	// same glyph on every layout that can produce it at all, which is the whole convention.
+	case '?':
+		return keyHelp
 	}
 	return keyNone
 }

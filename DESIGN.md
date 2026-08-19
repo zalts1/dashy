@@ -186,6 +186,21 @@ renderer — both renderers consume the same snapshot so they can never disagree
 
 ## 4. State model
 
+**Ordering, amended 2026-08-19 (§9.46).** Within a band, sessions sort **most recently touched
+first**: the top of QUIET is what you were last doing. It was the reverse until a reader read a
+column of times counting down from 2d22h as a sorting bug — which it is, to anyone whose other lists
+all put the newest first. The old argument was not wrong so much as redundant: neglect is already
+stated in the header's `oldest`, in the strip's `N quiet >45m`, and per row by `⧗`, so the band's best
+position was spending itself on a third telling.
+
+**Todos are the exception and keep the old order.** §9.19 established that idle time and age are two
+quantities in one field: a session's is a *gap* that resets when touched, a todo's is a *lifetime*
+that only grows. So the newest session is where the work is, and the oldest todo is the reproach.
+
+The collapse pays for this: `pick` sheds from the end of a band, so a short tab now hides the most
+neglected sessions rather than the least. `minQuietRows`, the `+N quiet` count and the two header
+statements are what keep that visible rather than silent (`view/layout.go`).
+
 | state | meaning | claude | maki |
 |---|---|---|---|
 | `blocked →` | genuinely needs an answer | interactive `status: waiting`, or background `state: blocked` | `needs_input` |
@@ -274,6 +289,7 @@ do not add a colour without re-validating.**
 | role | value | result |
 |---|---|---|
 | blocked badge | white on `#d03b3b` | 4.80 against its own fill — theme-independent |
+| link set, 4 glyphs | `#ff99bb` `#51cf66` `#3bc9db` `#b0b0ff` | 7.02 / 6.98 / 7.04 / 7.00 — matched, so none dominates (§18) |
 | running | `#0ca30c` | ≥3:1 mark on every candidate background |
 | stale ⚠ | `#fab219` | 7.63–11.18 |
 | body / dim ink | `#c3c2b7` / `#898781` | 7.81 / 3.90+ |
@@ -288,12 +304,35 @@ Two findings are load-bearing and are pinned by tests (§9.4).
   would flatten everything under a day into one cell.
 - The bar appears on blocked and quiet rows — both are "time you have owed this
   session attention" — and **not** on working rows.
+- **Rows are spaced out when the frame can afford it** (2026-08-19, §9.44). One blank line between
+  rows, composed first and whole; if it does not fit the tab, the compact form runs with the
+  shedding ladder instead. Air is a luxury and rows are information, so a tab one line too short
+  for the airy frame shows every row compact rather than most rows spaced. Terminal line height is
+  the other half of this and is not board's — that is Ghostty's `adjust-cell-height`.
+- **The state gutter is elastic and its mark is left-aligned** (amended 2026-08-19, §9.41). It
+  was a fixed 10 columns, sized for the BLOCKED badge, with the mark right-aligned to hug the
+  label — so a quiet row wore eleven blank columns in front of its `○` and every fleet paid for
+  a badge most of them did not have. It is now the badge's width when something is blocked and
+  four otherwise, with the mark starting one column after the lead. A blocked row arriving does
+  shift the table right, which is accepted: a row entering NEEDS YOU already moves every band on
+  the screen, and the six columns belong to the label the rest of the time.
+- **The stale mark is `⧗`, and it rides beside the state mark** rather than out by the duration.
+  A warning triangle claimed something was wrong; a session nobody has looked at for three hours
+  is waiting, not broken. Beside the state it qualifies it — `○ ⧗` is one glance — where three
+  columns from the IDLE value it read as a property of the number. It comes from the link
+  glyphs' Unicode block so it is drawn at their size (§18).
 - **No bars in `ASKED`.** Waits are minutes against a scale topping out at a week,
   so every row rendered a single cell and meant nothing. `never` in amber is the only
   thing in that band that earns colour.
 - A value scale without a key is decoration, so the ramp legend is drawn wherever the
   bars are — and **only** there. A key for a scale that is not on screen is noise, so
   the narrow layout drops both together.
+- **Amended 2026-08-19 (§9.38): the key names the dimension, `?` gives the resolution.**
+  The ambient line carries `▇ elapsed`; the five rungs moved behind `?`. The rule survives
+  because the bar is still labelled — a reader knows it measures elapsed time without
+  pressing anything — and only the rung *values* are a keystroke away. What that bought is
+  the width for the link hints and for a legend that can afford to name what each glyph
+  opens, neither of which fitted beside the full ramp.
 
 ### Width, at any size (`view/layout.go`, 2026-07-28)
 
@@ -670,39 +709,38 @@ state is the one where nothing disagrees.
 `Folder`, and one of them a `Preview`, at which point the GIF shows what the prose above
 describes.
 
-### 10.12 The pull request, and the review CTA — deferred (2026-08-19)
+### 10.12 The review CTA — deferred, and not for the reason first recorded (2026-08-19)
 
-A fourth and fifth link were asked for: `⧖` to open the branch's PR, and `⧗` in its place once
-somebody has reviewed since the latest commit, which turns the glyph into a call to action.
-Both were designed and neither was built. The reason is §9.37, and it is worth reading before
-anyone tries again, because the obvious route looks open and is not.
+Two glyphs were asked for: one to open the branch's pull request, one to replace it once somebody
+has reviewed since the latest commit. **The link shipped as §18, from cmux. The CTA did not.**
 
-**cmux already correlates the PR** and will tell you — `pr=#20 open https://github.com/…` from
-`cmux sidebar-state`. But it answers for one tab per call, the tab has to be named with
-`--tab=<uuid>`, and **board has no tab ids**: `cmux top --json` is everything board knows about
-tabs and it contains no `kind: "tab"` node and no `tab_id` on any surface. There is no mapping
-from a row to a tab and no way to enumerate tabs to find one. cmux's badge also carries no
-review state at all, so `⧗` was never available from it whatever the addressing, and the
-session file board *can* read cheaply carries `gitBranch` and `listeningPorts` but no PR.
+The first version of this entry said the whole thing needed GitHub and deferred the CTA on cost.
+That was wrong about the link — cmux had it all along (§9.42) — and it is still right about the
+CTA, for a different reason: cmux's badge carries `open | merged | closed` and nothing about
+reviews, so the CTA is the one half cmux cannot answer.
 
-**The route that works is GitHub.** One `gh api graphql --cache 3m` per worktree returns number,
-url, state, `latestReviews[].submittedAt` and the last commit's `committedDate` — both glyphs,
-one call — at 580ms cold and 30–60ms cached, with the cache in gh's own `~/.cache/gh`. Note what
-that does *not* cost: board would still write only `~/.board.json`, and would still run no
-daemon, because the caching and the refresh are gh's problem rather than board's. The single
-objection is the one in §2 and on the README's last line — **no network of its own** — and it is
-enough on its own. A reporting surface that quietly starts talking to github.com is a different
-tool from the one people installed.
+Nor is it measurable even with GitHub. "Since the latest commit was **pushed**" needs a push time,
+and GitHub's `pushedDate` is deprecated and usually null — so the honest comparison is against
+`committedDate`, which differs after a rebase and would put a call to action on a row nobody had
+touched. A glyph that shouts on the wrong row is worse than no glyph, which is the rule §18 is
+organised around.
 
-The shape it would take if built: a `github` key defaulting to false, so the property stays true
-on every machine that has not opted in, and the key is where the trade gets argued. Note also
-that "since the latest commit was **pushed**" is not measurable — GitHub's `pushedDate` is
-deprecated and usually null — so the honest comparison is against `committedDate`, which differs
-after a rebase.
+*Trigger:* cmux carrying review state in its badge, which would make it free the way the link now
+is. Failing that, `reviewDecision` alone would do — CHANGES_REQUESTED is your turn whenever it
+arrived — but that needs the network back, and §9.42 is the argument against reaching for it.
 
-*Trigger:* cmux exposing `pr` in `top --json` or in its session file, which makes the whole thing
-free, local, and a read board already does. Failing that, somebody wanting it enough to accept
-the network line moving.
+### 10.13 Draft pull requests — deferred, cmux does not carry it (2026-08-19)
+
+A muted `⧬` for a draft was asked for alongside the three states that shipped. cmux cannot supply
+it: `PullRequestStatus` maps GitHub's `state`, which is `OPEN` for a draft — draft-ness lives in a
+separate `isDraft` field cmux does not read. So a draft arrives as open and renders as open.
+
+Not built as dead code waiting for data that never comes, and not built by asking GitHub, which is
+the dependency §9.42 just removed.
+
+*Trigger:* cmux reading `isDraft` into its badge. The rendering is already decided — a muted `⧬`,
+since a draft is a pull request nobody is being asked to look at yet — so it would be one case in
+`prMark` and one line in the legend.
 
 ---
 
@@ -1241,11 +1279,38 @@ general-purpose tool: board requires cmux, cmux is built on Ghostty, and Ghostty
 OSC 8. On every machine board supports, the link works.
 
 **No legend line.** The keys are named at the bottom of the frame because a key you do not
-know does not exist. A hyperlink advertises itself — the terminal underlines it on hover
-and changes the cursor — so a legend entry would spend a scarce line restating what the
-glyph already does, and on a terminal without OSC 8 it would promise a click that never
+know does not exist. A hyperlink advertises itself — Ghostty underlines it on hover and changes
+the cursor, with no modifier needed, because board does not enable mouse reporting and links
+are therefore evaluated locally — so a legend entry would spend a scarce line restating what
+the glyph already does, and on a terminal without OSC 8 it would promise a click that never
 happens. That is §9.14 read forwards: name the route that exists, and do not name one that
 might not.
+
+**But the gesture is ⌘-click, not click,** and that half is *not* self-advertising: Ghostty
+opens a link only with the ctrl/super chord held at press, so a plain click on an underlined
+glyph does nothing at all. The first reader of this feature hit exactly that, and the README
+said "click them" and was wrong.
+
+So the frame names it after all — `⌘-click opens` on the bottom line, and only while the cell
+is on screen, which is the same condition the cell itself uses. Note what it is not: a key that
+opens the link. Adding one would mean board launching a browser, which §8 forbids, so the hint
+describes a gesture the terminal owns and board cannot perform.
+
+**And `?` spells the rest out.** The meanings could not fit beside the idle scale — `⧆ storybook
+⧇ preview ⧉ folder` is 36 columns on top of 87 — so the bottom line gained a third state
+instead of a fourth element. `?` swaps it for the legend: the scale's rungs, all three glyphs by
+name, the gesture, and `esc`. Same line, so the height cannot change (§12); a display mode like
+the quiet fold, so it does not pause the refresh, because nothing on that line goes stale.
+
+The legend shows all three glyphs whether or not the fleet has them. That looks like a breach of
+§9.14 — name the route that exists — and is not: `?` is help, and a legend that hid a feature
+nobody happened to be using that minute would answer a different question than the one asked.
+The ambient line is where the "only what exists" rule applies, and it does.
+
+Worth knowing that cmux fills in the other half unprompted: it renders the hovered link's URL
+through its own `linkHoverIndicatorView`, with no modifier needed since board never enables mouse
+reporting. So hovering `⧆` names `http://localhost:6006` — more precise than any legend board has
+room for.
 
 ### Which editor, and why the chooser is a command
 
@@ -1299,6 +1364,82 @@ interrupt an ambient dashboard on first run to ask a question nobody had yet. `d
 **No editor found means no folder glyph**, not a glyph pointing at `vscode://` on a machine
 with no VS Code. `actionCols` and `actionCell` are held to the same predicate by a test, so
 the column is not reserved for a cell that will not be drawn.
+
+### The location column is git's, not cmux's
+
+The tail column used to show the cmux workspace. On a real fleet that repeats the row's own
+label, because cmux creates a workspace per agent task and titles it after the task, and board's
+label precedence falls through to the tab title — four of six rows identical on the fleet that
+found it (§9.39). It was spending ~45 columns to restate the label, and capping the label at 30
+characters to do it.
+
+It answers the same question in git's terms now: **the repository, and the worktree inside it**
+when the session is in a linked one rather than the main checkout.
+
+    app -> acme-1013-dataview-refactor
+    date-invite
+
+Both halves were already on the row — `Folder` gives the worktree, and `host.Repository` resolves
+it to the repository through the `gitdir:` pointer in the worktree's `.git` file. The repository
+is memoised on the worktree, so several sessions in one resolve it once, and there is no new
+subprocess.
+
+The worktree half takes the preview's green, not a new colour: green already means "the live
+thing" on the preview glyph and a worktree is the live branch, so the two readings agree. No
+brackets — the colour is the separation. A main checkout prints one name, because there the
+repository *is* the worktree and naming it twice would be the duplication this removed.
+
+`Row.Where()` is the plain-text form both renderers size and print from, so they cannot disagree
+about what the column says (§3); `board.TreeArrow` is exported because the frame has to find the
+seam to paint the halves while the table prints it whole. `Find` matches the location as well as
+the label, since the column is what a reader can see — and still matches the cmux workspace,
+which is no longer drawn but is still the fleet's spread in the header.
+
+**The header still counts workspaces**, which is now a fact the column does not show. Left that
+way deliberately for one release: it is a true statement about how far the fleet is spread, and
+changing it to count repositories is a separate decision about what "spread" means. It is the
+first thing to revisit if the header and the column start reading as contradictions.
+
+### The pull request comes from cmux, not from GitHub
+
+`⧬` opens the pull request the row's branch has open. It is the fourth link and the only one that
+does not point at this machine — a port, a port and a directory, then github.com — which is why it
+sits beyond the other three at the far right rather than where its frequency would put it.
+
+**cmux has already correlated it.** It polls GitHub itself and shows a badge per tab in its
+sidebar; `cmux sidebar-state --workspace <uuid>` hands the same thing over. So this is enrichment
+from cmux exactly as tab titles and the idle clock are (§3): board makes no request, needs no
+credential, holds no cache and gains no config key. One call per workspace the fleet occupies,
+run concurrently, hiding behind `claude agents` like everything else.
+
+The flag is `--workspace` and this is worth writing down because getting it wrong cost a day:
+`--tab` is not a flag `sidebar-state` accepts, so passing it is silently ignored and the app
+answers about the *selected* tab. That makes every workspace look like it returns one tab's data,
+which reads as an addressing dead end and led to a whole networked package being built and thrown
+away (§9.42).
+
+Keyed by workspace UUID rather than by worktree, because that is the question cmux answers: one
+badge per tab. Two maki sessions in one tab therefore share a pull request, correctly — it is the
+tab's branch. A background agent has no tab and so has none.
+
+**Three states, and the difference is the point.** cmux reports `open`, `merged` or `closed`, and
+the frame draws them apart: `⧬` hollow in blue for open, `⧭` filled in blue for merged, `⧬` in
+GitHub's own red for closed. Shape carries "has it landed" and colour carries "did it land
+anywhere", so a reader who misses one cue still has the other. An open pull request is something to
+go and look at; a merged one is context; a closed one is a branch somebody abandoned. A state cmux
+has not had yet draws as open, because a glyph board cannot classify is still a pull request worth
+reaching.
+
+### Where a ⌘-click lands is cmux's decision
+
+board writes the URL; cmux routes it. An http link opens in a browser tab inside cmux by default
+and everything else goes out through the OS, and whether the http half stays inside is cmux's
+preference `browserOpenTerminalLinksInCmuxBrowser`.
+
+board **reports** it and never writes it. Reconfiguring another application is the line §8 already
+draws around a `plugin.toml` board did not create, and one tool silently reconfiguring another is
+how both become hard to trust. So `doctor`'s `links` row ends with `cmux browser` or `system
+browser`, and the README carries the `defaults write` that changes it.
 
 ### The frame has links; the one-shot table does not
 

@@ -3,6 +3,7 @@ package host
 import (
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // WorkTree is the directory a session's work belongs to: the nearest ancestor holding a
@@ -46,4 +47,37 @@ func WorkTree(dir string) string {
 		}
 		d = parent
 	}
+}
+
+// Repository is the repository a worktree belongs to. For a main checkout that is the worktree
+// itself; for a linked one it is the repository it was created from.
+//
+// The only thing on disk connecting the two is the pointer in the worktree's `.git` file —
+// `gitdir: /path/to/repo/.git/worktrees/<name>` — so the repository is that path with the
+// gitdir suffix removed. `git rev-parse --path-format=absolute --git-common-dir` answers the
+// same question and costs a fork per row per tick, which is the trade WorkTree already declined.
+//
+// Everything unexpected answers the worktree rather than guessing: a `.git` that is a directory
+// (a main checkout, nothing to resolve), a `.git` file in a shape this does not recognise, or a
+// path with no marker in it at all. A wrong repository name in the column would be worse than
+// the redundant one it replaces (§18).
+func Repository(tree string) string {
+	if tree == "" {
+		return ""
+	}
+	b, err := os.ReadFile(filepath.Join(tree, ".git"))
+	if err != nil {
+		return tree
+	}
+	rest, ok := strings.CutPrefix(strings.TrimSpace(string(b)), "gitdir:")
+	if !ok {
+		return tree
+	}
+	// The marker, not the last two path elements: a repository whose own directory is called
+	// "worktrees" would break a positional rule and not this one.
+	if i := strings.Index(strings.TrimSpace(rest), string(filepath.Separator)+".git"+
+		string(filepath.Separator)+"worktrees"+string(filepath.Separator)); i > 0 {
+		return strings.TrimSpace(rest)[:i]
+	}
+	return tree
 }

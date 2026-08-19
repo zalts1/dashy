@@ -54,6 +54,15 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.35 | The click is unobservable, so "ask on first use" is unbuildable — the chooser had to become a command | `editor/`, `cmd/board/commands.go`, `DESIGN.md` §18, §10.10 |
 | 9.36 | Colour was a rule enforced by memory; a test now measures it, and found the ramp is ordinal rather than legible and pink cannot reach the set's weight | `view/palette.go`, `view/palette_test.go`, `view/link.go`, `DESIGN.md` §6, §18 |
 | 9.37 | cmux does correlate the PR and board cannot reach it: exposed per-tab, and `top --json` names no tabs | `preview/`, `DESIGN.md` §10.12, §18 |
+| 9.38 | The underline advertises the link; the gesture does not. "Click them" was wrong, and the scale's key moved behind `?` to pay for saying so | `view/frame.go`, `view/scale.go`, `watch/keys.go`, `DESIGN.md` §6, §18 |
+| 9.39 | The widest column repeated the label: cmux names a workspace per agent task. It shows the repository and worktree now — and a silent edit shipped the map unwired | `board/`, `view/frame.go`, `view/table.go`, `host/worktree.go`, `DESIGN.md` §18 |
+| 9.40 | `StripSpinner` knew two spinner families and cmux uses a third — every busy row's label changed on every redraw | `cmux/top.go` |
+| 9.41 | The gutter was sized for a badge most fleets do not have, and `⚠` claimed a waiting session was broken | `view/layout.go`, `view/frame.go`, `DESIGN.md` §6 |
+| 9.42 | The flag is `--workspace`, not `--tab` — a mistyped flag became an architecture. cmux's PR badge was always readable | `cmux/pr.go`, `view/link.go`, `DESIGN.md` §18, §10.12 |
+| 9.43 | Colours that are alternatives need not match colours that are neighbours | `view/palette.go`, `DESIGN.md` §6 |
+| 9.44 | Four boxes one space apart read as one run of ink; and the frame can afford air it should give back when short | `view/link.go`, `view/frame.go`, `view/layout.go`, `DESIGN.md` §6 |
+| 9.45 | A half-empty cell reads as broken, not sparse — the fix is a glyph too faint to be information | `view/link.go`, `view/palette.go`, `DESIGN.md` §6, §18 |
+| 9.46 | Sessions sort newest-first; a column of times descending read as sorted backwards. Todos keep the old order, and §9.19 is why | `board/build.go`, `view/layout.go`, `DESIGN.md` §4 |
 
 ---
 
@@ -1324,3 +1333,383 @@ file, so it is found by a bounded port scan — and that scan needs the same ans
 routes need: where is this pid working. Both now go through **one** `lsof` over the union of
 their pids, which is why the second source costs nothing measurable on top of the first. Two
 mechanisms, one expensive read, the same join.
+
+### 9.38 A hyperlink advertises itself; ⌘-click does not (2026-08-19)
+
+**Believed:** §18 argued against a legend line for the link glyphs on the grounds that a
+hyperlink is self-advertising — the terminal underlines it on hover and changes the cursor — so
+naming it would spend a scarce line restating what the glyph already does. That was §9.14 read
+forwards: name the route that exists.
+
+**Found:** half of it is self-advertising. The first person to use the feature saw the glyph,
+hovered it, saw it underline, clicked it, and nothing happened.
+
+Ghostty splits the two conditions and only one of them is free:
+
+    mouseLinkRefreshAllowedState(mouse_reporting=false, …) → always true    ← the underline
+    a left click opens a link only with the ctrl/super chord held at press  ← the gesture
+
+The underline needs no modifier, and specifically *because* board never enables mouse reporting:
+links are evaluated locally rather than forwarded to the TUI. So the affordance appears exactly
+as the argument claimed. **Opening** needs ⌘ held at press — Ghostty's rule, so that dragging a
+selection across a row cannot fire a link — and nothing on screen said so. The README said
+"click them", which was simply wrong.
+
+**Shipped:** `⌘-click opens` on the bottom line, conditional on the cell being drawn — the same
+predicate the cell uses, so a tab too narrow for the links cannot advertise them. Note what was
+*not* added: a key that opens the link. That would mean board launching a browser, which §8
+forbids; the hint describes a gesture the terminal owns and board cannot perform.
+
+**Then the meanings, and the width that paid for them.** "Which glyph is which" does not fit
+beside the idle scale — `⧆ storybook  ⧇ preview  ⧉ folder` is 36 columns on top of a line already
+at 87. So the bottom line took a third state rather than a fourth element: `?` swaps it for the
+legend, and swaps back. Same line, so §12's height rule holds; a display mode like the quiet
+fold (§9.21), so it does not pause the refresh, because nothing on that line goes stale.
+
+**This amends §6.** The ambient line now shows `▇ elapsed` and the five rungs live under `?`,
+which brushes against "a value scale without a key is decoration". The rule survives, narrowly
+and deliberately: the bar is still *labelled*, so a reader knows it measures elapsed time
+without pressing anything, and only the resolution moved. The trade was explicit — the rungs
+cost 34 columns, the two link hints and a legend that can name things cost less, and both lines
+came out shorter than the one they replaced:
+
+    before                                     87 cols
+    ambient  ▇ elapsed … ⌘-click opens ? keys   84 cols
+    ?        ▇ 1h … ⧆ storybook … esc           82 cols
+
+**One thing found while designing it, worth recording because it changes what a legend is for.**
+board cannot see ⌘ at all — it reads stdin in raw mode and a bare modifier press emits no bytes,
+so nothing can key off holding it. But cmux answers the meaning question unprompted: on
+`GHOSTTY_ACTION_MOUSE_OVER_LINK` it calls `setLinkHoverURL` and renders the hovered link's URL
+through its own indicator view. Hovering `⧆` names `http://localhost:6006`, which is more precise
+than any legend board has room for. So `?` is the durable answer for a reader who does not know
+the glyphs, and hover is the better answer for one who wants to know where *this* row points.
+
+### 9.39 The widest column was repeating the label (2026-08-19)
+
+**Believed:** the tail column shows the cmux workspace, and that is the one fact no band below
+carries — where in the fleet this session lives. §6 sized it as the elastic column that gives way
+last, and the header counts the same thing as the fleet's spread.
+
+**Found:** on a real fleet it repeats the row's own label. cmux creates a workspace per agent
+task and titles it after the task, and board's label precedence falls through to the tab title,
+so both halves of the row end up as the same string:
+
+    LABEL                                    WORKSPACE
+    Align dataview styles with playground…   ✳ Align dataview styles with playground…
+    Wizard copy and UX fixes                 ✳ Wizard copy and UX fixes
+    Build adoption page with score and ba…   ✳ Build adoption page with score and ba…
+
+Four of six rows. The column was spending ~45 of the frame's columns to say what the row already
+said, and squeezing the label to do it — the label was capped at 30 characters on a 124-column
+terminal while its neighbour restated it in full.
+
+Not a defect in board: it reported the workspace faithfully, and a fleet organised
+workspace-per-project (which is what the demo fixture assumes — APP, API, AUTH) gets real value
+from it. It is a defect in the *assumption* that a cmux workspace names a place rather than a
+task.
+
+**Shipped:** the column answers the same question in git's terms instead — the repository, and
+the worktree inside it when the session is in a linked one:
+
+    REPO
+    app -> acme-1013-dataview-refactor
+    date-invite
+    dashy
+
+Both halves were already on the row: `Folder` for the link cell gives the worktree, and
+`host.Repository` resolves it to the repository by reading the `gitdir:` pointer in the
+worktree's `.git` file. No new subprocess and no new read per tick — the repository is memoised
+on the worktree, so several sessions in one worktree resolve it once. The label column gained 16
+columns on the fleet above.
+
+The worktree half is painted in the preview's green rather than a new colour. It already means
+"this is the live thing", and a worktree is the live branch, so the readings agree — adding a
+seventh hue to say the same thing would not (§6). No brackets: the colour is the separation.
+
+`Where()` lives on `Row` so the frame and the table print and size from one string, and `TreeArrow`
+is exported because the frame has to find the seam to paint the halves differently while the table
+prints it plain. `Find` matches the location now as well as the label — the column is what a reader
+sees, so `board jump dashy` has to reach it — and still matches the workspace, because taking a
+search term away is a worse surprise than one that is invisible but works.
+
+Background agents keep `background` in that column. They do have a repository, and saying so
+would be a second change riding on this one; the README documents the sentinel as how you spot
+them.
+
+**And the finding that cost the most time, which is not about columns.** `Snapshot.Repos` was
+added, filled in `Collect`, read in `Build`, tested — and never wired into the struct literal.
+A mechanical edit had targeted `Trees:     trees,` and gofmt had since realigned that line to
+`Trees:      trees,`, so the replacement silently matched nothing. Every row fell through to the
+main-checkout branch and the column showed a bare worktree name.
+
+**The suite could not have caught it.** `Build` is pure and its test supplies `Repos` directly;
+`Collect` is the impure gather and has no test by design (§11). This is exactly the gap
+`CONTRIBUTING`'s "verify it by hand as well" exists for, and it was the hand check that found it
+— the third silent no-op edit in one session, after two stale comments in §9.36. The lesson is
+narrow and cheap: **after a mechanical edit, assert the thing is present, not that the command
+exited zero.**
+
+### 9.40 StripSpinner knew two spinners and cmux uses a third (2026-08-19)
+
+**Believed:** `StripSpinner` removes the leading activity glyph from a tab title "so labels stay
+stable between renders" — `✳` while a turn is queued, or a braille frame. Both were handled and
+tested.
+
+**Found:** cmux animates a busy agent with the quarter-circle rotation `◐◑◒◓` (U+25D0–25D3), which
+was in neither range. So a working row rendered:
+
+    ◐ ◑ Dashy local preview and VS Code integration
+
+The first mark is board's own `◐` for a working session, painted green. The second is a spinner
+frame that survived into the label — unpainted, rotating between ticks, and reported as
+"confusing", which it is. The label changed on every redraw, which is the exact defect this
+function exists to prevent, and it had been doing so for as long as cmux has used that spinner.
+
+**Shipped:** a third range. The check is now a small `isSpinner` predicate rather than a boolean
+expression inline, because the shape of the bug is "one more family nobody knew about" and the
+next one should cost one line. The symptom to recognise is written in the doc comment: a label
+that flickers between ticks.
+
+Worth noting what the test did not catch. `TestStripSpinner` had a table of nine cases and every
+one of them passed — the function was correct about everything it had been told about. Fixture
+tests confirm the cases you thought of, and the one that mattered came from looking at the
+screen.
+
+### 9.41 The gutter was sized for a badge most fleets do not have (2026-08-19)
+
+**Believed:** the state-mark column is 10 columns wide because the BLOCKED badge is 9 printed
+plus a space, and the mark is right-aligned inside it so it hugs the label instead of leaving a
+gap. Both halves were deliberate.
+
+**Found:** on a fleet with nothing blocked — which is most fleets most of the time — a quiet row
+reads as eleven blank columns and then a one-character mark:
+
+               ○ Align dataview styles with playground design
+
+Right-aligning made it worse rather than better: the gap the rule was avoiding got moved to the
+left of the mark, where it is the first thing the eye crosses on every row. And the width was
+being reserved for a badge that was not on screen.
+
+**Shipped, two changes that turned out to be the same change.** The mark is **left-aligned**, so
+it starts one column after the lead and every row's mark is in the same place whatever follows
+it. And the gutter is **elastic** — the badge's width when a row is blocked, four columns
+otherwise. Together they take a quiet row from eleven leading blanks to three, and hand six
+columns to the label on any fleet with nothing blocked.
+
+The cost is that a blocked row arriving shifts the table right. Accepted: a row entering NEEDS
+YOU already moves every band on the screen, and the columns belong to the label the rest of the
+time. Both widths include the stale glyph and a trailing space, because a blocked row can be
+stale too — sized without it, the blocked row came out one column wider than every other, which
+`TestDurationColumnsShareARightEdge` caught immediately.
+
+**And the stale mark stopped being a warning.** `⚠` sat three columns from the IDLE value, where
+it read as a property of the number, and it claimed something was wrong. A session nobody has
+looked at for three hours is not wrong — it is **waiting**. `⧗` says that, and beside the state
+mark it qualifies the state: `○ ⧗` is one glance. It comes from the link glyphs' block, so it is
+drawn at their size (§9.36).
+
+Two tests were over-specified and said so under the change: one asserted the label column equals
+its floor at 50 columns, and one asserted the bar equals its base width at 60 — both true only
+of the old chrome arithmetic. Rewritten as the invariants they meant (the label never goes below
+its floor; the bar is never cut below its base), which is what they should have been.
+
+
+### 9.42 The flag was `--workspace`, and a typo became an architecture (2026-08-19)
+
+**Believed, and written into this file:** cmux correlates each tab's pull request but board cannot
+reach it. `cmux sidebar-state` answers only for the tab it is called from; `--tab` is accepted and
+ignored for every value; with cmux's env stripped it returns nothing at all. Therefore the glyph
+needs GitHub, behind a config key, with `gh` making the request. That was §10.12's deferral, and
+then a whole package — `internal/github` — plus a `github` config key, a qualifier on the README's
+*"no network of its own"*, and an EVIDENCE section arguing it was unavoidable.
+
+**All of it rested on a flag that does not exist.** `sidebar-state` takes `--workspace`, not
+`--tab`. Its own help says so:
+
+    Flags:
+      --workspace <id|ref|index>   Target workspace (default: $CMUX_WORKSPACE_ID)
+      --window <id|ref|index>      Window context for workspace refs and indexes
+
+`--tab` is not in that list, so passing it was silently ignored and the app fell back to the
+selected tab. Seven real tab UUIDs returned one tab's data, garbage returned the same, and refs
+returned the same — which read exactly like an addressing dead end and was in fact a mistyped
+flag being dropped on the floor. The correct call works first time, per tab, **with cmux's env
+stripped**:
+
+    workspace:35  →  pr=#21 open     https://github.com/zalts1/dashy/pull/21
+    workspace:24  →  pr=#1709 merged https://github.com/you/app/pull/1709
+    workspace:31  →  pr=none
+
+**Shipped:** `internal/github` deleted, the `github` key deleted, the network qualifier removed,
+and the badge read from cmux like every other thing cmux tells board. It also gives *more* than
+GitHub did — the state comes with it, so open, merged and closed render differently.
+
+Three things went wrong in the reasoning and each has a lesson worth more than the fix.
+
+**The evidence was gathered against the wrong hypothesis.** Every test was "does `--tab` work",
+and each negative result made the conclusion feel better supported. Nobody checked what flags the
+command actually takes until the fourth time of asking — `cmux sidebar-state --help` would have
+ended it in one command.
+
+**A correct earlier result was discarded.** `--workspace 0`, `1` and `2` were tried at the very
+start of the investigation and returned *three different tabs*. That is the answer, in the
+transcript, before the wrong turn. It was read as "only the selected tab per workspace" and
+abandoned.
+
+**Being asked twice was the signal.** The reader said "cmux already knows this" three times, and
+twice the response was to re-assert the conclusion with more evidence rather than re-test the
+premise. The third time came with a screenshot of the sidebar showing every tab's badge at once,
+which is not a thing a dead end can produce. **A premise defended twice should be re-tested, not
+re-argued** — and it was reading the *installed* commit, at the reader's insistence, that finally
+surfaced the CLI's own help text.
+
+The cost of the mistake was one afternoon and one abandoned package. The cost of shipping it would
+have been a permanent networked dependency, a config key, a `gh` requirement and a weakened claim
+in the README, all to fetch something already on the machine.
+
+### 9.43 Colours that are alternatives need not match colours that are neighbours (2026-08-19)
+
+§18 has the four link glyphs matched by measurement — 7.02, 6.98, 7.04, 7.00 — because they sit
+side by side in one cell and a mark heavier than its neighbours reads as the only one that matters.
+`TestLinkGlyphColoursAreMatched` enforces it.
+
+Then the pull-request slot needed three colours, one per state, and red was asked for. At the set's
+7.0 a red is a pale salmon: `#f5a29a`, saturation 0.28, 25° from the storybook pink and not
+recognisable as red at one column wide.
+
+**The rule was too broad.** What must match is colours the eye compares *simultaneously* — the
+four slots. Open, merged and closed are **alternatives**: exactly one is ever on a row, so nothing
+compares them to each other, and matching them to the set buys nothing while costing the hue.
+
+So the band applies to the slots and the state variants only have to clear the palette floor and
+read as themselves. `#ff7b72` — GitHub's own closed red — measures 5.55, well above inkMuted's
+3.90, at saturation 0.55. Not `statusCritical`: bare `#d03b3b` is 2.91 and may only ever be a
+filled badge (§9.4).
+
+The test now says which rule it is enforcing, which it did not before: the four slots are held to
+0.25 of each other, and the state colours are held to the floor.
+
+### 9.44 Ink needs room, and air is the first thing to give back (2026-08-19)
+
+**Believed:** one column between the link glyphs is enough. Every other cell in the frame separates
+its contents by one space, and the arithmetic was written that way.
+
+**Found:** at a terminal's cell width the four of them read as a single run of ink. The reason is
+§9.36's own rule working against itself — they come from one Unicode block so that they share a
+drawn size, and three of them are boxes, so `⧆ ⧇ ⧉ ⧬` at one space apart is a hedge rather than
+four marks. The KPI strip already knew this and uses five columns between cells; this cell was the
+one place that did not.
+
+**Shipped:** `actionsSpace = 2`, and `actionsW` derived from it — `4 + 3*actionsSpace` — so the
+number and the layout cannot disagree. The test assertions are derived the same way, through a
+`slotEnd(n)` helper, because three of them had hard-coded widths that had to be found and edited
+by hand when the gap changed, which is how a width assertion comes to assert the wrong width.
+
+**And the same reading, one scale up: the frame was cramped, not just the cell.** Asked for more
+line height, which is Ghostty's `adjust-cell-height` and not board's to set — but a blank line
+between rows is board's, and it is the same effect for the thing board draws.
+
+The interesting part is what it must not cost. Spacing doubles what a row occupies, so on a short
+tab it would push the fit loop into shedding rows — trading information for air, which is the wrong
+way round. So it is **a luxury the frame takes only when everything fits**: the airy form is
+composed first, whole, and used only if it fits the tab; otherwise the compact form runs with the
+existing shedding ladder. A tab one line too short for the airy frame shows every row compact
+rather than most rows spaced.
+
+Two invariants are pinned rather than argued. `TestAiryOnlyWhenItFits` renders at exactly one line
+below the airy height and asserts the fallback keeps every row. `TestAiryNeverCostsARow` sweeps 12
+to 60 lines and asserts that whenever a compact frame with the whole fleet would have fitted, the
+frame board actually drew shows the whole fleet — whichever form it chose.
+
+A first attempt at that second test compared row counts between a tall tab and a short one and
+"failed" correctly: an 18-line tab shows fewer rows than a 120-line one, which is the fit loop
+working. The invariant only means anything **at one height**, which is what it asserts now.
+
+### 9.45 A half-empty cell reads as broken, not sparse (2026-08-19)
+
+**Believed:** an absent link should draw nothing. The slot holds its column with a blank so the
+glyphs line up, trailing blanks are trimmed, and the cell says exactly what the row has and no more.
+That is §9.14's rule applied to a cell: do not draw a mark for something that is not there.
+
+**Found:** with four slots it stops looking sparse and starts looking broken. `⧆     ⧉  ⧭` — one
+gap in the middle and one at the end — reads as a rendering fault rather than as two absences,
+because a row of aligned marks with holes in it is a pattern the eye completes and then finds wrong.
+The rule was right about *information* and wrong about *form*.
+
+**Shipped:** every empty slot on a row that has any link draws `⧅` in `#4e4e4c`, which measures
+**1.68** against `#282c34` and 2.46 against `#040404` — deliberately below the palette floor of
+3.90, and the only value in the file that is.
+
+That inversion is the whole point and it is worth being explicit about, because every other value in
+`view/palette.go` exists to be legible. This one exists to be *sub*-legible: the moment it is clear
+enough to identify, it competes with the marks that mean something, and the cell goes back to
+looking wrong in a different way. `TestPaletteContrast` therefore exempts it by name **and asserts
+it stays under the floor**, because the obvious reading of a contrast table is that a low number
+wants raising.
+
+Three things fell out of it.
+
+**The trim went away.** Every populated cell is now the full width, which is what makes the column a
+column — the glyphs line up down a band whatever each row happens to have, and there is nothing left
+to right-trim. Three test assertions that had encoded per-shape widths (`slotEnd(3)`, `slotEnd(2)`,
+1) collapsed into one: any row with a link has a cell of `actionsW`.
+
+**A row with *nothing* still draws nothing.** Four placeholders on every filler row and every todo
+would be ink saying nothing, which is the failure this was fixing, one level up. The placeholder
+makes a partly-filled cell read as sparse; it cannot make an empty one read as anything.
+
+**And the placeholder is never a link.** It would be §9.14's chevron again — a mark promising
+something that is not there — so it is painted and not wrapped, and a test counts hyperlinks
+carrying a URL against the number of real links. The first version of that test asserted
+`!strings.Contains(cell, linkOpen+st)` and failed, correctly: `linkOpen+st` *is* the closing
+sequence, so it appears after every real link. The assertion was wrong, not the code.
+
+`?` names it too — `⧅ none` — because a legend that names six glyphs and omits the seventh is a
+legend with a hole in it, which is the same complaint one level up again. It pushed the fullest rung
+to 126 columns, so at 118 the ladder now sheds the scale's values; that is the ladder working, and
+§9.44 is why it exists.
+
+### 9.46 A column of times descending read as sorted backwards (2026-08-19)
+
+**Believed, since §4 was written:** within a band, the thing you have ignored longest belongs at the
+top. The top of a band is where the eye lands and neglect is what board is for, so the most-neglected
+row gets the most valuable position on the screen. `pick` was built on the same premise — sheds from
+the end, because the end is the least reproachful.
+
+**Found:** it reads as a sorting bug. Shown
+
+    2d22h
+    7h10m
+    4h17m
+    2h42m
+       4m
+
+the reader's response was "it feels like the sorting is off", and on being told the values were
+strictly descending, "what I meant was that the lowest time should be first". Every list a person
+uses puts the newest first — mail, commits, notifications, chat — so a column counting *down* from
+two days reads as reversed before anyone considers what the ordering is for.
+
+The argument for the old order was not wrong, it was **redundant**. Neglect is already stated twice
+above the band, in the header's `oldest 2d22h` and the strip's `5 quiet >45m`, and the `⧗` marks it
+per row. Spending the band's best position on a third statement of it cost the position that answers
+"what was I just doing" — which is the question a fleet of six sessions is actually read for.
+
+**Shipped:** sessions sort most-recently-touched first. **Todos do not**, and §9.19 is exactly why —
+it already established that these are two different quantities wearing one field. A session's idle
+time is a *gap* that resets the moment somebody touches it, so its newest end is where the work is.
+A todo's age is a *lifetime* that only grows, so its oldest end is the reproach, and putting a note
+written seconds ago above one from a fortnight ago would bury what the list is for. Same field, two
+quantities, two orders — which is the third consequence §9.19 has now had.
+
+**The cost is real and lands on the collapse.** `pick` still sheds from the end of a band, and the
+end of QUIET is now the *most* neglected rather than the least — so a tab too short to show
+everything hides the rows that most want attention, which is the opposite of what that mechanism was
+for. Three things keep it honest rather than silent: `minQuietRows` floors what is shown, the `+N
+quiet` count never disappears (§9.13), and both header statements survive the collapse. `↓` past the
+last visible row still walks into the hidden ones, which are now the oldest — so the README's
+"rottenest first" is still true, by a different route.
+
+Not fixed by shedding from the front instead. That would leave the hidden rows *above* the shown
+ones, which breaks the one invariant the `+N` line depends on: anything hidden belongs below
+everything shown.

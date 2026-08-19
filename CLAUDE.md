@@ -101,6 +101,9 @@ Two kinds, and the difference matters more than any single entry.
 - **board never rewrites or deletes a `plugin.toml` it did not write** — that file is the
   permission policy for every plugin in its directory (§8, §17).
 - **cmux env vars are always stripped from child processes** (§8).
+- **board makes no network request at all.** The pull request on a row comes from cmux, which
+  already polls GitHub for its sidebar — `cmux sidebar-state --workspace <uuid>`, and the flag is
+  `--workspace`, not `--tab` (§18, `EVIDENCE.md` §9.42).
 - **board opens nothing itself.** A row's preview and folder are hyperlinks handed to the
   terminal; there is no `open`, no `code`, no opener of any kind. `cmux surface.focus`
   stays the only thing board does to the world (§8, §18).
@@ -125,12 +128,19 @@ one, record why in `EVIDENCE.md` §9.
 - Capture and removal both live in the frame, and the capture mode stays bounded (§12,
   §9.18).
 - A band earns its lines by exception (`EVIDENCE.md` §9.13).
+- The state gutter is elastic and its mark left-aligned; the stale mark `⧗` rides beside it
+  (§6, `EVIDENCE.md` §9.41).
+- The bottom line has three states and is always one line: keys, the `?` legend, the capture
+  prompt. Nothing may make it two (§12, `EVIDENCE.md` §9.38).
 - All join logic stays in pure `board.Build`; `view` never reads the world and `watch`
   never formats (§3).
 - Derived quantities go on `Fleet`, not in a renderer, so the two renderers cannot
   disagree (§3).
 - Links live in the frame and not in the one-shot table: escapes do not belong in a pipe,
   and a preview hostname is derived from a branch name (§18).
+- The location column is `repo -> worktree`, not the cmux workspace: cmux names a workspace per
+  agent task, so its title repeats the label (§18, `EVIDENCE.md` §9.39). `Row.Where()` is the one
+  string both renderers size and print from.
 - A row points at one preview and one Storybook, joined on the git worktree — never on
   directory containment, which crosses worktrees (§18, `EVIDENCE.md` §9.34).
 - The Storybook port range is closed (6006–6020) and paired with a process check: TensorBoard

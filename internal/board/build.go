@@ -29,6 +29,14 @@ type Snapshot struct {
 	// because it is a walk over the filesystem; Build is pure over the answer, which is
 	// what lets §18's join be pinned by a fixture rather than by a real repository.
 	Trees map[string]string
+	// Repos maps a worktree to the repository it belongs to, resolved impurely beside Trees.
+	// Separate from Trees because they are two questions: which worktree is this work in, and
+	// which repository is that worktree part of (§18).
+	Repos map[string]string
+	// PRs maps a cmux workspace UUID to the pull request cmux has already correlated for that
+	// tab. Keyed by workspace and not by worktree, because that is the question cmux answers:
+	// one badge per tab (§18).
+	PRs map[string]cmux.PR
 	// Previews are the local dev servers up on this machine, each with the directory it
 	// is serving. Enrichment, never a row: a preview with no session is nobody's work.
 	Previews []preview.Route
@@ -88,12 +96,23 @@ func Build(s Snapshot, now time.Time) Fleet {
 			ws = noWorkspace
 		}
 		idle := idleFor(s.Clock, a.SessionID, now)
+		repo, tree := where(s, a.Cwd)
+		if a.IsBackground() {
+			// The sentinel the README documents as how you spot a background agent, and it has
+			// always lived in this column. A background agent does have a repository; saying so
+			// instead would be a second change riding on this one.
+			repo, tree = noWorkspace, ""
+		}
 		r := Row{
 			Key:       a.SessionID,
 			State:     "done",
 			Label:     label(s.Labels[t.ID], s.JobLabels[a.SessionID], t.Surface, a.Cwd),
 			Workspace: ws,
 			Surface:   t.ID,
+			Repo:      repo,
+			Tree:      tree,
+			PR:        s.PRs[t.WorkspaceID].URL,
+			PRState:   s.PRs[t.WorkspaceID].State,
 			Folder:    s.Trees[a.Cwd],
 			Preview:   nearest(s.Previews, s.Trees, s.Trees[a.Cwd], a.Cwd),
 			Storybook: nearest(s.Storybooks, s.Trees, s.Trees[a.Cwd], a.Cwd),
@@ -138,6 +157,7 @@ func Build(s Snapshot, now time.Time) Fleet {
 		if ws == "" {
 			ws = noWorkspace
 		}
+		makiRepo, makiTree := where(s, rep.Cwd)
 		for _, sess := range rep.Sessions {
 			idle := idleFor(s.Clock, sess.ID, now)
 			r := Row{
@@ -146,6 +166,10 @@ func Build(s Snapshot, now time.Time) Fleet {
 				Label:     label(s.Labels[t.ID], sess.Title, t.Surface, rep.Cwd),
 				Workspace: ws,
 				Surface:   t.ID,
+				Repo:      makiRepo,
+				Tree:      makiTree,
+				PR:        s.PRs[t.WorkspaceID].URL,
+				PRState:   s.PRs[t.WorkspaceID].State,
 				Folder:    s.Trees[rep.Cwd],
 				Preview:   nearest(s.Previews, s.Trees, s.Trees[rep.Cwd], rep.Cwd),
 				Storybook: nearest(s.Storybooks, s.Trees, s.Trees[rep.Cwd], rep.Cwd),
@@ -177,13 +201,33 @@ func Build(s Snapshot, now time.Time) Fleet {
 			Rank:  RankTodo,
 		})
 	}
-	// Band first, then oldest within a band: the thing you have ignored longest
-	// sits at the top of its group.
+	// Band first, then **most recently touched** within a band: the thing you last worked on sits
+	// at the top of its group.
+	//
+	// This was the other way round until §9.46, and the old reasoning is worth keeping: the top of a
+	// band is where the eye lands, so putting the most-neglected row there made neglect the first
+	// thing you saw. What that argument missed is that a column of times descending from 2d22h reads
+	// as *sorted backwards* — every other list a person uses puts the newest first — so the ordering
+	// was spending the band's most valuable position on a signal the header already carries in
+	// `oldest 2d22h` and the KPI strip in `5 quiet >45m`.
+	//
+	// The cost is real and lands on `pick`, which sheds from the end of a band: the end is now the
+	// oldest rows, so a tab too short to show everything hides the most neglected instead of the
+	// least. `minQuietRows` and the `+N quiet` count are what keep that honest, and the two header
+	// statements are what keep it from being silent.
+	// Todos are the exception, and §9.19 is why: a session's idle time is a **gap** that resets the
+	// moment somebody touches it, so the newest is the thing you were last doing and belongs at the
+	// top. A todo's age is a **lifetime** that only grows, so its oldest is a reproach and putting a
+	// note written seconds ago above one from a fortnight ago would bury exactly what the list is
+	// for. Same field, two quantities, two orders.
 	sort.SliceStable(rows, func(i, j int) bool {
 		if rows[i].Rank != rows[j].Rank {
 			return rows[i].Rank < rows[j].Rank
 		}
-		return rows[i].Idle > rows[j].Idle
+		if rows[i].Rank == RankTodo {
+			return rows[i].Idle > rows[j].Idle
+		}
+		return rows[i].Idle < rows[j].Idle
 	})
 	f.Rows = rows
 	f.Workspaces = len(spans)

@@ -14,26 +14,31 @@ import (
 func linkFleet() board.Fleet {
 	return board.Fleet{
 		Rows: []board.Row{
-			{Key: "K-1", State: "running", Label: "build the export endpoint", Workspace: "API",
+			{Key: "K-1", State: "running", Label: "build the export endpoint", Repo: "API",
 				Surface: "S-1", Rank: board.RankWorking,
 				Folder: "/Users/you/work/repo", Preview: "https://api.localhost"},
-			{Key: "K-2", State: "done", Label: "migrate auth handlers", Workspace: "AUTH",
+			{Key: "K-2", State: "done", Label: "migrate auth handlers", Repo: "AUTH",
 				Surface: "S-2", Idle: 30 * time.Minute, Rank: board.RankQuiet,
 				Folder: "/Users/you/work/repo/.claude/worktrees/auth-v2"},
-			{Key: "K-5", State: "done", Label: "all three links", Workspace: "UI",
+			{Key: "K-5", State: "done", Label: "all four links", Repo: "UI",
 				Surface: "S-5", Idle: 12 * time.Minute, Rank: board.RankQuiet,
 				Folder:    "/Users/you/work/repo",
 				Preview:   "https://ui.localhost",
-				Storybook: "http://localhost:6006"},
-			{Key: "K-3", State: "done", Label: "no directory at all", Workspace: "OPS",
+				Storybook: "http://localhost:6006",
+				PR:        "https://github.com/you/repo/pull/7",
+				PRState:   "open"},
+			{Key: "K-6", State: "done", Label: "a pull request and nothing else", Repo: "OPS",
+				Surface: "S-6", Idle: 8 * time.Minute, Rank: board.RankQuiet,
+				PR: "https://github.com/you/repo/pull/9", PRState: "merged"},
+			{Key: "K-3", State: "done", Label: "no directory at all", Repo: "OPS",
 				Surface: "S-3", Idle: 90 * time.Minute, Rank: board.RankQuiet, Stale: true},
-			{Key: "K-4", State: "done", Label: "a preview and no folder", Workspace: "WEB",
+			{Key: "K-4", State: "done", Label: "a preview and no folder", Repo: "WEB",
 				Surface: "S-4", Idle: 20 * time.Minute, Rank: board.RankQuiet,
 				Preview: "https://web.localhost"},
 			{Key: "todo:t1", State: "todo", Label: "book the quarterly review",
 				Idle: 26 * time.Hour, Rank: board.RankTodo},
 		},
-		Stale: 1, Workspaces: 5, Oldest: 90 * time.Minute, TodoCap: 10,
+		Stale: 1, Workspaces: 6, Oldest: 90 * time.Minute, TodoCap: 10,
 	}
 }
 
@@ -61,77 +66,84 @@ func byKey(t *testing.T, key string) board.Row {
 	return board.Row{}
 }
 
+// slotEnd is the printed width of a cell whose last occupied slot is the nth of four: the glyphs
+// up to it, plus the gaps between them. Derived rather than written out, so these assertions follow
+// actionsSpace instead of having to be found and edited when it changes (§9.44).
+func slotEnd(n int) int { return n + (n-1)*actionsSpace }
+
+// openedLinks counts the hyperlinks in a painted string that actually carry a URL. The closing
+// sequence is the opening one with an empty URI, so counting linkOpen alone counts both halves.
+func openedLinks(s string) int {
+	n := 0
+	for i := 0; i+len(linkOpen) < len(s); i++ {
+		if strings.HasPrefix(s[i:], linkOpen) && !strings.HasPrefix(s[i+len(linkOpen):], "\x1b") {
+			n++
+		}
+	}
+	return n
+}
+
 func TestActionCell(t *testing.T) {
-	both := actionCell(byKey(t, "K-1"), "cursor")
+	// Every cell on a row that has *any* link is the full width, because absent slots are filled
+	// with a placeholder rather than a blank: a cell with two of its four links should read as
+	// sparse, not broken (§9.45). So the glyphs line up down the band whatever a row has.
+	for _, key := range []string{"K-1", "K-2", "K-4", "K-5", "K-6"} {
+		cell := actionCell(byKey(t, key), "cursor")
+		if printed(cell) != actionsW {
+			t.Errorf("%s: cell printed %d columns, want %d: %q", key, printed(cell), actionsW, cell)
+		}
+	}
+
+	both := actionCell(byKey(t, "K-1"), "cursor") // a preview and a folder, no storybook, no PR
 	if !strings.Contains(both, linkOpen+"https://api.localhost"+st) {
 		t.Errorf("preview glyph is not a link to the preview: %q", both)
 	}
 	if !strings.Contains(both, linkOpen+"cursor://file/Users/you/work/repo"+st) {
 		t.Errorf("folder glyph is not a link to the chosen editor: %q", both)
 	}
-	if printed(both) != actionsW {
-		t.Errorf("cell with both links printed %d columns, want %d: %q", printed(both), actionsW, both)
+	// The two it does not have are placeholders, in the muted grey and *not* clickable — a
+	// placeholder that opened something would be the §9.14 failure with a new coat of paint.
+	if n := strings.Count(both, fg(linkAbsent, absentGlyph)); n != 2 {
+		t.Errorf("cell has %d placeholders, want 2: %q", n, both)
+	}
+	// Exactly as many hyperlinks as real links: a placeholder is never clickable, or it would be
+	// §9.14's chevron again — a mark promising something that is not there.
+	if n := openedLinks(both); n != 2 {
+		t.Errorf("cell opened %d hyperlinks for 2 real links: %q", n, both)
 	}
 
-	folderOnly := actionCell(byKey(t, "K-2"), "cursor")
-	if strings.Contains(folderOnly, "https://") {
-		t.Errorf("row with no preview got a preview link: %q", folderOnly)
+	// Slot order is fixed, so a glyph is always in its own column: storybook, preview, folder, pr.
+	all := actionCell(byKey(t, "K-5"), "cursor")
+	if printed(all) != actionsW {
+		t.Errorf("cell with all four printed %d columns, want %d: %q", printed(all), actionsW, all)
 	}
-	// The folder sits in the second column, so it lines up with the row above it.
-	if !strings.HasPrefix(folderOnly, "  ") {
-		t.Errorf("folder glyph did not keep the preview's column: %q", folderOnly)
+	order := []string{storybookGlyph, previewGlyph, folderGlyph, prGlyph}
+	at := make([]int, len(order))
+	for i, g := range order {
+		at[i] = strings.Index(all, g)
+		if at[i] < 0 {
+			t.Fatalf("cell with all four is missing %q: %q", g, all)
+		}
 	}
-	if printed(folderOnly) != actionsW {
-		t.Errorf("folder-only cell printed %d columns, want %d: %q", printed(folderOnly), actionsW, folderOnly)
+	for i := 1; i < len(at); i++ {
+		if at[i] < at[i-1] {
+			t.Errorf("slot %d (%q) is left of slot %d: %q", i, order[i], i-1, all)
+		}
+	}
+	// The pull request is rightmost, because it is the only one that does not point at this
+	// machine (§18).
+	if strings.Index(all, prGlyph) < strings.Index(all, folderGlyph) {
+		t.Errorf("the PR glyph is not right of the folder: %q", all)
 	}
 
-	// Nothing to point at is no cell at all, not an empty one — that is what keeps a row
-	// with no links byte-identical to the frame before links existed.
+	// Nothing to point at is still no cell at all. The placeholder makes a partly filled cell read
+	// as sparse; on a row with nothing it would be four marks saying nothing, on every filler row
+	// and every todo.
 	if got := actionCell(byKey(t, "K-3"), "cursor"); got != "" {
-		t.Errorf("row with neither link got a cell: %q", got)
+		t.Errorf("row with no links got a cell: %q", got)
 	}
 	if got := actionCell(byKey(t, "todo:t1"), "cursor"); got != "" {
 		t.Errorf("todo row got a cell: %q", got)
-	}
-
-	// The cell is the last thing on the line, so the absent second glyph is trimmed rather
-	// than spaced out: padding there would widen the frame's right edge on a row that has
-	// nothing in the column it widened for (§9.29).
-	previewOnly := actionCell(byKey(t, "K-4"), "cursor")
-	// All three, for the row that has them: the cell is exactly its width, no more.
-	if all := actionCell(byKey(t, "K-5"), "cursor"); printed(all) != actionsW {
-		t.Errorf("cell with all three printed %d columns, want %d: %q", printed(all), actionsW, all)
-	} else {
-		for _, g := range []string{previewGlyph, storybookGlyph, folderGlyph} {
-			if !strings.Contains(all, g) {
-				t.Errorf("cell with all three is missing %q: %q", g, all)
-			}
-		}
-	}
-	// The cell is the last thing on the line, so absent *trailing* glyphs are trimmed rather
-	// than spaced out: padding there would widen the frame's right edge on a row that has
-	// nothing in the column it widened for (§9.29). Absent *leading* ones still hold their
-	// column, which is what keeps the glyphs lined up down a band.
-	//
-	// The order is rarest first — Storybook, preview, folder — so a preview-only row keeps one
-	// leading blank and trims the two trailing ones.
-	if printed(previewOnly) != 3 {
-		t.Errorf("preview-only cell printed %d columns, want 3: %q", printed(previewOnly), previewOnly)
-	}
-	if !strings.HasPrefix(previewOnly, "  ") {
-		t.Errorf("preview-only cell did not keep the Storybook's column: %q", previewOnly)
-	}
-	if strings.HasSuffix(previewOnly, " ") {
-		t.Errorf("preview-only cell was padded rather than trimmed: %q", previewOnly)
-	}
-	// The leftmost slot alone is the smallest the cell gets: everything after it trims away.
-	storybookOnly := actionCell(board.Row{Storybook: "http://localhost:6006"}, "cursor")
-	if printed(storybookOnly) != 1 {
-		t.Errorf("storybook-only cell printed %d columns, want 1: %q",
-			printed(storybookOnly), storybookOnly)
-	}
-	if !strings.Contains(storybookOnly, storybookGlyph) {
-		t.Errorf("storybook-only cell is not the Storybook glyph: %q", storybookOnly)
 	}
 }
 
@@ -140,7 +152,8 @@ func TestActionCell(t *testing.T) {
 func TestFleetWithNoLinksIsUnchanged(t *testing.T) {
 	bare := linkFleet()
 	for i := range bare.Rows {
-		bare.Rows[i].Folder, bare.Rows[i].Preview, bare.Rows[i].Storybook = "", "", ""
+		bare.Rows[i].Folder, bare.Rows[i].Preview = "", ""
+		bare.Rows[i].Storybook, bare.Rows[i].PR = "", ""
 	}
 	if got := frameOf(bare, 118); strings.Contains(got, linkOpen) {
 		t.Error("a fleet with no links rendered a hyperlink")
@@ -186,7 +199,8 @@ func TestActionCellIsShedWhenNarrow(t *testing.T) {
 	// And a fleet with nothing to point at never reserves it, at any width.
 	bare := linkFleet()
 	for i := range bare.Rows {
-		bare.Rows[i].Folder, bare.Rows[i].Preview, bare.Rows[i].Storybook = "", "", ""
+		bare.Rows[i].Folder, bare.Rows[i].Preview = "", ""
+		bare.Rows[i].Storybook, bare.Rows[i].PR = "", ""
 	}
 	if got := actionCols(bare.Rows, 118, true); got != 0 {
 		t.Errorf("a fleet with no links reserved %d columns", got)
@@ -266,5 +280,90 @@ func TestEditorURLPerScheme(t *testing.T) {
 	}
 	if got := editorURL("vscode", ""); got != "" {
 		t.Errorf("editorURL with no folder = %q, want empty", got)
+	}
+}
+
+// cmux tells board which state the pull request is in, and the three want different things from
+// the reader: an open one is something to go and look at, a merged one is context, a closed one is
+// a branch somebody abandoned. Shape carries the first distinction and colour the second, so
+// neither has to be read alone (§18).
+func TestPRMarkByState(t *testing.T) {
+	cases := map[string]struct{ glyph, colour string }{
+		"open":   {prGlyph, linkPR},
+		"merged": {prMergedGlyph, linkPR},
+		"closed": {prGlyph, linkPRClosed},
+		// A state cmux has not had yet draws as open, because a glyph board cannot classify is
+		// still a pull request worth reaching.
+		"":         {prGlyph, linkPR},
+		"reopened": {prGlyph, linkPR},
+	}
+	for state, want := range cases {
+		got := prMark(state)
+		if got != fg(want.colour, want.glyph) {
+			t.Errorf("prMark(%q) = %q, want %q in %s", state, got, want.glyph, want.colour)
+		}
+		// Whatever the state, it is one column: the slot's width does not depend on it.
+		if printed(got) != 1 {
+			t.Errorf("prMark(%q) printed %d columns, want 1", state, printed(got))
+		}
+	}
+	// Merged and closed must not be told apart by colour alone or by shape alone — each pair
+	// differs in at least one, so a reader who misses one cue still has the other.
+	if prMark("merged") == prMark("closed") {
+		t.Error("merged and closed render identically")
+	}
+	if prMark("open") == prMark("merged") || prMark("open") == prMark("closed") {
+		t.Error("open is indistinguishable from a landed pull request")
+	}
+}
+
+// The spacing is a fit decision, not a style: the frame takes it when everything fits and drops it
+// when it does not, because the rows are the information and the gaps are not (§9.44).
+func TestAiryOnlyWhenItFits(t *testing.T) {
+	f := linkFleet()
+	frame := func(lines int) string {
+		return Frame(f, Screen{Now: time.Date(2026, 8, 19, 14, 30, 0, 0, time.UTC),
+			Interval: 10 * time.Second, Threshold: 45 * time.Minute, Rows: lines, Cols: 118,
+			EditorScheme: "cursor"}, UI{})
+	}
+	// A tall tab: a blank line between rows, so two row lines never sit adjacent.
+	tall := frame(120)
+	if !strings.Contains(tall, "\n\n   "+dim(quietGlyph)) {
+		t.Errorf("a tall tab did not space the quiet rows out:\n%s", tall)
+	}
+	// A tab exactly one line too short for the airy form falls back to compact rather than
+	// shedding a row to stay airy.
+	airyHeight := strings.Count(tall, "\n") + 2
+	tight := frame(airyHeight - 1)
+	if strings.Contains(tight, "\n\n   "+dim(quietGlyph)) {
+		t.Errorf("a tab too short for the airy form still spaced rows out:\n%s", tight)
+	}
+	if got, want := strings.Count(tight, quietGlyph), strings.Count(tall, quietGlyph); got != want {
+		t.Errorf("falling back to compact lost rows: %d vs %d", got, want)
+	}
+}
+
+// Spacing may never be the reason a row is missing. At every height where the compact frame would
+// show the whole fleet, the frame board actually renders shows the whole fleet too — whichever form
+// it chose.
+func TestAiryNeverCostsARow(t *testing.T) {
+	f := linkFleet()
+	_, _, todo, quiet := f.Bands()
+	for lines := 12; lines <= 60; lines++ {
+		s := Screen{Now: time.Date(2026, 8, 19, 14, 30, 0, 0, time.UTC),
+			Interval: 10 * time.Second, Threshold: 45 * time.Minute, Rows: lines, Cols: 118,
+			EditorScheme: "cursor"}
+		got := Frame(f, s, UI{})
+		if h := strings.Count(got, "\n") + 2; h > lines {
+			t.Fatalf("at %d lines the frame is %d", lines, h)
+		}
+		// Would a compact frame with every row have fitted? Then nothing may be missing.
+		compactAll := compose(f, s, UI{}, pick(quiet, len(quiet), ""), pick(todo, len(todo), ""), false)
+		if height(compactAll) > lines {
+			continue
+		}
+		if got, want := strings.Count(got, quietGlyph), len(quiet); got != want {
+			t.Errorf("at %d lines the frame shows %d quiet rows, want all %d", lines, got, want)
+		}
 	}
 }

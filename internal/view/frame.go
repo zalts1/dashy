@@ -45,6 +45,10 @@ type UI struct {
 	// mode cannot change the frame's height (§12).
 	Typing bool
 	Input  string
+	// Help swaps the bottom line for the legend: the idle scale's rungs, and what each link
+	// glyph opens. A display mode like QuietCollapsed rather than a mode that owns input — it
+	// does not pause the refresh, because nothing about it goes stale (§9.38).
+	Help bool
 	// QuietCollapsed folds the quiet band to its count. It defaults to false — the band
 	// starts open, and folding is something the viewer asks for. Distinct from the fit
 	// loop's trim, which is the terminal's height talking, not the reader (§9.21).
@@ -65,6 +69,15 @@ func Frame(f board.Fleet, s Screen, u UI) string {
 	if u.QuietCollapsed {
 		keepQuiet = 0
 	}
+	// The airy form first, whole: a blank line between rows, which on a laptop with room to spare
+	// is the difference between a dashboard and a wall of text. Tried before anything is shed
+	// because it is a luxury and shedding is not — if the spaced frame does not fit, every row
+	// compact beats some rows airy, since the rows are the information and the spacing is not
+	// (§9.44).
+	if airy := compose(f, s, u, pick(quiet, keepQuiet, u.Sel), pick(todo, keepTodo, u.Sel), true); height(airy) <= s.Rows {
+		return airy
+	}
+
 	out := ""
 	// Absorbers in order of expendability, each cutting by the exact overflow so a stage
 	// converges in one pass: the quiet tail to its floor, then the list to its own, then
@@ -82,7 +95,7 @@ func Frame(f board.Fleet, s Screen, u UI) string {
 		{&keepQuiet, minQuietRows}, {&keepTodo, minTodoRows}, {&keepQuiet, 0}, {&keepTodo, 0},
 	}
 	for range 10 {
-		out = compose(f, s, u, pick(quiet, keepQuiet, u.Sel), pick(todo, keepTodo, u.Sel))
+		out = compose(f, s, u, pick(quiet, keepQuiet, u.Sel), pick(todo, keepTodo, u.Sel), false)
 		over := height(out) - s.Rows
 		if over <= 0 {
 			return out
@@ -104,40 +117,55 @@ func Frame(f board.Fleet, s Screen, u UI) string {
 	return clip(out, s.Rows)
 }
 
-func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
+func compose(f board.Fleet, s Screen, u UI, quiet, todo band, airy bool) string {
+	// One blank line between rows when the frame can afford it. Between and not after: a band's
+	// header already opens with one, so a trailing gap would double it.
+	gap := ""
+	if airy {
+		gap = "\n"
+	}
 	var b bytes.Buffer
 	folders := s.EditorScheme != ""
+	gutterW := gutterFor(f)
 	labelW, tailW, barW := columns(f, s.Cols, folders)
 	actW := actionCols(f.Rows, s.Cols, folders)
 	bars := barW > 0
 	// The columns between a label and its duration: the bar, the warn mark, and the
 	// gaps around them.
-	midCols := 3
+	midCols := 1
 	if bars {
-		midCols = barW + 4
+		midCols = barW + 2
 	}
 	blocked, working, _, _ := f.Bands()
 
 	b.WriteString(kpiStrip(f, s, len(blocked), len(working)) + "\n")
 
-	// The state mark is right-aligned inside the gutter so it hugs the label
-	// instead of leaving a gap. Width is passed in because a badge's printed width
-	// is not its string length.
-	mark := func(s string, width int) string {
-		return strings.Repeat(" ", gutter-width-1) + s + " "
+	// The state mark is left-aligned in the gutter, so it starts one column after the lead and
+	// every row's mark is in the same place whatever follows it. It used to be right-aligned to
+	// hug the label, which put eleven blank columns in front of a quiet row's ○ — the widest
+	// thing in the gutter is the BLOCKED badge, and every other row paid for it (§9.41).
+	//
+	// The stale glyph rides here rather than out by the duration, because it qualifies the
+	// state: `○ ⧗` reads as "quiet, and has been for a while" in one glance, where the same mark
+	// three columns from the IDLE value read as a property of the number.
+	//
+	// Width is passed in because a badge's printed width is not its string length.
+	mark := func(s string, width int, stale bool) string {
+		out := s
+		if stale {
+			out += " " + fg(statusWarning, staleGlyph)
+			width += 2
+		}
+		return out + strings.Repeat(" ", max(0, gutterW-width))
 	}
-	b.WriteString("\n   " + dim(strings.Repeat(" ", gutter)+pad("LABEL", labelW)+
+	b.WriteString("\n   " + dim(strings.Repeat(" ", gutterW)+pad("LABEL", labelW)+
 		strings.Repeat(" ", midCols)+fmt.Sprintf("%*s", idleW, "IDLE")+"  "+
 		cut(wsHeader, tailW)) + "\n")
 
 	// when and tail are passed rather than derived, because a todo row states a lifetime
 	// and belongs to no workspace, while a session row states a gap and does (§9.19).
 	line := func(state, label string, showBar bool, r board.Row, when, tail string) string {
-		warn := " "
-		if r.Stale {
-			warn = fg(statusWarning, "⚠")
-		}
-		mid := " " + warn + " "
+		mid := " "
 		if bars {
 			// An empty cell, not a missing one: a working row has no bar but still has
 			// to line its duration up with everything else.
@@ -145,7 +173,7 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
 			if showBar {
 				barCell = bar(r.Idle, barW)
 			}
-			mid = " " + barCell + " " + warn + " "
+			mid = " " + barCell + " "
 		}
 		lead, text := "   ", body(pad(label, labelW))
 		if u.Sel != "" && r.Key == u.Sel {
@@ -155,24 +183,27 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
 		// to point at — and every todo, which has no process and so no directory (§12) —
 		// keeps the shape it had before links existed. actW is the reservation; whether this
 		// row spends it is the row's own business.
-		tailCell := dim(cut(tail, tailW))
+		tailCell := whereCell(tail, tailW, false)
 		if acts := actionCell(r, s.EditorScheme); actW > 0 && acts != "" {
-			tailCell = dim(pad(tail, tailW)) + strings.Repeat(" ", actionsGap) + acts
+			tailCell = whereCell(tail, tailW, true) + strings.Repeat(" ", actionsGap) + acts
 		}
 		return lead + state + text + mid +
 			body(fmt.Sprintf("%*s", idleW, when)) + "  " + tailCell + "\n"
 	}
-	// row is the session form of line: idle time as a gap, and the workspace it lives in.
+	// row is the session form of line: idle time as a gap, and the place it lives in.
 	row := func(state, label string, showBar bool, r board.Row) string {
-		return line(state, label, showBar, r, humanize(r.Idle), r.Workspace)
+		return line(state, label, showBar, r, humanize(r.Idle), r.Where())
 	}
 
 	if len(blocked) > 0 {
 		b.WriteString("\n  " + fg(statusCritical, "NEEDS YOU") + "\n")
-		for _, r := range blocked {
+		for i, r := range blocked {
+			if i > 0 {
+				b.WriteString(gap)
+			}
 			// Blocked rows carry the bar too: the same quantity on the same absolute
 			// scale, so "waiting 3h" is comparable to anything in QUIET.
-			b.WriteString(row(mark(badge(inkPrimary, statusCritical, " BLOCKED "), 9), r.Label, true, r))
+			b.WriteString(row(mark(badge(inkPrimary, statusCritical, " BLOCKED "), 9, r.Stale), r.Label, true, r))
 		}
 	} else {
 		b.WriteString("\n  " + dim("NEEDS YOU") + "   " + dim("nothing blocked") + "\n")
@@ -180,9 +211,12 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
 
 	if len(working) > 0 {
 		b.WriteString("\n  " + fg(statusGood, "WORKING") + " " + dim(fmt.Sprintf("· %d", len(working))) + "\n")
-		for _, r := range working {
+		for i, r := range working {
+			if i > 0 {
+				b.WriteString(gap)
+			}
 			// No bar: for a working agent elapsed time is progress, not rot.
-			b.WriteString(row(mark(fg(statusGood, "◐"), 1), r.Label, false, r))
+			b.WriteString(row(mark(fg(statusGood, workingGlyph), 1, false), r.Label, false, r))
 		}
 	}
 
@@ -195,8 +229,11 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
 			b.WriteString(head + dim(" · collapsed") + "\n")
 		} else {
 			b.WriteString(head + "\n")
-			for _, r := range quiet.rows {
-				b.WriteString(row(mark(dim("○"), 1), r.Label, true, r))
+			for i, r := range quiet.rows {
+				if i > 0 {
+					b.WriteString(gap)
+				}
+				b.WriteString(row(mark(dim(quietGlyph), 1, r.Stale), r.Label, true, r))
 			}
 		}
 		// The count stays visible so the backlog can never hide by being collapsed. It is
@@ -206,7 +243,7 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
 		//
 		// Folded, this line would restate the header's own count as "+13 quiet".
 		if quiet.hidden > 0 && !u.QuietCollapsed {
-			b.WriteString("   " + strings.Repeat(" ", gutter) + dim(fmt.Sprintf("+%d quiet", quiet.hidden)) + "\n")
+			b.WriteString("   " + strings.Repeat(" ", gutterW) + dim(fmt.Sprintf("+%d quiet", quiet.hidden)) + "\n")
 		}
 	}
 
@@ -229,20 +266,23 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
 		}
 		b.WriteString("\n  " + fg(inkSecondary, "TODO") + " " +
 			dim(fmt.Sprintf("· %d%s", total, cap)) + "\n")
-		for _, r := range todo.rows {
+		for i, r := range todo.rows {
+			if i > 0 {
+				b.WriteString(gap)
+			}
 			// No bar, and no workspace: a bar means rot on the idle scale, and a todo's age
 			// is a lifetime that only grows rather than a gap that resets. The mark is an
 			// empty box — nothing is running, and nothing has been done.
-			b.WriteString(line(mark(fg(inkSecondary, "▫"), 1), r.Label, false, r, since(r.Idle), ""))
+			b.WriteString(line(mark(fg(inkSecondary, todoGlyph), 1, false), r.Label, false, r, since(r.Idle), ""))
 		}
 		if todo.hidden > 0 {
-			b.WriteString("   " + strings.Repeat(" ", gutter) + dim(fmt.Sprintf("+%d todo", todo.hidden)) + "\n")
+			b.WriteString("   " + strings.Repeat(" ", gutterW) + dim(fmt.Sprintf("+%d todo", todo.hidden)) + "\n")
 		}
 	}
 
 	// A value scale without a key is decoration — and a key without its scale is noise,
 	// so the legend goes wherever the bars went.
-	b.WriteString("\n  " + bottom(f, u, bars) + "\n")
+	b.WriteString("\n  " + bottom(f, u, bars, actW > 0, s.Cols) + "\n")
 
 	// The header is written last and measured against everything below it, so the frame
 	// has one right edge instead of two that agree only at 118 columns (§9.29).
@@ -256,20 +296,29 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
 	return strings.Join(lines, "\n")
 }
 
-// bottom is the frame's last line, and it is one line in every state: the scale legend
-// plus the keys while ambient, the capture prompt while typing. Same slot, so entering
-// the mode cannot change the height and collapse the quiet tail under the typist (§12).
+// bottom is the frame's last line, and it is one line in every state: the legend plus the keys
+// while ambient, the whole legend spelled out under `?`, the capture prompt while typing. Same
+// slot, so entering any of them cannot change the height and collapse the quiet tail under the
+// reader (§12).
 //
-// A value scale without a key is decoration — and a key without its scale is noise, so
-// the legend goes wherever the bars went.
-func bottom(f board.Fleet, u UI, bars bool) string {
+// The ambient line names each thing and `?` gives its resolution. That is an amendment to §6's
+// "a value scale without a key is decoration": the key is still there — the bar is labelled
+// `elapsed` — and only the rung values moved, which buys the width for the two link hints and
+// for a legend that can afford to spell out what the glyphs mean (§9.38).
+func bottom(f board.Fleet, u UI, bars, links bool, cols int) string {
 	if u.Typing {
-		// The caret is what proves the mode is on before the first keystroke lands.
+		// The caret is what proves the mode is on before the first keystroke lands. Checked
+		// first because it is the most specific state and the only one holding unsaved text.
 		return dim("new todo  ") + fg(inkPrimary, u.Input) + fg(inkPrimary, "▌")
+	}
+	if u.Help {
+		return helpLine(bars, cols)
 	}
 	legend := ""
 	if bars {
-		legend = dim("elapsed ") + scaleLegend()
+		// The dimension, not the scale. A bar you cannot read the value of is still a bar you
+		// know is time, and `?` is one keystroke away.
+		legend = swatchDim() + dim(" elapsed")
 	}
 	// `a` always works, so it is always named. `d` fires on a selected todo and nowhere
 	// else, so it is named only there: §9.14 was a chevron promising a key that did not
@@ -292,7 +341,81 @@ func bottom(f board.Fleet, u UI, bars bool) string {
 			hints += dim("   d done")
 		}
 	}
-	return legend + hints + dim("   ctrl-c to exit")
+	tail := dim("   ctrl-c to exit")
+	// The gesture, and only while the cell it describes is on screen — the same condition the
+	// cell itself uses, so a tab too narrow for the links cannot advertise it. Last on the
+	// line deliberately: it is the newest and most expendable hint, and `ctrl-c to exit` is
+	// the one thing that must never be what clipping takes.
+	if links {
+		tail += dim("   ⌘-click opens")
+	}
+	return legend + hints + tail + dim("   ? keys")
+}
+
+// helpLine is `?`: everything the ambient line abbreviates, spelled out. Every mark the frame
+// draws that is not a word — the stale mark, the four link glyphs, and the two shapes the pull
+// request takes — plus the scale's rungs, the gesture, and the way back.
+//
+// All of them whether or not this fleet has any: this is help rather than a status line, and a
+// legend that hid a feature nobody happened to be using that minute would answer a different
+// question than the one asked.
+//
+// It **sheds** rather than clips, in a ladder from most complete to least, because a legend cut
+// mid-word is worse than a shorter legend and this is the one line a reader opened deliberately.
+// What gives way is ordered by what `?` is for: the scale's rungs first, since the ambient line
+// already labels the bar; then the gesture, which the README also carries. The glyph meanings
+// never give way — they are the question being asked (§9.42).
+func helpLine(bars bool, cols int) string {
+	glyphs := fg(statusWarning, staleGlyph) + dim(" quiet a while")
+	glyphs += "   " + fg(linkStorybook, storybookGlyph) + dim(" storybook")
+	glyphs += "  " + fg(linkPreview, previewGlyph) + dim(" preview")
+	glyphs += "  " + fg(linkFolder, folderGlyph) + dim(" folder")
+	glyphs += "  " + fg(linkPR, prGlyph) + dim(" pr")
+	glyphs += "  " + fg(linkPR, prMergedGlyph) + dim(" merged")
+	glyphs += "  " + fg(linkAbsent, absentGlyph) + dim(" none")
+	gesture, out := dim("   ⌘-click"), dim("   esc")
+
+	ladder := []string{glyphs + gesture + out, glyphs + out}
+	if bars {
+		ladder = append([]string{scaleLegend() + "   " + glyphs + gesture + out}, ladder...)
+	}
+	for _, line := range ladder {
+		// headMargin twice: the two columns compose() indents by, and the same right-hand margin
+		// every other line keeps.
+		if printed(line)+2*headMargin <= cols {
+			return line
+		}
+	}
+	// Narrower than the shortest rung. clampLine takes it from here, which is the one case where
+	// this line is allowed to be cut: there is nothing left to shed.
+	return ladder[len(ladder)-1]
+}
+
+// whereCell paints the location column. The repository is dim, like every other piece of
+// context on the row, and the worktree inside it takes the preview's green — the branch you are
+// on is the part worth catching the eye, and it is the half a reader scanning a fleet of
+// worktrees is actually looking for (§18).
+//
+// The green is reused rather than new. It already means "this is the live thing" on the preview
+// glyph, and a worktree is the live branch, so the two readings agree; adding a seventh hue to
+// the frame to say the same thing would not (§6, §9.39).
+//
+// Truncation happens on the plain text before anything is painted, so the column's width is
+// the width board measured — and the seam is found in what survived, so a cut that lands inside
+// the repository half simply leaves nothing green.
+func whereCell(plain string, w int, padded bool) string {
+	shown := cut(plain, w)
+	fit := func(s string) string {
+		if padded {
+			return s + strings.Repeat(" ", max(0, w-runes(shown)))
+		}
+		return s
+	}
+	i := strings.Index(shown, board.TreeArrow)
+	if i < 0 {
+		return fit(dim(shown))
+	}
+	return fit(dim(shown[:i+len(board.TreeArrow)]) + fg(linkPreview, shown[i+len(board.TreeArrow):]))
 }
 
 // kpiStrip is the sub-second read, and blocked is the only thing in it allowed to

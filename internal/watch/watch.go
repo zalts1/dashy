@@ -73,6 +73,9 @@ func Run(interval time.Duration) {
 	// The one mode this UI has, and the only state that holds unsaved user text.
 	var typing bool
 	var input string
+	// The legend, which is a display mode like the fold: it belongs to the viewer, survives a
+	// refresh, and is not persisted (§9.38).
+	var help bool
 	// The quiet fold, which belongs to the viewer and so survives a refresh. It is not
 	// persisted: a fold is about this sitting at the tab, not a preference (§9.21).
 	var folded bool
@@ -83,7 +86,7 @@ func Run(interval time.Duration) {
 	// which rows are on it.
 	ui := func() view.UI {
 		return view.UI{Sel: sel, Paused: sel != "" || typing, Notice: notice,
-			Typing: typing, Input: input, QuietCollapsed: folded}
+			Typing: typing, Input: input, QuietCollapsed: folded, Help: help}
 	}
 
 	// Resolved once, outside draw: it is a stat over three app bundles, and unlike the
@@ -153,10 +156,15 @@ func Run(interval time.Duration) {
 				if _, _, todos, _ := f.Bands(); len(todos) >= config.MaxTodos {
 					notice = fmt.Sprintf("at the cap of %d todos — finish one first", config.MaxTodos)
 				} else {
-					typing, notice = true, ""
+					// The prompt takes the same line the legend was on, so the legend goes.
+					typing, notice, help = true, "", false
 				}
 			case keyEscape:
-				sel = ""
+				sel, help = "", false
+			case keyHelp:
+				// A display mode, so it does not pause: nothing on this line goes stale, and a
+				// reader holding the legend open should still watch the fleet move (§9.38).
+				help = !help
 			case keyList:
 				// Straight to the top of the list: stepping there means walking past every
 				// quiet row (DESIGN.md §12).

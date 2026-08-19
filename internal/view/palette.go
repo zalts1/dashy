@@ -44,6 +44,31 @@ const (
 	linkPreview   = "#51cf66" // ⧇ a dev server is serving this worktree
 	linkFolder    = "#3bc9db" // ⧉ the worktree, in an editor
 	linkStorybook = "#ff99bb" // ⧆ a component workbench listening in this worktree
+	// The pull-request slot, which is three colours rather than one because cmux tells board the
+	// state and the three want different things from the reader.
+	//
+	// linkPR is navy's own hue — 240° exactly — lightened until a dark terminal can show it: true
+	// navy #000080 measures 1.14 against #282c34, a third of the bare red §9.4 rejected, so "navy"
+	// at this weight is this. 27° clear of the idle ramp's 213° as well, because a blue in the
+	// frame that is not a bar has to be unmistakably not a bar.
+	//
+	// linkPRClosed is GitHub's own closed red, and it deliberately does **not** match the set's
+	// weight. The four slot colours sit side by side in one cell and must match so none dominates;
+	// open, merged and closed are *alternatives* that never appear together, so this one only has
+	// to clear the floor and read as red. At the set's 7.0 a red is a pale salmon, which does not
+	// (§9.43). It is not statusCritical: bare #d03b3b measures 2.91 and may only ever be a filled
+	// badge (§9.4).
+	linkPR       = "#b0b0ff" // ⧬ open, ⧭ merged
+	linkPRClosed = "#ff7b72" // ⧬ closed without merging
+	// linkAbsent fills a slot the row has nothing for, and it is **deliberately below the palette
+	// floor** — 1.68 against #282c34 and 2.46 against #040404, where inkMuted is 3.90.
+	//
+	// Every other value in this file is information and has to be legible. This one is the opposite:
+	// it exists so a cell with two of its four links reads as sparse rather than broken, and the
+	// moment it is legible enough to *identify* it starts competing with the marks that mean
+	// something. Texture, not a mark. TestPaletteContrast exempts it by name and asserts it stays
+	// under the floor, so nobody raises it as a fix (§9.45).
+	linkAbsent = "#4e4e4c"
 )
 
 // idleRamp is the ordinal ramp for idle magnitude: dim = fresh, bright = rotting.

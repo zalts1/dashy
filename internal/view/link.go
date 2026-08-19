@@ -106,41 +106,113 @@ func escapePath(s string) string {
 // All are single cell under the East Asian Width table, which is what decides the width
 // Ghostty allocates. That is the check that matters for the fit, and it is a different question
 // from the drawn size above: a glyph can occupy one cell and be drawn small inside it.
+// The state marks, and the one that qualifies them. ○ quiet, ◐ working, ▫ a todo — Geometric
+// Shapes, unchanged since the frame was drawn. ⧗ is new and replaces ⚠ on a stale row: a warning
+// triangle says "something is wrong", and a session nobody has looked at for three hours is not
+// wrong, it is *waiting*. An hourglass says that, and it comes from the same block as the link
+// glyphs so it is drawn at their size (§9.41).
+const (
+	quietGlyph   = "○"
+	workingGlyph = "◐"
+	todoGlyph    = "▫"
+	staleGlyph   = "⧗"
+)
+
 const (
 	previewGlyph   = "⧇"
 	storybookGlyph = "⧆"
 	folderGlyph    = "⧉"
+	// A circle with a down arrow, which is literally a *pull* mark — and a circle, so the one link
+	// glyph that cannot be mistaken for the three squares at a glance. Hollow while the pull
+	// request is still a request; filled once it has landed.
+	prGlyph       = "⧬"
+	prMergedGlyph = "⧭"
+	// absentGlyph fills a slot this row has nothing for. A crossed box reads as "not here" rather
+	// than as a thing, and it is from the same block as the four so the cell keeps one silhouette
+	// whatever a row happens to have (§9.45).
+	absentGlyph = "⧅"
 )
 
 // actionCell is the row's trailing links, each on its own column so they line up down the
 // band whichever of them a row happens to have. Empty when the row has none — an empty cell
 // would pad every row of a fleet that has nothing to point at.
 //
-// Order is by how often a row has one, rarest first: Storybook, preview, folder. The folder is
-// on nearly every row, so putting it last anchors the cell's right-hand edge and keeps the
-// trailing trim from firing; the Storybook is the rarest, so its empty column falls on the
-// left where it costs nothing to look at. The alternative — grouping the two http links
-// together — spreads the gaps through the middle of the cell instead, which reads as ragged
-// down a band (§18).
+// Order is by how often a row has one, rarest first — Storybook, preview, folder — with the pull
+// request outside that run at the far right. The folder is on nearly every row, so ending the
+// local run with it keeps the trailing trim from firing; the Storybook is the rarest, so its empty
+// column falls on the left where it costs nothing to look at.
+//
+// The PR sits beyond all of them because it is the only one that does not point at this machine.
+// The first three are a port, a port and a directory; ⧭ is github.com. Grouping by locality is
+// why it is last rather than where its frequency would put it (§18).
 //
 // Green for the live thing and cyan for the editor, matched in measured contrast so neither
 // dominates the other (see linkPreview/linkFolder). Colour is what separates the two glyphs
 // at a glance; shape is what separates them when it is not read. Neither is the accent and
 // neither is dim: these are affordances rather than data, and exactly one element in the
-// frame is allowed to shout (§6). Under cmux the terminal underlines them on hover, which is
-// what makes them findable without a legend line promising a click the reader cannot see.
+// frame is allowed to shout (§6). Under cmux the terminal underlines them on hover with no
+// modifier — board does not enable mouse reporting, so Ghostty evaluates links locally — which
+// is what makes them findable without a legend line. Note that *opening* one is ⌘-click and not
+// click: Ghostty wants the ctrl/super chord held at press so a text selection cannot fire a
+// link. That half is a platform convention the frame cannot teach, so the README says it (§18).
 func actionCell(r board.Row, scheme string) string {
-	storybook, preview, folder := " ", " ", " "
-	if r.Preview != "" {
-		preview = link(r.Preview, fg(linkPreview, previewGlyph))
+	slots := []string{
+		mark(r.Storybook != "", linkStorybook, storybookGlyph),
+		mark(r.Preview != "", linkPreview, previewGlyph),
+		mark(editorURL(scheme, r.Folder) != "", linkFolder, folderGlyph),
+		"",
 	}
-	if r.Storybook != "" {
-		storybook = link(r.Storybook, fg(linkStorybook, storybookGlyph))
+	if r.PR != "" {
+		slots[3] = prMark(r.PRState)
+	} else {
+		slots[3] = fg(linkAbsent, absentGlyph)
 	}
-	if url := editorURL(scheme, r.Folder); url != "" {
-		folder = link(url, fg(linkFolder, folderGlyph))
+	// A row with nothing to point at gets no cell at all, rather than four placeholders. The
+	// placeholder exists so a *partly* filled cell reads as sparse instead of broken; on a row with
+	// nothing it would be four marks saying nothing, on every filler row and every todo (§9.45).
+	links := []string{r.Storybook, r.Preview, editorURL(scheme, r.Folder), r.PR}
+	any := false
+	for _, url := range links {
+		if url != "" {
+			any = true
+		}
 	}
-	// Right-trimmed because nothing follows it on the line: a row whose only link is the
-	// Storybook would otherwise end in four columns of padding.
-	return strings.TrimRight(storybook+" "+preview+" "+folder, " ")
+	if !any {
+		return ""
+	}
+	for i, url := range links {
+		if url != "" {
+			slots[i] = link(url, slots[i])
+		}
+	}
+	// No trimming: every populated cell is the full width now, which is the whole point — the
+	// glyphs line up down the band and the cell has one silhouette.
+	return strings.Join(slots, strings.Repeat(" ", actionsSpace))
+}
+
+// mark is one slot's glyph, painted for what it is or for what it is not.
+func mark(present bool, colour, glyph string) string {
+	if present {
+		return fg(colour, glyph)
+	}
+	return fg(linkAbsent, absentGlyph)
+}
+
+// prMark paints the pull-request glyph for the state cmux found it in. Three readings, and the
+// difference is what the glyph is for: an open pull request is something to go and look at, a
+// merged one is context, and a closed one is a branch somebody abandoned (§18).
+//
+// Shape carries the first distinction and colour the second, so neither has to be read alone:
+// hollow while it is still a request, filled once it has landed, and red when it landed nowhere.
+// An unknown state — cmux gaining a fourth — draws as open rather than not at all, because a
+// glyph board cannot classify is still a pull request worth reaching.
+func prMark(state string) string {
+	switch state {
+	case "merged":
+		return fg(linkPR, prMergedGlyph)
+	case "closed":
+		return fg(linkPRClosed, prGlyph)
+	default:
+		return fg(linkPR, prGlyph)
+	}
 }

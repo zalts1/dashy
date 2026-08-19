@@ -122,3 +122,18 @@ func TestReadKeysStreamsEveryKeystrokeInAChunk(t *testing.T) {
 		t.Errorf("keys = %v, want the backspace and the enter last", got)
 	}
 }
+
+// `?` is help, and it is the one key in the map that is not a letter — so the one with no
+// Hebrew twin, since the glyph is the same wherever it can be typed at all (§10.8, §9.38).
+func TestHelpKey(t *testing.T) {
+	if got := command('?'); got != keyHelp {
+		t.Errorf("command('?') = %v, want keyHelp", got)
+	}
+	// It still carries its text, because inside the capture mode it is a character: a todo may
+	// legitimately contain a question mark, and which reading applies is the loop's decision
+	// rather than the decoder's (§12).
+	evs := decode("?")
+	if len(evs) != 1 || evs[0].text != "?" || evs[0].k != keyHelp {
+		t.Errorf(`decode("?") = %+v, want one event carrying both readings`, evs)
+	}
+}

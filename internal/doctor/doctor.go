@@ -85,6 +85,16 @@ type Report struct {
 	Editor      string
 	EditorFound bool
 
+	// The pull requests cmux has correlated: PRs is how many of the fleet's tabs have one, Open
+	// how many of those still want something done about them. Reported only when there is one,
+	// the same exception rule the Storybook clause follows (§9.13).
+	PRs     int
+	OpenPRs int
+	// LinksInCmux is where a ⌘-click lands: a cmux browser tab, or the system browser. cmux's
+	// preference, never board's — reported because "why did that open there" has no other answer
+	// in board's output (§9.42).
+	LinksInCmux bool
+
 	Hooks    []string // events with board's notify hook wired up
 	HooksErr error    // settings.json unreadable — the state install-hooks refuses on
 
@@ -128,6 +138,25 @@ func Gather() Report {
 
 	ed := editor.Gather(st.Config.Editor, config.Path())
 
+	// The same read board's frame makes, over the workspaces cmux knows about.
+	wsIDs := map[string]bool{}
+	for _, t := range titles {
+		if t.WorkspaceID != "" {
+			wsIDs[t.WorkspaceID] = true
+		}
+	}
+	ids := make([]string, 0, len(wsIDs))
+	for id := range wsIDs {
+		ids = append(ids, id)
+	}
+	pulls := cmux.PullRequests(ids)
+	openPRs := 0
+	for _, pr := range pulls {
+		if pr.Open() {
+			openPRs++
+		}
+	}
+
 	makiHooked, makiManifest, makiHooksErr := hooks.MakiInstalled()
 
 	spans := map[string]bool{}
@@ -159,6 +188,9 @@ func Gather() Report {
 		NoPortless:     noPortless,
 		Editor:         ed.Chosen.Name,
 		EditorFound:    ed.Installed[ed.Chosen.Name],
+		PRs:            len(pulls),
+		OpenPRs:        openPRs,
+		LinksInCmux:    cmux.OpensLinksInternally(),
 		Hooks:          installed,
 		HooksErr:       hooksErr,
 		MakiHooked:     makiHooked,
@@ -206,7 +238,7 @@ func Format(r Report) string {
 	// halves are stated in those terms. It is also six characters, which is what keeps the
 	// answer column where version.LabelWidth puts it — widening a documented constant to
 	// fit a label is the tail wagging the dog (§13).
-	row("links", previewRow(r)+storybookRow(r)+editorRow(r))
+	row("links", previewRow(r)+storybookRow(r)+editorRow(r)+prRow(r)+browserRow(r))
 
 	claudeHooks, claudeOK := "not installed", false
 	switch {
@@ -304,6 +336,29 @@ func storybookRow(r Report) string {
 	default:
 		return fmt.Sprintf(" · %d %s", r.Storybooks, plural(r.Storybooks, "storybook"))
 	}
+}
+
+// prRow is the pull-request clause, silent when the fleet's tabs have none — the same exception
+// rule the Storybook clause follows, since board asks on every tick whether or not anybody is
+// using pull requests (§9.13).
+//
+// Both numbers, because they are different facts: how many tabs cmux found a pull request for, and
+// how many of those are still open. A fleet of merged PRs is a fleet with nothing to do.
+func prRow(r Report) string {
+	if r.PRs == 0 {
+		return ""
+	}
+	return fmt.Sprintf(" · %d %s, %d open", r.PRs, plural(r.PRs, "pr"), r.OpenPRs)
+}
+
+// browserRow says where a ⌘-click lands. It is cmux's preference and board only reports it —
+// but it is reported always, because it is the answer to a question every reader of the links
+// eventually asks and board's output is otherwise silent on it (§9.42).
+func browserRow(r Report) string {
+	if r.LinksInCmux {
+		return " · cmux browser"
+	}
+	return " · system browser"
 }
 
 // makiRoster is the maki half of the roster row: what the two reads found, or nothing at

@@ -46,7 +46,7 @@ func Table(f board.Fleet, threshold time.Duration) string {
 		fmt.Fprintf(&b, "%s\n\n", f.Trouble)
 	}
 	fmt.Fprintf(&b, "%s %s %s %7s\n",
-		pad("STATE", colState), pad("LABEL", colLabel), pad("WORKSPACE", colWorkspace), "IDLE")
+		pad("STATE", colState), pad("LABEL", colLabel), pad(wsHeader, colWorkspace), "IDLE")
 	var running, todos int
 	for _, r := range f.Rows {
 		switch r.Rank {
@@ -57,7 +57,7 @@ func Table(f board.Fleet, threshold time.Duration) string {
 		}
 		state := r.State
 		if r.Stale {
-			state += " ⚠"
+			state += " " + staleGlyph
 		}
 		// A todo's age is a lifetime, not a gap, on this surface as much as in the frame.
 		when := humanize(r.Idle)
@@ -65,7 +65,7 @@ func Table(f board.Fleet, threshold time.Duration) string {
 			when = since(r.Idle)
 		}
 		fmt.Fprintf(&b, "%s %s %s %7s\n",
-			pad(state, colState), pad(r.Label, colLabel), pad(r.Workspace, colWorkspace), when)
+			pad(state, colState), pad(r.Label, colLabel), pad(r.Where(), colWorkspace), when)
 	}
 	// Sessions only: a todo is not a session, and folding the two together would report
 	// a fleet larger than the one running (§12). The cell appears only when non-zero,

@@ -27,6 +27,10 @@ const (
 )
 
 func TestPaletteContrast(t *testing.T) {
+	// linkAbsent is absent deliberately too, and asserted the other way round below: it is a
+	// placeholder whose whole job is to be sub-legible, so holding it to the floor would break the
+	// thing it is for (§9.45).
+	//
 	// statusCritical is absent deliberately: bare #d03b3b measures 2.91 and is the finding
 	// §9.4 records, which is why it may only ever appear as a filled badge with white text.
 	// A test that let it through here would be asserting the opposite of the finding.
@@ -39,6 +43,8 @@ func TestPaletteContrast(t *testing.T) {
 		"linkPreview":   linkPreview,
 		"linkFolder":    linkFolder,
 		"linkStorybook": linkStorybook,
+		"linkPR":        linkPR,
+		"linkPRClosed":  linkPRClosed,
 	}
 	for name, hex := range values {
 		for _, bg := range []string{bgLightest, bgDarkest} {
@@ -67,6 +73,16 @@ func TestIdleRampIsOrdinal(t *testing.T) {
 				i-1, i, step, rampStep)
 		}
 	}
+	// The placeholder, asserted as staying *under* the floor. Written as a test rather than a
+	// comment because the obvious "fix" on reading the contrast table is to raise it, and raising it
+	// is what would make it compete with the marks that mean something (§9.45).
+	for _, bg := range []string{bgLightest, bgDarkest} {
+		if r := contrast(linkAbsent, bg); r >= inkFloor {
+			t.Errorf("linkAbsent measures %.2f against %s — at or above the floor %.2f, so it is "+
+				"legible enough to compete with the real glyphs", r, bg, inkFloor)
+		}
+	}
+
 	// And the badge's own guarantee, which is what makes it theme-independent: white on its
 	// fill, measured against the fill rather than against the terminal.
 	if r := contrast(inkPrimary, statusCritical); r < 4.5 {
@@ -79,8 +95,16 @@ func TestIdleRampIsOrdinal(t *testing.T) {
 // the match is the thing worth pinning — and the pink was the value that made this hard, so
 // it is the one this test is really guarding (§9.36).
 func TestLinkGlyphColoursAreMatched(t *testing.T) {
+	// The four *slots*, which is the rule: these are the colours the eye compares side by side in
+	// one cell, and a mark heavier than its neighbours reads as the only one that matters.
+	//
+	// linkPRClosed is deliberately not here. Open, merged and closed are alternatives — exactly
+	// one is ever on a row — so nothing compares them to each other, and holding a red to this
+	// band would make it a pale salmon nobody reads as red (§9.43). It is held to the floor by
+	// TestPaletteContrast instead.
 	set := map[string]string{
-		"linkPreview": linkPreview, "linkFolder": linkFolder, "linkStorybook": linkStorybook,
+		"linkPreview": linkPreview, "linkFolder": linkFolder,
+		"linkStorybook": linkStorybook, "linkPR": linkPR,
 	}
 	for _, bg := range []string{bgLightest, bgDarkest} {
 		for an, a := range set {
@@ -106,6 +130,7 @@ func TestEachGlyphGetsItsOwnColour(t *testing.T) {
 		"preview":   fg(linkPreview, previewGlyph),
 		"storybook": fg(linkStorybook, storybookGlyph),
 		"folder":    fg(linkFolder, folderGlyph),
+		"pr":        fg(linkPR, prGlyph), // K-5's is open, so the hollow mark
 	} {
 		if !strings.Contains(cell, want) {
 			t.Errorf("the %s glyph is not painted its own colour:\n%q", name, cell)

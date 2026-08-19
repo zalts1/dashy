@@ -27,3 +27,8 @@ func Output(bin string, args ...string) ([]byte, error) {
 		"CMUX_SURFACE_ID=", "CMUX_WORKSPACE_ID=", "CMUX_TAB_ID=", "CMUX_PANEL_ID=")
 	return c.Output()
 }
+
+// Look reports whether a binary is on PATH, without running it. exec.LookPath by another name,
+// wrapped here so callers do not import os/exec for one question and so there is still one place
+// that knows how board touches the machine.
+func Look(bin string) (string, error) { return exec.LookPath(bin) }

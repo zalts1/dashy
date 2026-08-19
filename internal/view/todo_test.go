@@ -82,7 +82,7 @@ func TestTodoBandCollapsesToItsOwnFloorAfterQuiet(t *testing.T) {
 	f := fixture()
 	for i := range 20 {
 		f.Rows = append(f.Rows, board.Row{Key: fmt.Sprintf("K-F%d", i), State: "done",
-			Label: "filler", Workspace: "W", Surface: "S-F",
+			Label: "filler", Repo: "W", Surface: "S-F",
 			Idle: time.Duration(20-i) * time.Hour, Rank: board.RankQuiet})
 	}
 	f = withTodos(f, "t-one", "t-two", "t-three", "t-four", "t-five", "t-six")
@@ -166,7 +166,7 @@ func TestTodosSurviveTheCollapse(t *testing.T) {
 	f := fixture()
 	for i := range 30 {
 		f.Rows = append(f.Rows, board.Row{Key: fmt.Sprintf("K-F%d", i), State: "done",
-			Label: "filler", Workspace: "W", Surface: "S-F",
+			Label: "filler", Repo: "W", Surface: "S-F",
 			Idle: time.Duration(30-i) * time.Hour, Rank: board.RankQuiet})
 	}
 	out := Frame(withTodos(f, "reply to the questionnaire", "ACME csv export"), screen(24, 110), UI{})

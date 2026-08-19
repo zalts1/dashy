@@ -12,18 +12,18 @@ The same fleet once, in plain text, for a pipe or a bug report:
 
 ```
 $ board
-STATE        LABEL                                        WORKSPACE            IDLE
-blocked → ⚠  merge app#1497 before branching              APP                 3h00m
-done ⚠       rotate the staging credentials               OPS                 3d02h
-done ⚠       answer the ACME security questionnaire       DOCS                1d04h
-done ⚠       backfill the events table                    DATA                7h20m
-done ⚠       hunt the flaky payment test                  background          5h00m
-done ⚠       fold the quiet band                          TOOLS               4h05m
-done ⚠       Review pipeline PR #541                      REVIEWS             2h48m
-done ⚠       ship the pricing page copy                   WEB                   55m
-done         bump the staging image                       INFRA                 26m
-done         migrate auth handlers to v2                  AUTH                   9m
-running      build the csv export endpoint                API                    0m
+STATE        LABEL                                        REPO                 IDLE
+blocked → ⧗  merge app#1497 before branching              app                 3h00m
+done         migrate auth handlers to v2                  auth                   9m
+done         bump the staging image                       infra                 26m
+done ⧗       ship the pricing page copy                   web                   55m
+done ⧗       Review pipeline PR #541                      reviews             2h48m
+done ⧗       fold the quiet band                          tools               4h05m
+done ⧗       hunt the flaky payment test                  background          5h00m
+done ⧗       backfill the events table                    data                7h20m
+done ⧗       answer the ACME security questionnaire       docs -> acme-que…   1d04h
+done ⧗       rotate the staging credentials               ops                 3d02h
+running      build the csv export endpoint                api                    0m
 todo         reply to the ACME csv export request                           12d ago
 todo         book the quarterly review                                       1d ago
 
@@ -57,10 +57,11 @@ so `board watch > frame.txt` works.
 Inside `board watch`: `↑`/`↓` (or `k`/`j`) select a row, `Enter` focuses that
 session's cmux tab **and leaves board running**, `a` adds a todo, `t` jumps to the top
 of the list, `d` finishes the selected one, `z` folds the quiet band to its count,
-`Esc` clears, `q` or `Ctrl-C` exits. That is the whole keymap — no
+`?` shows the legend, `Esc` clears, `q` or `Ctrl-C` exits. That is the whole keymap — no
 sorting, no filtering.
 
-`z` is the one thing that changes what the frame shows rather than where the cursor is.
+`z` and `?` are the two keys that change what the frame shows rather than where the cursor is;
+`?` only swaps the bottom line, so the fleet above it is untouched.
 QUIET starts **open**; folded, it keeps its header and its count — `QUIET · 13 ·
 collapsed` — so the backlog can be out of the way without being out of sight, and the
 rows it gives back go to the bands where something is happening. Folded rows are not
@@ -78,7 +79,7 @@ than a paused tab. `Ctrl-C` still exits from inside the prompt.
 
 When QUIET does not fit, the band ends with `+N quiet`. **That is a count, not a
 control** — nothing expands a band. To read a hidden row, press `↓` past the last
-visible one (it walks into the collapsed rows one at a time, rottenest first) or make
+visible one (it walks into the collapsed rows one at a time, oldest first) or make
 the tab taller. Rows with no cmux tab can be selected and read too; `Enter` on one
 says there is nowhere to jump.
 
@@ -95,31 +96,70 @@ after 10s of no keypress so the tab always returns to being ambient.
 | `running` | working | `status: busy` | `working` |
 | `done` | finished its turn, unnoticed | everything else | `idle` |
 
-`⚠` marks a quiet session past the idle threshold (default 45m).
+Rows are ordered **most recently touched first** within a band, so the top of QUIET is what you were
+last doing. Todos are the exception and stay oldest-first: a session's idle time is a gap that
+resets, a todo's age is a lifetime that only grows, so an old todo is a reproach and belongs at the
+top of its own list.
+
+`⧗` marks a quiet session past the idle threshold (default 45m) — it sits right after the state
+mark, so `○ ⧗` reads as "quiet, and has been for a while" in one glance. An hourglass rather than
+a warning triangle: a session nobody has looked at for three hours is not *wrong*, it is
+**waiting**.
 
 Both agents land on the same three words, and **the screen does not say which agent a row
 belongs to.** The action is the same either way — `Enter` focuses the tab — so a column
 repeating the agent on every row would cost width and answer a question you do not have.
 `board doctor` counts the two rosters separately, which is where the difference matters.
 
-## Three links per row — `⧆`, `⧇` and `⧉`
+## Four links per row — `⧆`, `⧇`, `⧉` and `⧭`
 
-At the right-hand end of a row, `board watch` puts up to three clickable glyphs:
+At the right-hand end of a row, `board watch` puts up to four clickable glyphs:
 
-    ○ migrate auth handlers to v2   ▇▇▇       9m  AUTH        ⧇ ⧉
+    ○ migrate auth handlers to v2   ▇▇▇       9m  AUTH        ⧇ ⧉ ⧬
     ○ ship the component library    ▇▇        4m  UI        ⧆ ⧇ ⧉
     ○ backfill the events table     ▇▇▇▇   7h20m  DATA          ⧉
 
 - **`⧆` pink** — a **Storybook** listening in the session's worktree
 - **`⧇` green** — the local **preview** serving that branch
 - **`⧉` cyan** — its **folder**, the worktree, opened in your editor to see the branch's diff
+- **`⧬` blue** — the **pull request** that branch has open (`⧭` filled once merged, red if closed)
 
-They are ordered by how often a row has one, rarest first, so the folder anchors the right
-edge and the gaps fall on the left.
+The first three are ordered by how often a row has one, rarest first, so the folder anchors that
+run and the gaps fall on the left. `⧭` sits beyond all of them because it is the only one that does
+not point at this machine.
 
-Click them; they are terminal hyperlinks, so cmux opens the http ones in a browser tab beside
-the fleet and hands the folder to your editor. **board itself opens nothing** — it only says
-where the three things are.
+**⌘-click** them — hold Command and click. They are terminal hyperlinks, so cmux opens the http
+ones in a browser tab beside the fleet and hands the folder to your editor. **board itself opens
+nothing** — it only says where the three things are.
+
+A plain click does nothing, and that is Ghostty's rule rather than board's: a link fires only
+with the ctrl/super chord held, so selecting text over a row can never open something. Hovering
+does underline the glyph without any modifier, which is how you can tell a row has a live link
+before you reach for ⌘ — and cmux shows you the URL it points at while you hover, which names
+the destination more exactly than the glyph can.
+
+The frame says so too. The bottom line carries `⌘-click opens` whenever any row has a link, and
+**`?` swaps that line for the legend** — the idle scale's rungs, and each glyph by name:
+
+    ▇ 1h  ▇ 3h  ▇ 12h  ▇ 2d  ▇ 7d   ⧗ quiet a while   ⧆ storybook  ⧇ preview  ⧉ folder  ⧬ pr  ⧭ merged   ⌘-click   esc
+
+Rows are spaced out with a blank line between them whenever the frame fits the tab that way, and
+drawn compact when it does not — air is worth having, but never at the price of a row you wanted to
+see. If you want the *terminal's* line height taller as well, that is Ghostty's setting rather than
+board's: `adjust-cell-height = 30%` in `~/.config/ghostty/config`.
+
+`?` again or `Esc` puts the keys back. It is the same line either way, so the frame never changes
+height, and the refresh keeps running while you read it. On a narrow tab it sheds in order — the
+scale's rungs first, then the ⌘-click reminder — rather than clipping, because the glyph meanings
+are what you opened it for.
+
+**Where a ⌘-click lands is cmux's decision, not board's.** An http link opens in a browser tab
+inside cmux by default. To use your own browser instead:
+
+    defaults write com.cmuxterm.app browserOpenTerminalLinksInCmuxBrowser -bool false
+
+board reports which way it is set on `board doctor`'s `links` row and never writes it — silently
+reconfiguring another application is not something a reporting tool should do.
 
 Both are properties of the same thing, the **git worktree** the session is in. A session in
 `.claude/worktrees/csv-export` gets that worktree's folder and that branch's preview; one in
@@ -156,6 +196,31 @@ TLS is one you have put behind portless, and it shows up as `⧇` instead.
 
 Nothing to install and nothing to configure — run `npm run storybook` and the glyph appears on
 the matching row within a tick.
+
+### `⧬` — the pull request
+
+Nothing to install and nothing to configure: **cmux has already worked this out.** It polls GitHub
+and shows a badge per tab in its sidebar, and board reads the same badge — so no network request of
+board's own, no credential, no `gh`, no config key.
+
+The state comes with it, and the three read differently:
+
+| glyph | means |
+|---|---|
+| `⧬` blue, hollow | **open** — somebody still has to do something about it |
+| `⧭` blue, filled | **merged** — it landed; the link is context now |
+| `⧬` red | **closed** — a branch somebody abandoned |
+
+A slot the row has nothing for shows `⧅` in a very faint grey, so a cell with two of its four links
+reads as sparse rather than broken. It is not clickable, and a row with no links at all shows no
+cell.
+
+Shape carries *has it landed* and colour carries *did it land anywhere*, so missing one cue still
+leaves the other. A draft shows as open: GitHub keeps draft-ness in a separate field that cmux does
+not read (`DESIGN.md` §10.13).
+
+It is keyed by tab, not by directory, because that is the question cmux answers — so two sessions
+in one tab share its pull request, correctly, and a background agent with no tab has none.
 
 ### `⧉` — the folder, in your editor
 
@@ -229,8 +294,11 @@ There is no undo: the header reports the text it removed, so a mis-key costs one
 of retyping.
 
 Claude Code rows come from `claude agents --json`, which knows every live session. cmux
-supplies tab titles, workspace names and the idle clock, joined on pid. Background agents
-(`claude --bg`) appear with `background` in the workspace column — they have no tab,
+supplies tab titles, workspace names and the idle clock, joined on pid. The location column is
+git's rather than cmux's — the repository, and the worktree inside it in green when the session
+is in one — because cmux names a workspace per agent task, so its title tends to repeat the row's
+own label. Background agents
+(`claude --bg`) appear with `background` in the location column — they have no tab,
 so they cannot be jumped to, and their label is the open question Claude Code
 records for them.
 
@@ -335,7 +403,7 @@ which says how it was built rather than hiding it.
     maki   0.4.9
     roster 16 claude sessions · 3 maki sessions in 2 tabs
     tabs   22 tabs in 7 workspaces
-    links  2 portless routes · 1 storybook · cursor
+    links  2 portless routes · 1 storybook · vscode · 3 prs, 1 open · cmux browser
     hooks  Stop, Notification · maki init.lua
     config /Users/you/.board.json
     notify off — set notify_cmd to push

@@ -17,14 +17,14 @@ func wideFleet() board.Fleet {
 	f := board.Fleet{Workspaces: 3, Blocked: 1, Stale: 1, Oldest: 52 * 24 * time.Hour}
 	f.Rows = []board.Row{
 		{Label: "decide: ignore noise, guard hook in config, or investigate cmux settings?",
-			Workspace: "platform-migration", Surface: "S-BLK", Idle: 52 * 24 * time.Hour,
+			Repo: "platform-migration", Surface: "S-BLK", Idle: 52 * 24 * time.Hour,
 			Rank: board.RankBlocked, Stale: true},
-		{Label: "short", Workspace: "background", Surface: "S-RUN", Rank: board.RankWorking},
-		{Label: strings.Repeat("x", 140), Workspace: strings.Repeat("w", 60),
+		{Label: "short", Repo: "background", Surface: "S-RUN", Rank: board.RankWorking},
+		{Label: strings.Repeat("x", 140), Repo: strings.Repeat("w", 60),
 			Surface: "S-OLD", Idle: 50 * time.Hour, Rank: board.RankQuiet, Stale: true},
 	}
 	for i := 0; i < 12; i++ {
-		f.Rows = append(f.Rows, board.Row{Label: "filler", Workspace: "platform-migration",
+		f.Rows = append(f.Rows, board.Row{Label: "filler", Repo: "platform-migration",
 			Surface: "S-F", Idle: time.Duration(i) * time.Hour, Rank: board.RankQuiet})
 	}
 	return f
@@ -72,7 +72,7 @@ func TestResizeKeepsTheColumnsAligned(t *testing.T) {
 		}
 		// The whole line has to fit by construction, not by the clamp catching it:
 		// the clamp is a backstop for absurd widths, not part of the layout.
-		if w := rowChrome(barW) + labelW + tailW; w > cols {
+		if w := rowChrome(barW, gutterFor(f)) + labelW + tailW; w > cols {
 			t.Errorf("cols=%d: widest row is %d by arithmetic, %d too many", cols, w, w-cols)
 		}
 	}
@@ -82,8 +82,8 @@ func TestResizeKeepsTheColumnsAligned(t *testing.T) {
 	if labelW != minLabelW {
 		t.Errorf("label column = %d at 64 cols, want the floor %d", labelW, minLabelW)
 	}
-	if rowChrome(barW)+labelW+tailW > 64 {
-		t.Errorf("tail did not give way: %d + %d + %d > 64", rowChrome(barW), labelW, tailW)
+	if rowChrome(barW, gutterFor(f))+labelW+tailW > 64 {
+		t.Errorf("tail did not give way: %d + %d + %d > 64", rowChrome(barW, gutterFor(f)), labelW, tailW)
 	}
 }
 

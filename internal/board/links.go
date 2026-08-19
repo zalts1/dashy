@@ -52,3 +52,23 @@ func sharedPath(a, b string) int {
 	}
 	return n
 }
+
+// where resolves a session's directory to the two names the location column prints: the
+// repository, and the worktree inside it when the session is in a linked one.
+//
+// Both come from maps Collect filled, so this stays pure and the rule is pinned by a fixture
+// rather than by a real repository on the machine running the tests (§11). An unresolvable
+// directory answers nothing at all: an empty column is honest, and a guessed name is not.
+func where(s Snapshot, cwd string) (repo, tree string) {
+	t := s.Trees[cwd]
+	if t == "" {
+		return "", ""
+	}
+	r := s.Repos[t]
+	if r == "" || r == t {
+		// A main checkout, or a directory in no repository: the worktree is the repository, and
+		// naming it in both halves would be the duplication this column exists to remove.
+		return filepath.Base(t), ""
+	}
+	return filepath.Base(r), filepath.Base(t)
+}
