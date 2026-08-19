@@ -129,16 +129,7 @@ func visibleWidth(s string) int {
 
 func filled(s string) int { return strings.Count(s, "▇") }
 
-// luminance is the relative luminance used by the contrast checks.
-func luminance(hex string) float64 {
-	r, g, b := rgb(hex)
-	lin := func(c int) float64 {
-		v := float64(c) / 255
-		if v <= 0.04045 {
-			return v / 12.92
-		}
-		// Approximation is fine: this test asserts ordering, not exact ratios.
-		return ((v + 0.055) / 1.055) * ((v + 0.055) / 1.055)
-	}
-	return 0.2126*lin(r) + 0.7152*lin(g) + 0.0722*lin(b)
-}
+// luminance lives in palette_test.go, which needs the exact formula rather than the squared
+// approximation this file used to carry: the ordinal checks below only need monotonicity, and
+// an exact formula is monotonic too, so one implementation serves both and §6's table can be
+// checked against the numbers it was actually built from (§9.36).

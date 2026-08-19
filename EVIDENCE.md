@@ -52,6 +52,8 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.33 | cmux counts a surface's whole process tree, so "a maki with no report" is not the same as "no hook" | `board/build.go`, `DESIGN.md` §14, §17 |
 | 9.34 | A hyperlink is an OSC, not an SGR — one `m` in a URL cost 16 phantom columns, and a clamped link made the screen below it clickable | `view/format.go`, `view/link.go`, `host/worktree.go`, `preview/`, `DESIGN.md` §18 |
 | 9.35 | The click is unobservable, so "ask on first use" is unbuildable — the chooser had to become a command | `editor/`, `cmd/board/commands.go`, `DESIGN.md` §18, §10.10 |
+| 9.36 | Colour was a rule enforced by memory; a test now measures it, and found the ramp is ordinal rather than legible and pink cannot reach the set's weight | `view/palette.go`, `view/palette_test.go`, `view/link.go`, `DESIGN.md` §6, §18 |
+| 9.37 | cmux does correlate the PR and board cannot reach it: exposed per-tab, and `top --json` names no tabs | `preview/`, `DESIGN.md` §10.12, §18 |
 
 ---
 
@@ -1199,3 +1201,101 @@ unless the new name sorts first, and `doctor`'s `links` row names the choice eit
 disagree about". It went on `Screen` instead, beside `Threshold` — read from the same file,
 about the machine rather than about the fleet. `internal/board` never learned what an editor
 is, and `Table` cannot disagree with `Frame` about something it has no access to.
+
+
+### 9.36 Colour was validated by whoever remembered to (2026-08-19)
+
+**Believed:** §6 says *"colour is validated, never eyeballed — do not add a colour without
+re-validating"*, and `CLAUDE.md` lists it as a hard rule. Two years of values cleared that bar.
+
+**Found:** nothing enforced it. The rule lived in prose, the numbers lived in a markdown table,
+and the only thing standing between the palette and an eyeballed substitution was the author
+remembering the rule at the moment of adding a colour. Adding three link colours was the first
+time anything was added since the table was written, and the honest thing was to make the check
+executable: `TestPaletteContrast` computes the WCAG ratio for every value against both
+documented backgrounds.
+
+It found two things in the palette that was already there.
+
+**`inkMuted` is the floor, exactly.** It measures 3.8996, so a floor of 3.90 fails on itself.
+Trivial, and worth stating because it means the floor is not an arbitrary round number: it is
+"no dimmer than the dimmest thing that was already argued for", and the value that defines it
+is one of the values it constrains.
+
+**The idle ramp is ordinal, not legible, and that is the design.** Its low rungs are far under
+any text-contrast bar — `#256abf` measures **2.59** against `#282c34` and 3.80 against
+`#040404`, below even the rejected bare red of §9.4. The first instinct is that this is a
+defect. It is not: §6 validates the ramp for *ordinality*, adjacent rungs clear ΔL 0.094
+against a 0.06 minimum, and a bar you can barely see is a session nobody needs to look at. Dim
+means fresh. The numbers are now written into the test that could have been used to "fix" them.
+
+A smaller thing fell out: `scale_test.go` carried its own `luminance` using a squared
+approximation, correct for the ordering it asserted and not for a ratio. There is one exact
+formula now, shared, so §6's table can be checked against the arithmetic that produced it.
+
+**Then the glyphs, which are the part no amount of measuring settles.** The preview link began
+as `↗`, which is the obvious mark and measured fine and was simply *too light* beside `⧉` — a
+thin diagonal stroke next to a boxy double square. Four heavier arrows were tried and none of
+them read as a set with the folder glyph either. What worked was abandoning the arrow: `⧫`, a
+solid lozenge, and later `⧆` for the Storybook, both from `⧉`'s own Unicode block
+(Miscellaneous Mathematical Symbols-B). **One block is one font's design family**, which is why
+the three now hold their relative weight; picking by meaning across three blocks does not.
+
+**Pink is the value that justifies the whole test.** Asked for a pink Storybook glyph matched to
+the other two (6.98 and 7.04), and it does not exist at the obvious saturations: `#e64980`
+measures 3.75, `#f783ac` 5.86, `#f06595` 4.67 — pink approaches this band from far below. Going
+pale overshoots instead: `#ffa8d0` is 7.84, `#f9a8d4` 7.72. A sweep of pink hues at 35–40%
+saturation found `#ff99bb` at **7.02**, which is where a legible pink crosses the set's own
+weight. Eyeballed, any of those seven would have looked "pink and about right", and the cell
+would have had one mark quietly louder or quieter than the others.
+
+**Also, a stale comment shipped.** Two multi-line comment replacements in `view/link.go`
+silently failed to apply while the constants beside them changed, so the committed file
+explained `↗` and `▤` — glyphs that no longer existed — for one commit. Nothing caught it: a
+comment cannot fail a test. The lesson is narrow and worth having: when a change is *the
+comment*, read the file back rather than trusting the edit.
+
+### 9.37 cmux knows about the PR; board cannot get at it (2026-08-19)
+
+**Believed:** cmux correlates each tab to its GitHub pull request — it does, visibly, in the
+sidebar — so board could read that the way it reads tab titles and the hook clock. Enrichment
+from cmux, no network, consistent with §3.
+
+**Found: it is real, and it is out of reach.** `cmux sidebar-state` answers exactly what was
+wanted:
+
+    pr=#20 open https://github.com/zalts1/dashy/pull/20
+    pr_label=PR
+    git_branch=a-row-points-at-more-than-its-tab dirty
+    ports=none
+
+But it answers for **one tab per call**, at ~140ms, and the tab must be named with `--tab=<uuid>`
+— and **board cannot name one.** `cmux top --json` is where board gets everything it knows about
+tabs, and on this machine that tree contains no node of `kind: "tab"` at all and no `tab_id` on
+any surface; the only `tab_id` in the whole document is the caller's own panel. So there is no
+mapping from a row to a tab, and no way to enumerate tabs to search for one. `--workspace N`
+reaches only that workspace's *selected* tab, which is a fraction of the fleet.
+
+Two further facts closed the door rather than propping it open. cmux's badge is
+`SidebarPullRequestBadge{number, label, url, status, branch, isStale}` — **no review state at
+all**, so the "reviewed since your last commit" half was never available from it, whatever the
+addressing. And `~/Library/Application Support/cmux/session-*.json`, which board *can* read
+cheaply and which does carry `gitBranch` and `listeningPorts`, carries no PR: the badge lives in
+the running process.
+
+**So the PR glyphs are deferred, not built** (§10.12), and the measurements are the reason. The
+route that works is GitHub itself: one `gh api graphql --cache 3m` per worktree returns number,
+url, state, `latestReviews[].submittedAt` and the last commit's `committedDate` — everything both
+glyphs need — at **580ms cold and 30–60ms cached**, with the cache in gh's own `~/.cache/gh`. That
+would have kept two of board's documented properties intact (it still writes only
+`~/.board.json`, still runs no daemon) and broken the third: *no network of its own*. Declined for
+now on that basis alone; the cost was never the problem.
+
+*Trigger:* cmux exposing `pr` in `top --json`, or in the session file — either makes the whole
+thing free and local.
+
+**One thing this investigation did produce.** Storybook has no roster, no proxy and no state
+file, so it is found by a bounded port scan — and that scan needs the same answer the portless
+routes need: where is this pid working. Both now go through **one** `lsof` over the union of
+their pids, which is why the second source costs nothing measurable on top of the first. Two
+mechanisms, one expensive read, the same join.

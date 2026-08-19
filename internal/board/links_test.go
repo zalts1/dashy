@@ -146,3 +146,59 @@ func TestTodosHaveNoLinks(t *testing.T) {
 		}
 	}
 }
+
+// A Storybook joins on the worktree exactly as a preview does, and the two are independent:
+// a row can carry both, either, or neither. They are found by different mechanisms — a
+// portless route and a bounded port scan — and the join is the one thing they share (§18).
+func TestStorybookJoinsLikeAPreview(t *testing.T) {
+	withBoth := func(s *Snapshot) {
+		s.Trees = trees()
+		s.Previews = []preview.Route{{URL: "https://feature-a.localhost", Dir: treeA}}
+		s.Storybooks = []preview.Route{
+			{URL: "http://localhost:6006", Dir: treeA},
+			{URL: "http://localhost:6007", Dir: repo},
+		}
+	}
+
+	a := interactive()
+	a.Cwd = treeA
+	r := one(t, snap(a, withBoth))
+	if r.Preview != "https://feature-a.localhost" || r.Storybook != "http://localhost:6006" {
+		t.Errorf("worktree row: preview %q storybook %q", r.Preview, r.Storybook)
+	}
+
+	// The main checkout has a Storybook and no dev server: one glyph, not both, and not the
+	// worktree's Storybook either.
+	a.Cwd = repo
+	r = one(t, snap(a, withBoth))
+	if r.Preview != "" {
+		t.Errorf("main checkout got a worktree's preview: %q", r.Preview)
+	}
+	if r.Storybook != "http://localhost:6007" {
+		t.Errorf("main checkout storybook = %q, want the one in its own worktree", r.Storybook)
+	}
+
+	// A third worktree with nothing running in it gets neither, though both are up elsewhere
+	// in the same repository.
+	a.Cwd = treeB
+	r = one(t, snap(a, withBoth))
+	if r.Preview != "" || r.Storybook != "" {
+		t.Errorf("idle worktree got links: preview %q storybook %q", r.Preview, r.Storybook)
+	}
+}
+
+// A todo has no directory, so it has none of the three links (§12).
+func TestTodosHaveNoStorybook(t *testing.T) {
+	a := interactive()
+	a.Cwd = repo
+	s := snap(a, func(s *Snapshot) {
+		s.Trees = trees()
+		s.Storybooks = []preview.Route{{URL: "http://localhost:6006", Dir: repo}}
+		s.Todos = []config.Todo{{ID: "t1", Text: "book the quarterly review", Created: now}}
+	})
+	for _, r := range Build(s, now).Rows {
+		if r.Rank == RankTodo && r.Storybook != "" {
+			t.Errorf("todo row carries a storybook: %q", r.Storybook)
+		}
+	}
+}

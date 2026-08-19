@@ -59,7 +59,7 @@ Routing only; `DESIGN.md` §3 is why the tree is this shape.
       claude/        roster + state: `claude agents --json`, jobs, transcript mtime
       maki/          roster + state: the reports its plugin writes, plus live pids (§17)
       cmux/          tab titles, hook clock, focus — enrichment, never the roster
-      preview/       portless's routes: the local URL serving a worktree (§18)
+      preview/       local URLs for a worktree: portless routes + a Storybook port scan (§18)
       editor/        which editor a folder link opens, and `board editor` (§18)
       board/         Fleet/Row; Build = pure join, Collect = impure gather
       view/          PURE: Frame, header, layout arithmetic, Table, palette, scale
@@ -131,8 +131,12 @@ one, record why in `EVIDENCE.md` §9.
   disagree (§3).
 - Links live in the frame and not in the one-shot table: escapes do not belong in a pipe,
   and a preview hostname is derived from a branch name (§18).
-- A row points at one preview, joined on the git worktree — never on directory
-  containment, which crosses worktrees (§18, `EVIDENCE.md` §9.34).
+- A row points at one preview and one Storybook, joined on the git worktree — never on
+  directory containment, which crosses worktrees (§18, `EVIDENCE.md` §9.34).
+- The Storybook port range is closed (6006–6020) and paired with a process check: TensorBoard
+  shares the default and the increment (§18).
+- The link glyphs are one Unicode block and one matched contrast band — adding a fourth means
+  re-running the arithmetic, not picking a colour (§18, `EVIDENCE.md` §9.36).
 - The folder link's editor is chosen, not fixed: the config's `editor` name, else the first
   of `editor.Known` installed. `Known` is alphabetical **deliberately** — any other order is
   an opinion about editors (§18).

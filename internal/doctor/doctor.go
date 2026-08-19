@@ -68,6 +68,12 @@ type Report struct {
 	Previews     int
 	PreviewsSeen int
 	PreviewErr   error
+	// The Storybook half, in the same two pieces: Storybooks are the ones a row can carry,
+	// StorybooksSeen every socket found in the range. Reported only when something is
+	// listening — on a machine where nobody runs Storybook there is nothing to diagnose, and
+	// a permanent "0 storybooks" is a clause readers learn to skip (§9.13).
+	Storybooks     int
+	StorybooksSeen int
 	// NoPortless is not a fault, for the reason NoMaki is not: previews are optional and a
 	// machine without portless still gets a folder link on every row.
 	NoPortless bool
@@ -134,32 +140,34 @@ func Gather() Report {
 	_, statErr := os.Stat(config.Path())
 
 	return Report{
-		Versions:     version.Report(),
-		Sessions:     len(agents),
-		RosterErr:    rosterErr,
-		Tabs:         len(titles),
-		Workspaces:   len(spans),
-		NoCmux:       !cmux.Available(),
-		MakiProcs:    len(roster.Pids),
-		MakiReports:  len(roster.Reports),
-		MakiSessions: makiSessions,
-		MakiErr:      makiErr,
-		NoMaki:       noMaki,
-		Previews:     len(previews.Routes),
-		PreviewsSeen: previews.Listed,
-		PreviewErr:   previewErr,
-		NoPortless:   noPortless,
-		Editor:       ed.Chosen.Name,
-		EditorFound:  ed.Installed[ed.Chosen.Name],
-		Hooks:        installed,
-		HooksErr:     hooksErr,
-		MakiHooked:   makiHooked,
-		MakiManifest: makiManifest,
-		MakiHooksErr: makiHooksErr,
-		ConfigPath:   config.Path(),
-		ConfigOnDisk: statErr == nil,
-		NotifyOn:     st.Config.NotifyCmd != "",
-		NotifyCmd:    st.Config.NotifyCmd,
+		Versions:       version.Report(),
+		Sessions:       len(agents),
+		RosterErr:      rosterErr,
+		Tabs:           len(titles),
+		Workspaces:     len(spans),
+		NoCmux:         !cmux.Available(),
+		MakiProcs:      len(roster.Pids),
+		MakiReports:    len(roster.Reports),
+		MakiSessions:   makiSessions,
+		MakiErr:        makiErr,
+		NoMaki:         noMaki,
+		Previews:       len(previews.Routes),
+		PreviewsSeen:   previews.Listed,
+		Storybooks:     len(previews.Storybooks),
+		StorybooksSeen: previews.Listeners,
+		PreviewErr:     previewErr,
+		NoPortless:     noPortless,
+		Editor:         ed.Chosen.Name,
+		EditorFound:    ed.Installed[ed.Chosen.Name],
+		Hooks:          installed,
+		HooksErr:       hooksErr,
+		MakiHooked:     makiHooked,
+		MakiManifest:   makiManifest,
+		MakiHooksErr:   makiHooksErr,
+		ConfigPath:     config.Path(),
+		ConfigOnDisk:   statErr == nil,
+		NotifyOn:       st.Config.NotifyCmd != "",
+		NotifyCmd:      st.Config.NotifyCmd,
 	}
 }
 
@@ -198,7 +206,7 @@ func Format(r Report) string {
 	// halves are stated in those terms. It is also six characters, which is what keeps the
 	// answer column where version.LabelWidth puts it — widening a documented constant to
 	// fit a label is the tail wagging the dog (§13).
-	row("links", previewRow(r)+editorRow(r))
+	row("links", previewRow(r)+storybookRow(r)+editorRow(r))
 
 	claudeHooks, claudeOK := "not installed", false
 	switch {
@@ -278,6 +286,23 @@ func editorRow(r Report) string {
 		return " · " + r.Editor + ", not installed here"
 	default:
 		return " · " + r.Editor
+	}
+}
+
+// storybookRow is the Storybook clause of the `links` row, and it is silent when nothing is
+// listening in the range: board scans every tick whether or not anybody uses Storybook, and a
+// permanent "0 storybooks" would be noise on most machines (§9.13).
+func storybookRow(r Report) string {
+	switch {
+	case r.StorybooksSeen == 0:
+		return ""
+	case r.Storybooks == 0:
+		// Listening and unplaceable: the process is not inside any session's worktree, which
+		// is the whole diagnosis. Stated as both halves rather than as a conclusion.
+		return fmt.Sprintf(" · %d storybook %s outside every worktree",
+			r.StorybooksSeen, plural(r.StorybooksSeen, "port"))
+	default:
+		return fmt.Sprintf(" · %d %s", r.Storybooks, plural(r.Storybooks, "storybook"))
 	}
 }
 

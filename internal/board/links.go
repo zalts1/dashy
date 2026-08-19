@@ -3,14 +3,17 @@ package board
 import (
 	"path/filepath"
 	"strings"
+
+	"github.com/zalts1/dashy/internal/preview"
 )
 
 // The link join: which local preview belongs to which row. One concern, one file — the rule
 // below is the one that would have been wrong silently, so it is worth being able to read on
 // its own (DESIGN.md §18, EVIDENCE.md §9.34).
 
-// previewFor picks the one preview a row points at: a dev server serving the same git
-// worktree the session is working in.
+// nearest picks the one URL a row points at from a set of candidates: something serving the
+// same git worktree the session is working in. Used for both the preview and the Storybook,
+// which are found by different mechanisms and joined by the same rule.
 //
 // The worktree is the join and a path prefix is not, because Claude Code puts its
 // worktrees *inside* the main checkout. `.claude/worktrees/feature` is under the repo's
@@ -22,13 +25,13 @@ import (
 // nearest to the session's own directory wins, measured in shared leading path
 // components, and ties resolve to the first route — which arrives URL-sorted, so the
 // answer is the same on every tick rather than drifting with map order.
-func previewFor(s Snapshot, tree, cwd string) string {
+func nearest(candidates []preview.Route, trees map[string]string, tree, cwd string) string {
 	if tree == "" {
 		return ""
 	}
 	best, bestShared := "", -1
-	for _, rt := range s.Previews {
-		if s.Trees[rt.Dir] != tree {
+	for _, rt := range candidates {
+		if trees[rt.Dir] != tree {
 			continue
 		}
 		if n := sharedPath(rt.Dir, cwd); n > bestShared {

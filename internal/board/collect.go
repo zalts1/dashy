@@ -42,12 +42,12 @@ func Collect() Fleet {
 	// (§18). Its error is dropped rather than carried into Trouble — a missing preview
 	// costs one glyph on one row, and the trouble line is ordered by how much of the board
 	// a fact costs (§14). `doctor` is where this read is reported.
+	// Read unconditionally rather than behind preview.Available(): that answers for portless
+	// only, and a machine with no portless can still be running a Storybook (§18).
 	var previews preview.Roster
 	previewDone := make(chan struct{})
 	go func() {
-		if preview.Available() {
-			previews, _ = preview.Read()
-		}
+		previews, _ = preview.Read()
 		close(previewDone)
 	}()
 
@@ -78,6 +78,9 @@ func Collect() Fleet {
 	for _, rt := range previews.Routes {
 		resolve(rt.Dir)
 	}
+	for _, sb := range previews.Storybooks {
+		resolve(sb.Dir)
+	}
 
 	clock := cmux.HookClock()
 	jobs := map[string]string{}
@@ -105,18 +108,19 @@ func Collect() Fleet {
 	}
 
 	return Build(Snapshot{
-		Agents:    agents,
-		Titles:    titles,
-		Clock:     clock,
-		JobLabels: jobs,
-		Labels:    st.Labels,
-		Todos:     st.Todos,
-		Threshold: st.Threshold(),
-		Trees:     trees,
-		Previews:  previews.Routes,
-		Maki:      roster,
-		RosterErr: rosterErr,
-		MakiErr:   makiErr,
+		Agents:     agents,
+		Titles:     titles,
+		Clock:      clock,
+		JobLabels:  jobs,
+		Labels:     st.Labels,
+		Todos:      st.Todos,
+		Threshold:  st.Threshold(),
+		Trees:      trees,
+		Previews:   previews.Routes,
+		Storybooks: previews.Storybooks,
+		Maki:       roster,
+		RosterErr:  rosterErr,
+		MakiErr:    makiErr,
 		// Asked here rather than in the callers, so every entry point learns about a
 		// missing cmux from the same place and cannot word it differently (§9.26).
 		NoCmux: !cmux.Available(),

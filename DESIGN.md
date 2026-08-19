@@ -41,7 +41,7 @@ grep -n '^#\+ ' DESIGN.md        # § → line, then Read with offset/limit
 | 15 | `uninstall-hooks`: defined as install's inverse, and what it must not touch on the way | `hooks/`, anything editing `~/.claude/settings.json` or a maki `init.lua` |
 | 16 | the demo: a fixture fleet through the real join, recorded by hand | `internal/demo/`, `demo/`, the top of the README |
 | 17 | maki as the second agent: no roster command, so board installs one; two reads settle liveness | `maki/`, `hooks/maki.go`, `board/build.go` |
-| 18 | links: the two things a row points at besides its tab, joined on the worktree, opened by the terminal, and which editor answers | `preview/`, `editor/`, `host/worktree.go`, `view/link.go`, `board/build.go` |
+| 18 | links: the three things a row points at besides its tab, joined on the worktree, opened by the terminal, and which editor answers | `preview/`, `editor/`, `host/worktree.go`, `view/link.go`, `board/build.go` |
 
 ---
 
@@ -670,6 +670,40 @@ state is the one where nothing disagrees.
 `Folder`, and one of them a `Preview`, at which point the GIF shows what the prose above
 describes.
 
+### 10.12 The pull request, and the review CTA — deferred (2026-08-19)
+
+A fourth and fifth link were asked for: `⧖` to open the branch's PR, and `⧗` in its place once
+somebody has reviewed since the latest commit, which turns the glyph into a call to action.
+Both were designed and neither was built. The reason is §9.37, and it is worth reading before
+anyone tries again, because the obvious route looks open and is not.
+
+**cmux already correlates the PR** and will tell you — `pr=#20 open https://github.com/…` from
+`cmux sidebar-state`. But it answers for one tab per call, the tab has to be named with
+`--tab=<uuid>`, and **board has no tab ids**: `cmux top --json` is everything board knows about
+tabs and it contains no `kind: "tab"` node and no `tab_id` on any surface. There is no mapping
+from a row to a tab and no way to enumerate tabs to find one. cmux's badge also carries no
+review state at all, so `⧗` was never available from it whatever the addressing, and the
+session file board *can* read cheaply carries `gitBranch` and `listeningPorts` but no PR.
+
+**The route that works is GitHub.** One `gh api graphql --cache 3m` per worktree returns number,
+url, state, `latestReviews[].submittedAt` and the last commit's `committedDate` — both glyphs,
+one call — at 580ms cold and 30–60ms cached, with the cache in gh's own `~/.cache/gh`. Note what
+that does *not* cost: board would still write only `~/.board.json`, and would still run no
+daemon, because the caching and the refresh are gh's problem rather than board's. The single
+objection is the one in §2 and on the README's last line — **no network of its own** — and it is
+enough on its own. A reporting surface that quietly starts talking to github.com is a different
+tool from the one people installed.
+
+The shape it would take if built: a `github` key defaulting to false, so the property stays true
+on every machine that has not opted in, and the key is where the trade gets argued. Note also
+that "since the latest commit was **pushed**" is not measurable — GitHub's `pushedDate` is
+deprecated and usually null — so the honest comparison is against `committedDate`, which differs
+after a rebase.
+
+*Trigger:* cmux exposing `pr` in `top --json` or in its session file, which makes the whole thing
+free, local, and a read board already does. Failing that, somebody wanting it enough to accept
+the network line moving.
+
 ---
 
 ## 11. How this is verified
@@ -1108,17 +1142,21 @@ block needs instead of taking the decision (§8).
 
 ---
 
-## 18. Links — the two things a row points at besides its tab
+## 18. Links — the three things a row points at besides its tab
 
 `Enter` focuses a session's tab, and for two years that was the only place a row went.
-Two more are worth reaching, and both are properties of the same thing — the git worktree
-the session is working in:
+Three more are worth reaching, and all three are properties of the same thing — the git
+worktree the session is working in:
 
-- **the preview**, a local dev server serving that worktree, and
+- **the preview**, a local dev server serving that worktree,
+- **the Storybook**, a component workbench listening in it, and
 - **the folder**, the worktree itself, opened in an editor to read the branch's diff.
 
-They are rendered as a three-column cell at the right-hand end of the row — `↗` for the
-preview, `⧉` for the folder — and they are hyperlinks, not keys.
+They are rendered as a five-column cell at the right-hand end of the row — `⧫` green for the
+preview, `⧆` pink for the Storybook, `⧉` cyan for the folder — and they are hyperlinks, not
+keys. Order is the two running things first and the folder last: the folder is on nearly
+every row, so anchoring it at the right-hand end gives the cell a consistent edge, while the
+two http links sit together because that is what they have in common.
 
 ### The worktree is the join, and a path prefix is not
 
@@ -1159,6 +1197,30 @@ costs anything measurable: both hide behind `claude agents`, which is still the 
 
 portless is optional exactly as maki is. Without it, `Available` is false, nothing is read,
 nothing complains, and every row still carries its folder.
+
+### Storybook is found by its port, because there is nothing to ask
+
+portless writes a state file and maki writes reports. Storybook does neither: no roster
+command, no proxy registration, nothing on disk. What it has instead is a **well-known default
+and a well-known way of leaving it** — 6006, then 6007, then 6008 as each is found busy — so
+the identification is a bounded scan of that range plus the same worktree join everything else
+here uses.
+
+**The range is closed at 6020, and that is the interesting part.** TensorBoard also defaults to
+6006 and also increments, so an open-ended "6006 and up" would eventually claim one and put a
+Storybook link on a row that has no Storybook — the failure this whole section is organised
+around. Fifteen ports is more than anyone runs at once. The second half of the identification
+is the process: a JS runtime (`node`, `bun`, `deno`) by prefix, which is what separates
+Storybook from the Python thing sharing its port range.
+
+One `lsof -iTCP -sTCP:LISTEN -P` for the whole machine, not one per row. And it shares the
+expensive half with the portless read: neither a route nor a listening socket says where its
+process is *working*, so both feed **one** cwd lookup over the union of their pids. That is why
+the second source costs nothing measurable on top of the first (§9.37).
+
+`http://localhost:<port>`, not https — Storybook serves plain http. A Storybook put behind TLS
+is a Storybook put behind portless, and it arrives through the other half of this package with
+its own hostname instead.
 
 ### Hyperlinks, not keys — and this is the safety argument, not a shortcut
 
@@ -1257,6 +1319,11 @@ arithmetic and the rendering so they cannot disagree:
   and that reads as a rendering fault rather than as an absent link.
 - **Never the label's floor.** The cell comes out of the surplus the bar would otherwise
   take, after the label and the workspace column have theirs (§9.29).
+
+Two predicates decide whether the cell exists — `pointsSomewhere` for the arithmetic and
+`actionCell` for the rendering — and a test holds them to the same answer. Disagreeing either
+reserves a column nothing fills, or draws a glyph nothing reserved room for, and the second one
+wraps the frame.
 
 Colour is `inkSecondary`, already validated: these are affordances, not data, and exactly
 one element in the frame is allowed to shout (§6). The glyphs stay inside the Unicode

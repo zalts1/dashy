@@ -20,6 +20,11 @@ func linkFleet() board.Fleet {
 			{Key: "K-2", State: "done", Label: "migrate auth handlers", Workspace: "AUTH",
 				Surface: "S-2", Idle: 30 * time.Minute, Rank: board.RankQuiet,
 				Folder: "/Users/you/work/repo/.claude/worktrees/auth-v2"},
+			{Key: "K-5", State: "done", Label: "all three links", Workspace: "UI",
+				Surface: "S-5", Idle: 12 * time.Minute, Rank: board.RankQuiet,
+				Folder:    "/Users/you/work/repo",
+				Preview:   "https://ui.localhost",
+				Storybook: "http://localhost:6006"},
 			{Key: "K-3", State: "done", Label: "no directory at all", Workspace: "OPS",
 				Surface: "S-3", Idle: 90 * time.Minute, Rank: board.RankQuiet, Stale: true},
 			{Key: "K-4", State: "done", Label: "a preview and no folder", Workspace: "WEB",
@@ -28,7 +33,7 @@ func linkFleet() board.Fleet {
 			{Key: "todo:t1", State: "todo", Label: "book the quarterly review",
 				Idle: 26 * time.Hour, Rank: board.RankTodo},
 		},
-		Stale: 1, Workspaces: 4, Oldest: 90 * time.Minute, TodoCap: 10,
+		Stale: 1, Workspaces: 5, Oldest: 90 * time.Minute, TodoCap: 10,
 	}
 }
 
@@ -43,9 +48,21 @@ func frameWith(f board.Fleet, cols int, scheme string) string {
 // Each glyph carries its own destination, and a row with only one of them leaves the other
 // column empty rather than sliding into it: the two have to line up down the band, or the
 // column stops being a column.
+// byKey keeps these assertions readable as the fixture grows: a row's index is not a fact
+// worth encoding in six places.
+func byKey(t *testing.T, key string) board.Row {
+	t.Helper()
+	for _, r := range linkFleet().Rows {
+		if r.Key == key {
+			return r
+		}
+	}
+	t.Fatalf("no row %q in the fixture", key)
+	return board.Row{}
+}
+
 func TestActionCell(t *testing.T) {
-	rows := linkFleet().Rows
-	both := actionCell(rows[0], "cursor")
+	both := actionCell(byKey(t, "K-1"), "cursor")
 	if !strings.Contains(both, linkOpen+"https://api.localhost"+st) {
 		t.Errorf("preview glyph is not a link to the preview: %q", both)
 	}
@@ -56,7 +73,7 @@ func TestActionCell(t *testing.T) {
 		t.Errorf("cell with both links printed %d columns, want %d: %q", printed(both), actionsW, both)
 	}
 
-	folderOnly := actionCell(rows[1], "cursor")
+	folderOnly := actionCell(byKey(t, "K-2"), "cursor")
 	if strings.Contains(folderOnly, "https://") {
 		t.Errorf("row with no preview got a preview link: %q", folderOnly)
 	}
@@ -70,17 +87,27 @@ func TestActionCell(t *testing.T) {
 
 	// Nothing to point at is no cell at all, not an empty one — that is what keeps a row
 	// with no links byte-identical to the frame before links existed.
-	if got := actionCell(rows[2], "cursor"); got != "" {
+	if got := actionCell(byKey(t, "K-3"), "cursor"); got != "" {
 		t.Errorf("row with neither link got a cell: %q", got)
 	}
-	if got := actionCell(rows[4], "cursor"); got != "" {
+	if got := actionCell(byKey(t, "todo:t1"), "cursor"); got != "" {
 		t.Errorf("todo row got a cell: %q", got)
 	}
 
 	// The cell is the last thing on the line, so the absent second glyph is trimmed rather
 	// than spaced out: padding there would widen the frame's right edge on a row that has
 	// nothing in the column it widened for (§9.29).
-	previewOnly := actionCell(rows[3], "cursor")
+	previewOnly := actionCell(byKey(t, "K-4"), "cursor")
+	// All three, for the row that has them: the cell is exactly its width, no more.
+	if all := actionCell(byKey(t, "K-5"), "cursor"); printed(all) != actionsW {
+		t.Errorf("cell with all three printed %d columns, want %d: %q", printed(all), actionsW, all)
+	} else {
+		for _, g := range []string{previewGlyph, storybookGlyph, folderGlyph} {
+			if !strings.Contains(all, g) {
+				t.Errorf("cell with all three is missing %q: %q", g, all)
+			}
+		}
+	}
 	if printed(previewOnly) != 1 {
 		t.Errorf("preview-only cell printed %d columns, want 1: %q", printed(previewOnly), previewOnly)
 	}
@@ -94,7 +121,7 @@ func TestActionCell(t *testing.T) {
 func TestFleetWithNoLinksIsUnchanged(t *testing.T) {
 	bare := linkFleet()
 	for i := range bare.Rows {
-		bare.Rows[i].Folder, bare.Rows[i].Preview = "", ""
+		bare.Rows[i].Folder, bare.Rows[i].Preview, bare.Rows[i].Storybook = "", "", ""
 	}
 	if got := frameOf(bare, 118); strings.Contains(got, linkOpen) {
 		t.Error("a fleet with no links rendered a hyperlink")
@@ -140,7 +167,7 @@ func TestActionCellIsShedWhenNarrow(t *testing.T) {
 	// And a fleet with nothing to point at never reserves it, at any width.
 	bare := linkFleet()
 	for i := range bare.Rows {
-		bare.Rows[i].Folder, bare.Rows[i].Preview = "", ""
+		bare.Rows[i].Folder, bare.Rows[i].Preview, bare.Rows[i].Storybook = "", "", ""
 	}
 	if got := actionCols(bare.Rows, 118, true); got != 0 {
 		t.Errorf("a fleet with no links reserved %d columns", got)

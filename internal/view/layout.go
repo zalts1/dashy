@@ -30,11 +30,11 @@ const (
 	// The quiet tail never shrinks below this: a QUIET band of one row reads as a
 	// quiet fleet, which is the opposite of the truth.
 	minQuietRows = 3
-	// actionsW is the trailing link cell: two glyphs on stable columns with a space between
-	// them, so a row carrying only one of them leaves the other's column empty rather than
-	// sliding into it. Fixed at two, because a row points at exactly two things — the
-	// preview serving its worktree, and the worktree itself (§18).
-	actionsW = 3
+	// actionsW is the trailing link cell: three glyphs on stable columns with a space between
+	// each, so a row carrying only one of them leaves the others' columns empty rather than
+	// sliding into them. Three because a row points at three things — the dev server serving
+	// its worktree, the Storybook listening in it, and the worktree itself (§18).
+	actionsW = 5
 	// actionsGap separates the cell from the workspace name, which is left-aligned and
 	// truncating: one space would read as part of the name it follows.
 	actionsGap = 2
@@ -141,7 +141,7 @@ func actionCols(rows []board.Row, cols int, folders bool) int {
 // only when there is an editor to open it in: without one the glyph would point at nothing,
 // so the column must not be reserved for it either (§18).
 func pointsSomewhere(r board.Row, folders bool) bool {
-	return r.Preview != "" || (folders && r.Folder != "")
+	return r.Preview != "" || r.Storybook != "" || (folders && r.Folder != "")
 }
 
 // columns sizes the row's three elastic columns: the label, the tail — the workspace,

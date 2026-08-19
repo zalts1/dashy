@@ -32,6 +32,10 @@ type Snapshot struct {
 	// Previews are the local dev servers up on this machine, each with the directory it
 	// is serving. Enrichment, never a row: a preview with no session is nobody's work.
 	Previews []preview.Route
+	// Storybooks are the same fact from the other source — a component workbench listening on
+	// its own port. Kept apart from Previews because they are different things to open, not
+	// two spellings of one thing: a row can have both (§18).
+	Storybooks []preview.Route
 	// Maki is the second agent's roster: the processes running now and the reports they
 	// wrote. Two reads rather than one because a report outlives its process (§17).
 	Maki maki.Roster
@@ -91,7 +95,8 @@ func Build(s Snapshot, now time.Time) Fleet {
 			Workspace: ws,
 			Surface:   t.ID,
 			Folder:    s.Trees[a.Cwd],
-			Preview:   previewFor(s, s.Trees[a.Cwd], a.Cwd),
+			Preview:   nearest(s.Previews, s.Trees, s.Trees[a.Cwd], a.Cwd),
+			Storybook: nearest(s.Storybooks, s.Trees, s.Trees[a.Cwd], a.Cwd),
 			Idle:      idle,
 			Rank:      RankQuiet,
 		}
@@ -142,7 +147,8 @@ func Build(s Snapshot, now time.Time) Fleet {
 				Workspace: ws,
 				Surface:   t.ID,
 				Folder:    s.Trees[rep.Cwd],
-				Preview:   previewFor(s, s.Trees[rep.Cwd], rep.Cwd),
+				Preview:   nearest(s.Previews, s.Trees, s.Trees[rep.Cwd], rep.Cwd),
+				Storybook: nearest(s.Storybooks, s.Trees, s.Trees[rep.Cwd], rep.Cwd),
 				Idle:      idle,
 				Rank:      RankQuiet,
 			}

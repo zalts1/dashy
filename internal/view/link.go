@@ -80,33 +80,56 @@ func escapePath(s string) string {
 	return b.String()
 }
 
-// The two glyphs, and why these two. ↗ is the universal "this leaves here" mark, which is
-// what a preview is: the work, running, somewhere that is not this terminal. ▤ is a box of
-// lines — the files — for the folder. Both stay inside the blocks the rest of the frame
-// draws from (Arrows, Geometric Shapes), because a glyph that falls back to another font
-// is a glyph whose width board guessed wrong, and the frame's fit is a hard rule (§6).
+// The three glyphs, and why these three.
+//
+// ⧉ is the conventional "open in a new window", which is what the folder link does — and it
+// names the *action* rather than the app, so it does not go stale when the editor behind it
+// changes. ⧫ is a solid mark for the live thing: no interior detail to lose at 12px, and a
+// diamond against squares, so it is told apart by shape before colour is read at all. ⧆ is a
+// boxed mark for the workbench a Storybook is — deliberately the folder's square again, so
+// the two squares read as "somewhere you go to look at this code", with the asterisk and the
+// colour separating them.
+//
+// All three come from one Unicode block — Miscellaneous Mathematical Symbols-B — which is the
+// point rather than a coincidence: one block is one font's design family, so the set keeps its
+// relative weight wherever it renders. An arrow was tried first for the preview and was too
+// light beside ⧉, which is a thing you can only see at size (§9.36).
+//
+// All are single cell under the East Asian Width table, which is what decides the width
+// Ghostty allocates. That is the check that matters, not the font: a glyph board thinks is one
+// column and the terminal draws as two wraps the row, and the fit is a hard rule (§6).
 const (
-	previewGlyph = "↗"
-	folderGlyph  = "⧉"
+	previewGlyph   = "⧫"
+	storybookGlyph = "⧆"
+	folderGlyph    = "⧉"
 )
 
-// actionCell is the row's trailing links: the preview first, then the folder, each on its
-// own column so the two line up down the band. Empty when the row has neither — an empty
-// cell would pad every row of a fleet that has nothing to point at.
+// actionCell is the row's trailing links, each on its own column so they line up down the
+// band whichever of them a row happens to have. Empty when the row has none — an empty cell
+// would pad every row of a fleet that has nothing to point at.
 //
-// inkSecondary, not the accent and not dim: these are affordances rather than data, and
-// exactly one element in the frame is allowed to shout (§6). Under cmux the terminal
-// underlines them on hover, which is what makes them findable without a legend line
-// promising a click the reader cannot see (§18).
+// Order is the two running things first, then the folder: the folder is on nearly every row,
+// so anchoring it at the right-hand end gives the cell a consistent edge, and the two http
+// links sit together because that is what they have in common (§18).
+//
+// Green for the live thing and cyan for the editor, matched in measured contrast so neither
+// dominates the other (see linkPreview/linkFolder). Colour is what separates the two glyphs
+// at a glance; shape is what separates them when it is not read. Neither is the accent and
+// neither is dim: these are affordances rather than data, and exactly one element in the
+// frame is allowed to shout (§6). Under cmux the terminal underlines them on hover, which is
+// what makes them findable without a legend line promising a click the reader cannot see.
 func actionCell(r board.Row, scheme string) string {
-	preview, folder := " ", " "
+	preview, storybook, folder := " ", " ", " "
 	if r.Preview != "" {
-		preview = link(r.Preview, fg(inkSecondary, previewGlyph))
+		preview = link(r.Preview, fg(linkPreview, previewGlyph))
+	}
+	if r.Storybook != "" {
+		storybook = link(r.Storybook, fg(linkStorybook, storybookGlyph))
 	}
 	if url := editorURL(scheme, r.Folder); url != "" {
-		folder = link(url, fg(inkSecondary, folderGlyph))
+		folder = link(url, fg(linkFolder, folderGlyph))
 	}
-	// Right-trimmed because nothing follows it on the line: a row with a preview and no
-	// resolvable folder would otherwise end in two columns of padding.
-	return strings.TrimRight(preview+" "+folder, " ")
+	// Right-trimmed because nothing follows it on the line: a row whose only link is the
+	// preview would otherwise end in four columns of padding.
+	return strings.TrimRight(preview+" "+storybook+" "+folder, " ")
 }

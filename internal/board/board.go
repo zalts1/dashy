@@ -45,9 +45,13 @@ type Row struct {
 	// nothing is up. One row shows one preview: the nearest, resolved in Build so the
 	// two renderers cannot disagree about which (§18).
 	Preview string
-	Idle    time.Duration
-	Stale   bool // quiet past the threshold
-	Rank    int
+	// Storybook is the same for a component workbench listening in this worktree. A separate
+	// field and not a second Preview, because they are two different things to open and a row
+	// can carry both.
+	Storybook string
+	Idle      time.Duration
+	Stale     bool // quiet past the threshold
+	Rank      int
 }
 
 // Jumpable reports whether this row has a tab to focus. Selectable and jumpable are

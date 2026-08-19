@@ -35,6 +35,35 @@ func healthy() Report {
 	}
 }
 
+// The Storybook clause, and the one thing it must not do: appear on a machine where nobody
+// runs Storybook. board scans the port range every tick regardless, so a permanent
+// "0 storybooks" would be a clause every reader learns to skip (§9.13).
+func TestFormatReportsStorybooks(t *testing.T) {
+	cases := []struct {
+		name, want string
+		r          Report
+	}{
+		{"one placed", "1 storybook", func() Report { r := healthy(); r.Storybooks, r.StorybooksSeen = 1, 1; return r }()},
+		{"several", "3 storybooks", func() Report { r := healthy(); r.Storybooks, r.StorybooksSeen = 3, 3; return r }()},
+		// Listening and unplaceable — the process is not inside any session's worktree.
+		{"unplaceable", "2 storybook ports outside every worktree",
+			func() Report { r := healthy(); r.Storybooks, r.StorybooksSeen = 0, 2; return r }()},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := Format(c.r); !strings.Contains(got, c.want) {
+				t.Errorf("links row does not say %q:\n%s", c.want, got)
+			}
+		})
+	}
+	// Nothing listening: silent.
+	silent := healthy()
+	silent.Storybooks, silent.StorybooksSeen = 0, 0
+	if got := Format(silent); strings.Contains(got, "storybook") {
+		t.Errorf("a machine with no storybook still gets a clause:\n%s", got)
+	}
+}
+
 // The `links` row carries both halves of "can a row point anywhere": the preview read, and
 // the editor the folder half opens. Two halves on one row for the same reason `roster` has
 // two — one concern, two sources that fail independently (§14, §18).

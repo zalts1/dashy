@@ -1,17 +1,20 @@
-// Package preview reads the local preview URLs a session's work is reachable at.
+// Package preview reads the local URLs a session's work is reachable at, from two sources
+// that have nothing in common but the answer.
 //
-// The mechanism is portless (https://www.npmjs.com/package/portless), which fronts dev
-// servers with stable hostnames instead of ports and keeps its live routes in
-// ~/.portless/routes.json. board reads that file the way it reads maki's reports: the
-// state is somebody else's, and board only joins it.
+// portless (https://www.npmjs.com/package/portless) fronts dev servers with stable hostnames
+// instead of ports and keeps its live routes in ~/.portless/routes.json. board reads that
+// file the way it reads maki's reports: the state is somebody else's, and board only joins
+// it. Storybook registers with nothing at all, so it is found by its port instead — a
+// bounded scan of the range it defaults into (storybook.go).
 //
-// It is deliberately two reads and not one, for the same reason maki's roster is (§17):
-// routes.json says which hostname serves which pid, and nothing in it says where that
-// pid is *working*. The directory is what board joins on — a preview belongs to the
-// session whose worktree it serves — and only the running process knows it.
+// Both need a second read, for the same reason maki's roster does (§17): neither a route nor
+// a listening socket says where its process is *working*, and the directory is what board
+// joins on — a URL belongs to the session whose worktree it serves. So the expensive half is
+// shared: one cwd lookup over every pid from both sources.
 //
-// portless is optional, like maki. Without it Available reports false, nothing is read
-// and nothing complains: board reports on whichever of these are on the machine.
+// Both sources are optional and neither is a fault when absent. Available reports only on
+// portless, because that is the half with a state directory to be missing; a machine with no
+// portless can still be running a Storybook, so Read is called either way.
 //
 // DESIGN.md §18 is why the links exist and why the join is by worktree.
 package preview
@@ -40,13 +43,24 @@ type Route struct {
 	Dir string
 }
 
-// Roster is one read of portless's state, in two halves for the reason maki's is (§17):
-// Listed is every route the file names, Routes are the ones with a live process behind
-// them. The two disagreeing is a diagnosis rather than a fault — routes.json outlives the
-// dev servers it describes — and `doctor` is where it is stated.
+// Roster is one read of the machine's local URLs.
+//
+// The portless half comes in two pieces for the reason maki's roster does (§17): Listed is
+// every route the file names, Routes are the ones with a live process behind them, and the
+// two disagreeing is a diagnosis rather than a fault — routes.json outlives the dev servers
+// it describes. `doctor` is where it is stated.
+//
+// Storybooks are found a different way, because Storybook registers with nothing and has
+// nothing to read: a bounded port scan (storybook.go). Different mechanism, same shape, and
+// they join to a row identically.
 type Roster struct {
-	Listed int
-	Routes []Route
+	Listed     int
+	Routes     []Route
+	Storybooks []Route
+	// Listeners is how many sockets in the Storybook range were found at all, placed or not.
+	// The same two-halves shape as Listed and Routes, and the same diagnosis: something is
+	// listening and no row will carry it means it is not in any session's worktree.
+	Listeners int
 }
 
 // route is one entry of routes.json. Only two fields are read: the hostname the proxy
@@ -73,27 +87,55 @@ func Available() bool {
 	return err == nil && fi.IsDir()
 }
 
-// Read reads the live previews. Like the rosters, the error is half the answer: no routes
-// and no error is a machine with nothing running, and an error is a machine board could
-// not read (§9.26).
+// Read reads the machine's local URLs: portless's routes, and the Storybooks listening on
+// its ports. Like the rosters, the error is half the answer — no routes and no error is a
+// machine with nothing running, and an error is a machine board could not read (§9.26).
+//
+// The two sources are read together because they share the expensive part. Neither
+// routes.json nor an lsof listener scan says where its process is *working*, and the
+// directory is what board joins on, so both need a cwd lookup — and one lsof over every pid
+// from both sources costs what one over either would (§9.37).
 func Read() (Roster, error) {
+	// Asked first and unconditionally: a machine with no portless can still be running a
+	// Storybook, and the routes read below is the one that can fail.
+	found := listeners()
+
 	b, err := os.ReadFile(filepath.Join(StateDir(), "routes.json"))
-	if err != nil {
-		if os.IsNotExist(err) {
-			// portless has run here and nothing is up. Not a fault: the ordinary state.
-			return Roster{}, nil
+	var routes []route
+	var readErr error
+	switch {
+	case err == nil:
+		routes = parseRoutes(b)
+		if len(routes) == 0 && !json.Valid(b) {
+			readErr = ErrUnreadable
 		}
-		return Roster{}, fmt.Errorf("%w: %v", ErrUnreadable, err)
+	case os.IsNotExist(err):
+		// portless has run here and nothing is up. Not a fault: the ordinary state.
+	default:
+		readErr = fmt.Errorf("%w: %v", ErrUnreadable, err)
 	}
-	routes := parseRoutes(b)
-	if len(routes) == 0 {
-		if !json.Valid(b) {
-			return Roster{}, ErrUnreadable
+
+	// One lookup for both sources.
+	pids := make([]int, 0, len(routes)+len(found))
+	for _, r := range routes {
+		if r.Pid > 0 {
+			pids = append(pids, r.Pid)
 		}
-		return Roster{}, nil
 	}
-	return Roster{Listed: len(routes),
-		Routes: join(routes, cwds(routes), proxyPort(), proxyTLS())}, nil
+	for _, l := range found {
+		pids = append(pids, l.Pid)
+	}
+	dirs := cwds(pids)
+
+	rs := Roster{Storybooks: storybooks(found, dirs), Listeners: len(found)}
+	if readErr != nil {
+		// The Storybooks still stand: they were found without portless and do not depend on
+		// it. A half-readable world is reported as half-readable (§9.26).
+		return rs, readErr
+	}
+	rs.Listed = len(routes)
+	rs.Routes = join(routes, dirs, proxyPort(), proxyTLS())
+	return rs, nil
 }
 
 func parseRoutes(b []byte) []route {
@@ -169,23 +211,25 @@ func proxyTLS() bool {
 	return err == nil
 }
 
-// cwds asks where each route's process is working. One lsof for every pid at once rather
-// than one per route: this runs on every tick, and lsof scoped to the cwd descriptor of
-// named pids costs ~50ms however many there are.
-func cwds(routes []route) map[int]string {
-	var pids []string
-	for _, r := range routes {
-		if r.Pid > 0 {
-			pids = append(pids, strconv.Itoa(r.Pid))
+// cwds asks where each process is working. One lsof for every pid at once rather than one
+// per pid: this runs on every tick, and lsof scoped to the cwd descriptor of named pids
+// costs ~50ms however many there are.
+func cwds(pids []int) map[int]string {
+	var args []string
+	seen := map[int]bool{}
+	for _, p := range pids {
+		if p > 0 && !seen[p] {
+			seen[p] = true
+			args = append(args, strconv.Itoa(p))
 		}
 	}
-	if len(pids) == 0 {
+	if len(args) == 0 {
 		return nil
 	}
 	// A dead pid is not an error here — lsof exits non-zero when any of the pids it was
 	// given is gone, which on a machine with a stale route is the normal case — so the
 	// output is used whatever the exit status.
-	out, _ := host.Output("lsof", "-a", "-d", "cwd", "-p", strings.Join(pids, ","), "-Fpn")
+	out, _ := host.Output("lsof", "-a", "-d", "cwd", "-p", strings.Join(args, ","), "-Fpn")
 	return parseCwds(out)
 }
 

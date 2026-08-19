@@ -91,7 +91,9 @@ func goldenLinkFleet() board.Fleet {
 	f.TodoCap = 10
 	f.Rows[0].Folder, f.Rows[0].Preview = "/Users/you/work/repo", "https://app.localhost"
 	f.Rows[2].Folder = "/Users/you/work/repo/.claude/worktrees/csv export"
+	f.Rows[2].Storybook = "http://localhost:6006"
 	f.Rows[3].Folder, f.Rows[3].Preview = "/Users/you/work/other", "https://api.localhost:8443"
+	f.Rows[4].Storybook = "http://localhost:6007"
 	f.Rows = append(f.Rows, board.Row{Key: "todo:t0", State: "todo",
 		Label: "book the quarterly review", Idle: 26 * time.Hour, Rank: board.RankTodo})
 	return f
