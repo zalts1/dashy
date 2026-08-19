@@ -63,6 +63,7 @@ func Collect() Fleet {
 	// sessions in one worktree.
 	trees := map[string]string{}
 	repos := map[string]string{}
+	branches := map[string]string{}
 	resolve := func(dir string) {
 		if dir == "" {
 			return
@@ -75,6 +76,9 @@ func Collect() Fleet {
 			if t != "" {
 				if _, seen := repos[t]; !seen {
 					repos[t] = host.Repository(t)
+					// Beside the repository and memoised with it: both are one file read per
+					// worktree, and a fleet routinely has several sessions in one (§18).
+					branches[t] = host.Branch(t)
 				}
 			}
 		}
@@ -92,9 +96,10 @@ func Collect() Fleet {
 		resolve(sb.Dir)
 	}
 
-	// The pull requests cmux has already correlated, one per workspace. Nothing here leaves the
-	// machine: cmux polls GitHub and board reads the badge, the same way it reads tab titles
-	// (§18). Asked for the workspaces the fleet actually occupies rather than all of them.
+	// What cmux's sidebar says about each workspace the fleet occupies: the pull request it has
+	// correlated, the colour the user gave it, and the branch its directory is on. Nothing here
+	// leaves the machine — cmux polls GitHub and board reads the badge, the same way it reads tab
+	// titles (§18). Asked for the workspaces the fleet actually occupies rather than all of them.
 	spans := map[string]bool{}
 	for _, t := range titles {
 		if t.WorkspaceID != "" {
@@ -107,7 +112,7 @@ func Collect() Fleet {
 	}
 	// Sorted so the calls, and anything that ever depends on their order, are the same on every tick.
 	sort.Strings(ids)
-	prs := cmux.PullRequests(ids)
+	spaces := cmux.WorkspaceStates(ids)
 
 	clock := cmux.HookClock()
 	jobs := map[string]string{}
@@ -144,7 +149,8 @@ func Collect() Fleet {
 		Threshold:  st.Threshold(),
 		Trees:      trees,
 		Repos:      repos,
-		PRs:        prs,
+		Spaces:     spaces,
+		Branches:   branches,
 		Previews:   previews.Routes,
 		Storybooks: previews.Storybooks,
 		Maki:       roster,

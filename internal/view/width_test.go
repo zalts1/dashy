@@ -176,7 +176,7 @@ func TestDurationColumnsShareARightEdge(t *testing.T) {
 		t.Fatalf("no line containing %q", marker)
 		return 0
 	}
-	head := rightOf("LABEL", "IDLE")
+	head := rightOf(sessionHeader, "IDLE")
 	blocked := rightOf("watch CI to green", "52d00h")
 	quiet := rightOf("rotting thing", "2d02h")
 	if head != blocked || blocked != quiet {

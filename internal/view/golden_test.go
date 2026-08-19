@@ -71,6 +71,16 @@ func TestGoldenFrames(t *testing.T) {
 		// keys were on. Pinned because it is the one line whose whole job is to be read (§9.38).
 		{"frame-help.txt", goldenLinkFleet(),
 			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118, goldenScheme}, UI{Help: true}},
+		// The two mental models on one frame: a workspace holding three sessions, which earns a
+		// named header, and workspaces holding one, which wear the rail and spend no line. Pinned
+		// because "a group earns its header by exception" is a rule about what is *absent*, and an
+		// absence nothing pins is one that comes back (§18, §9.47).
+		{"frame-grouped.txt", goldenGroupedFleet(),
+			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118, goldenScheme}, UI{}},
+		// The same fleet with the caret on a grouped row: the rail and the caret share the lead,
+		// and the one place they could collide is the one worth pinning.
+		{"frame-grouped-sel.txt", goldenGroupedFleet(),
+			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118, goldenScheme}, UI{Sel: "K-G2"}},
 	}
 	for _, c := range cases {
 		t.Run(c.file, func(t *testing.T) {
@@ -115,6 +125,49 @@ func goldenLinkFleet() board.Fleet {
 	f.Rows = append(f.Rows, board.Row{Key: "todo:t0", State: "todo",
 		Label: "book the quarterly review", Idle: 26 * time.Hour, Rank: board.RankTodo})
 	return f
+}
+
+// goldenGroupedFleet is the fleet grouping exists for: one workspace holding three sessions on
+// three branches — the model where a workspace is a project — beside workspaces holding one
+// session each, which is the other model. Both are drawn by the same rule (§18).
+//
+// The uncoloured group is deliberate: most workspaces have no accent, and a group with no colour
+// still has to read as a group, which is what the underline is for.
+func goldenGroupedFleet() board.Fleet {
+	return board.Fleet{
+		Workspaces: 4,
+		Blocked:    1,
+		Stale:      1,
+		Oldest:     50 * time.Hour,
+		TodoCap:    10,
+		Rows: []board.Row{
+			{Key: "K-G1", State: "blocked →", Label: "refactor the charge ledger", Repo: "app",
+				Tree: "pla-981-charge-ledger", Surface: "S-G1", Group: "Payments rework",
+				GroupColour: "#7D6608", Idle: 2 * time.Minute, Rank: board.RankBlocked,
+				PR: "https://github.com/you/repo/pull/981", PRState: "open"},
+			{Key: "K-G2", State: "running", Label: "backfill refunds worker", Repo: "app",
+				Tree: "pla-982-refund-backfill", Surface: "S-G2", Group: "Payments rework",
+				GroupColour: "#7D6608", Idle: 0, Rank: board.RankWorking},
+			{Key: "K-G3", State: "running", Label: "stripe webhook retries", Repo: "app",
+				Tree: "pla-983-webhook-retry", Surface: "S-G3", Group: "Payments rework",
+				GroupColour: "#7D6608", Idle: 4 * time.Minute, Rank: board.RankWorking},
+			// A second multi-session workspace, and this one the user never coloured.
+			{Key: "K-U1", State: "done", Label: "tenant name validation", Repo: "app",
+				Surface: "S-U1", Group: "Rollout follow-up", Idle: 20 * time.Minute, Rank: board.RankQuiet},
+			{Key: "K-U2", State: "done", Label: "verdict update flow", Repo: "app",
+				Surface: "S-U2", Group: "Rollout follow-up", Idle: 35 * time.Minute, Rank: board.RankQuiet},
+			// One session per workspace: the rail, and no line spent on a name.
+			{Key: "K-S1", State: "done", Label: "wizard copy and UX fixes", Repo: "date-invite",
+				Surface: "S-S1", Group: "Wizard copy and UX fixes", GroupColour: "#880E4F",
+				Idle: 50 * time.Hour, Rank: board.RankQuiet, Stale: true},
+			{Key: "K-S2", State: "done", Label: "align dataview styles", Repo: "app",
+				Tree: "pla-1013-dataview-refactor", Surface: "S-S2", Group: "Align dataview styles",
+				GroupColour: "#006B6B", Idle: 90 * time.Minute, Rank: board.RankQuiet},
+			// No tab, so no workspace, no rail and no group: the row grouping must leave alone.
+			{Key: "K-BG", State: "blocked →", Label: "watch CI to green, or leave it here?",
+				Repo: "background", Idle: 3 * time.Hour, Rank: board.RankBlocked},
+		},
+	}
 }
 
 // goldenTroubleFleet is a partially-read world: cmux is gone, so the interactive

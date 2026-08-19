@@ -54,13 +54,3 @@ ports=none
 		}
 	}
 }
-
-// Asking about nothing costs nothing: a fleet whose rows have no tabs makes no calls.
-func TestPullRequestsWithNoWorkspaces(t *testing.T) {
-	if got := PullRequests(nil); len(got) != 0 {
-		t.Errorf("PullRequests(nil) = %+v, want empty", got)
-	}
-	if got := PullRequests([]string{"", ""}); len(got) != 0 {
-		t.Errorf("PullRequests of empty ids = %+v, want empty", got)
-	}
-}

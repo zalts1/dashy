@@ -71,6 +71,20 @@ const (
 	linkAbsent = "#4e4e4c"
 )
 
+// The two backgrounds every value in this file is measured against, and the weakest contrast
+// any of them carries.
+//
+// They are constants rather than test fixtures because groupColour lifts against them at
+// runtime: a workspace's colour is the user's, chosen in cmux, and the only way to keep §6's
+// promise about a value board did not pick is to move it until it clears this floor (§18).
+const (
+	bgLightest = "#282c34" // the lightest plausible terminal background
+	bgDarkest  = "#040404"
+	// inkFloor is the weakest value the ink and status colours already carry — inkMuted, at
+	// 3.90. Nothing new among them may be dimmer than the dimmest thing already argued for.
+	inkFloor = 3.90
+)
+
 // idleRamp is the ordinal ramp for idle magnitude: dim = fresh, bright = rotting.
 // Steps skip every other rung of the source ramp; adjacent rungs measured ΔL 0.049,
 // under the 0.06 minimum.
@@ -94,6 +108,11 @@ func badge(fgHex, bgHex, s string) string {
 	br, bgc, bb := rgb(bgHex)
 	return fmt.Sprintf("\033[38;2;%d;%d;%dm\033[48;2;%d;%d;%dm%s\033[0m", fr, fgc, fb, br, bgc, bb, s)
 }
+
+// underline is how a group with no colour is still marked as a group. The user gave that
+// workspace no accent, so there is no hue to carry the grouping and the weight has to come from
+// somewhere that is not colour at all (§18).
+func underline(s string) string { return "\033[4m" + s + "\033[24m" }
 
 func dim(s string) string  { return fg(inkMuted, s) }
 func body(s string) string { return fg(inkSecondary, s) }

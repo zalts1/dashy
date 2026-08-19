@@ -10,14 +10,10 @@ import (
 // by whoever remembered it. This file enforces it: every value in the palette is measured
 // against both documented backgrounds, so an eyeballed substitution fails the suite rather
 // than shipping and looking fine to the person who chose it (§9.4).
+// The backgrounds and the floor live in palette.go: they are facts about the design, and
+// groupColour has to lift against them at runtime, not only in a test.
 const (
-	bgLightest = "#282c34" // the lightest plausible terminal background
-	bgDarkest  = "#040404"
-	// inkFloor is the weakest value the ink and status colours already carry — inkMuted, at
-	// 3.90. Nothing new among them may be dimmer than the dimmest thing already argued for.
-	// Compared with a tolerance because inkMuted *is* the floor and measures 3.8996.
-	inkFloor = 3.90
-	epsilon  = 0.01
+	epsilon = 0.01
 	// rampStep is what §6 actually claims for the idle ramp, and it is a different claim:
 	// the ramp is **ordinal**, so what matters is that adjacent rungs are distinguishable
 	// from each other, not that each clears a text-contrast bar against the background.

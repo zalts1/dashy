@@ -149,10 +149,14 @@ func Gather() Report {
 	for id := range wsIDs {
 		ids = append(ids, id)
 	}
-	pulls := cmux.PullRequests(ids)
-	openPRs := 0
-	for _, pr := range pulls {
-		if pr.Open() {
+	spaces := cmux.WorkspaceStates(ids)
+	pulls, openPRs := 0, 0
+	for _, st := range spaces {
+		if st.PR.URL == "" {
+			continue
+		}
+		pulls++
+		if st.PR.Open() {
 			openPRs++
 		}
 	}
@@ -188,7 +192,7 @@ func Gather() Report {
 		NoPortless:     noPortless,
 		Editor:         ed.Chosen.Name,
 		EditorFound:    ed.Installed[ed.Chosen.Name],
-		PRs:            len(pulls),
+		PRs:            pulls,
 		OpenPRs:        openPRs,
 		LinksInCmux:    cmux.OpensLinksInternally(),
 		Hooks:          installed,

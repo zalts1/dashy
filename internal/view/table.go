@@ -46,7 +46,7 @@ func Table(f board.Fleet, threshold time.Duration) string {
 		fmt.Fprintf(&b, "%s\n\n", f.Trouble)
 	}
 	fmt.Fprintf(&b, "%s %s %s %7s\n",
-		pad("STATE", colState), pad("LABEL", colLabel), pad(wsHeader, colWorkspace), "IDLE")
+		pad("STATE", colState), pad(sessionHeader, colLabel), pad(wsHeader, colWorkspace), "IDLE")
 	var running, todos int
 	for _, r := range f.Rows {
 		switch r.Rank {
