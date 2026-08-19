@@ -29,6 +29,10 @@ const (
 	// weight as the workspace name beside them instead of becoming a fourth thing competing
 	// for the half-second (§18).
 	//
+	// The matching is load-bearing rather than tidy: all three glyphs are squares, so colour is
+	// what tells them apart, and one mark heavier than the others would read as the only one
+	// that mattered.
+	//
 	// The pink was the hard one and is why the numbers are here rather than in a comment
 	// saying "cyan, green, pink". Pink does not reach this band from below at any recognisable
 	// saturation — #f783ac is 5.86, #e64980 is 3.75 — and going pale overshoots: #ffa8d0 is
@@ -37,7 +41,7 @@ const (
 	// linkPreview is deliberately **not** statusGood. statusGood is the weakest value in this
 	// file at 4.17 and it already means "running" on the state mark, so reusing it would both
 	// unbalance the set and give one colour two meanings.
-	linkPreview   = "#51cf66" // ⧫ a dev server is serving this worktree
+	linkPreview   = "#51cf66" // ⧇ a dev server is serving this worktree
 	linkFolder    = "#3bc9db" // ⧉ the worktree, in an editor
 	linkStorybook = "#ff99bb" // ⧆ a component workbench listening in this worktree
 )

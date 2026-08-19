@@ -84,22 +84,30 @@ func escapePath(s string) string {
 //
 // ⧉ is the conventional "open in a new window", which is what the folder link does — and it
 // names the *action* rather than the app, so it does not go stale when the editor behind it
-// changes. ⧫ is a solid mark for the live thing: no interior detail to lose at 12px, and a
-// diamond against squares, so it is told apart by shape before colour is read at all. ⧆ is a
-// boxed mark for the workbench a Storybook is — deliberately the folder's square again, so
-// the two squares read as "somewhere you go to look at this code", with the asterisk and the
-// colour separating them.
+// changes. ⧆ is a boxed asterisk for the workbench a Storybook is. ⧇ is a boxed circle for the
+// live thing, a shape that is neither of the other two rather than a variation on one.
 //
-// All three come from one Unicode block — Miscellaneous Mathematical Symbols-B — which is the
-// point rather than a coincidence: one block is one font's design family, so the set keeps its
-// relative weight wherever it renders. An arrow was tried first for the preview and was too
-// light beside ⧉, which is a thing you can only see at size (§9.36).
+// **All three are from one Unicode block, Miscellaneous Mathematical Symbols-B, and that is a
+// size guarantee rather than a stylistic preference.** A monospace font draws a block in one
+// design, so glyphs from one block share a drawn size; glyphs from different blocks do not,
+// whatever the width table says about their cells. This was learned by breaking it — the
+// preview was briefly ▣ (Geometric Shapes), which is the same idea as ⧇ at half the drawn
+// size, and it looked like a bug beside ⧆ and ⧉ (§9.36).
+//
+// So a fourth glyph, if one is ever added, comes from U+29xx or it does not match. That is a
+// harder constraint than it sounds and it is the reason the arrow the preview started as could
+// not be kept: there is no arrow in this block.
+//
+// All three being squares is the cost of that rule, and it means **colour carries the work of
+// telling them apart** — which is why the three values are matched by measurement rather than
+// chosen (palette.go). Position helps: the slots are fixed, so which one a glyph sits in is
+// itself a cue.
 //
 // All are single cell under the East Asian Width table, which is what decides the width
-// Ghostty allocates. That is the check that matters, not the font: a glyph board thinks is one
-// column and the terminal draws as two wraps the row, and the fit is a hard rule (§6).
+// Ghostty allocates. That is the check that matters for the fit, and it is a different question
+// from the drawn size above: a glyph can occupy one cell and be drawn small inside it.
 const (
-	previewGlyph   = "⧫"
+	previewGlyph   = "⧇"
 	storybookGlyph = "⧆"
 	folderGlyph    = "⧉"
 )

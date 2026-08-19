@@ -1153,7 +1153,7 @@ worktree the session is working in:
 - **the folder**, the worktree itself, opened in an editor to read the branch's diff.
 
 They are rendered as a five-column cell at the right-hand end of the row — `⧆` pink for the
-Storybook, `⧫` green for the preview, `⧉` cyan for the folder — and they are hyperlinks, not
+Storybook, `⧇` green for the preview, `⧉` cyan for the folder — and they are hyperlinks, not
 keys.
 
 **Order is by how often a row has one, rarest first.** The folder is on nearly every row, so

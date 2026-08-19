@@ -1241,6 +1241,31 @@ solid lozenge, and later `⧆` for the Storybook, both from `⧉`'s own Unicode 
 (Miscellaneous Mathematical Symbols-B). **One block is one font's design family**, which is why
 the three now hold their relative weight; picking by meaning across three blocks does not.
 
+**Then the one-block rule was abandoned, and rendering falsified the abandonment within
+minutes.** `⧫` was replaced by `▣` — the same idea as a boxed mark, from Geometric Shapes
+rather than Miscellaneous Mathematical Symbols-B. The reasoning for allowing it was that
+Geometric Shapes already supplies the frame's `○ ▫ ▇`, so the font certainly has the face and
+the fallback risk was small. That reasoning was about the *wrong property*. Rendered beside
+`⧆` and `⧉`, `▣` came out at roughly half their drawn size and read as a rendering fault:
+
+    ⧆  ▣  ⧉        the middle one is not smaller by design
+
+**The finding: a Unicode block predicts a glyph's drawn size, and East Asian Width does not.**
+The two are independent questions and only one of them was being checked. `▣` is a single cell
+by the width table — the fit rule was never in danger — and a monospace font still draws it at
+whatever size its block's design calls for. So "one block is one font's design family" is not
+tidiness, it is the only size guarantee available, and the set went to `⧇` (U+29C7, squared
+small circle) which is the same idea as `▣` drawn at the block's size.
+
+The consequence is a real constraint worth stating: **a fourth link glyph comes from U+29xx or
+it does not match.** That block has no arrow in it, which is the actual reason the preview
+could not stay an arrow — not weight, as recorded above, but availability.
+
+All three being squares is what that costs, and it moves the whole burden of telling them
+apart onto colour. That is why the matching below stopped being tidiness and became
+load-bearing: a set of same-shaped marks at unequal weight is unreadable in a way a set of
+different shapes would have survived.
+
 **Pink is the value that justifies the whole test.** Asked for a pink Storybook glyph matched to
 the other two (6.98 and 7.04), and it does not exist at the obvious saturations: `#e64980`
 measures 3.75, `#f783ac` 5.86, `#f06595` 4.67 — pink approaches this band from far below. Going
