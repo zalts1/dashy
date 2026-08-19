@@ -63,6 +63,9 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.44 | Four boxes one space apart read as one run of ink; and the frame can afford air it should give back when short | `view/link.go`, `view/frame.go`, `view/layout.go`, `DESIGN.md` §6 |
 | 9.45 | A half-empty cell reads as broken, not sparse — the fix is a glyph too faint to be information | `view/link.go`, `view/palette.go`, `DESIGN.md` §6, §18 |
 | 9.46 | Sessions sort newest-first; a column of times descending read as sorted backwards. Todos keep the old order, and §9.19 is why | `board/build.go`, `view/layout.go`, `DESIGN.md` §4 |
+| 9.47 | The workspace was two mental models, not one bad column — and the pull request was joined on the wrong one | `board/build.go`, `board/board.go`, `host/branch.go`, `cmux/sidebar.go`, `DESIGN.md` §19 |
+| 9.48 | A colour board does not choose still has to clear the floor — so validate the function, not the value | `view/group.go`, `view/palette.go`, `DESIGN.md` §19 |
+| 9.49 | ⌘-click cannot focus a tab: cmux registers no deep link, and OSC 8 needs a URL | `view/link.go`, `DESIGN.md` §10.14 |
 
 ---
 
@@ -1713,3 +1716,136 @@ last visible row still walks into the hidden ones, which are now the oldest — 
 Not fixed by shedding from the front instead. That would leave the hidden rows *above* the shown
 ones, which breaks the one invariant the `+N` line depends on: anything hidden belongs below
 everything shown.
+
+
+### 9.47 The workspace was two mental models, not one bad column (2026-08-19)
+
+**Believed:** the workspace column was a mistake, full stop. §9.39 measured it repeating the row's
+own label on four of six rows and removed it, and §10.5 had already rejected grouping as answering
+"how is my fleet arranged", a question nobody has.
+
+**Falsified by:** the observation that both findings were made on the same kind of fleet. On a
+fleet where each workspace holds **one** agent session plus its dev servers, the workspace name
+*is* the session label — so of course the column repeated it. On a fleet where a workspace holds
+**several** sessions on several branches, which is how other people use cmux, the workspace is the
+only thing that says which sessions are one piece of work, and board had no way to show it.
+
+Two mental models, and board had been built as though there were one. Neither is wrong.
+
+**What shipped:** the workspace as a grouping inside a band, with a header **only** when the group
+holds more than one session (`DESIGN.md` §19). That is what makes it free for the model that found
+the original bug — a solo workspace draws no header, so a one-session-per-workspace fleet renders
+exactly as it did before, which the golden frames confirm by not changing.
+
+Three things fell out of building it that are worth recording separately.
+
+**The rail cost nothing, because the lead was already blank.** Every row's lead was three columns
+and only the middle one was ever used, by the selection caret. The colour rail took the outermost
+one, so the label column did not move and §6's width arithmetic was untouched. A feature that
+needs no columns is a feature that cannot break the fit.
+
+**Aligning the header to the label column was wrong.** Tried first, and it looked fine on a fleet
+with nothing blocked. The gutter is elastic (§9.41): one blocked row widens it to twelve, which
+dragged every group name out to meet the labels and stranded it nine columns from its own rail.
+The header is at a fixed column 3 now — one inside the band header, so band, group and label read
+as the nesting they are.
+
+**The colour was free.** It arrives on the `sidebar-state` call board already makes for the pull
+request (§18): one dump, three facts, no new subprocess. Grouping would have been much harder to
+justify on §2's terms if it had cost a read.
+
+#### And the pull request was joined on the wrong key
+
+Grouping is what exposed this, and it is the more serious half of the finding.
+
+cmux reports one pull request per **workspace**, keyed off that workspace's own directory. board
+took that answer unchecked. But Claude Code creates worktrees *inside* the main checkout, so a
+session in a linked worktree sits in a workspace whose directory is on a different branch
+entirely.
+
+Observed on the live fleet, one row said both of these at once:
+
+    location:      app -> pla-1013-dataview-system-refactor
+    pull request:  #1709   (branch pla-138-final-rollout-tweak)
+
+Confirmed against git: the worktree's own branch is `pla-1013-dataview-system-refactor`, and
+`sidebar-state` for that workspace reports `git_branch=pla-138-final-rollout-tweak`. The row was
+asserting two contradictory things, and the pull-request glyph was the one that was wrong.
+
+This is exactly the failure §18 organised the *preview* join around — "a URL that looks like this
+session's work and is not" — but the pull request shipped later and never got the same treatment.
+The previews join on the worktree; the pull request joined on the workspace.
+
+**Fixed** with `host.Branch`, which reads HEAD out of a worktree's gitdir — a file read, no
+subprocess, memoised per worktree beside `host.Repository`. The rule is: both branches known, and
+equal, or nothing is drawn. An unverifiable branch draws no glyph, because a wrong link is worse
+than a missing one.
+
+*Trap for whoever touches this next:* a linked worktree's `.git` is a **file** pointing at the
+repository's gitdir, and HEAD lives there. Reading `<tree>/.git/HEAD` answers nothing for exactly
+the rows this fix is about.
+
+### 9.48 A colour board does not choose still has to clear the floor (2026-08-19)
+
+**Believed, briefly:** the workspace's colour is the user's choice, so board should pass it
+through unchanged. Recolouring somebody's workspace is the kind of thing §8 draws a line around.
+
+**Falsified by:** measuring them. cmux's palette is built for a filled rail on the app's own
+background, so the values are dark. Against `#282c34`:
+
+| workspace | value | contrast |
+|---|---|---|
+| Dashy contribute | `#7D6608` | 2.52 |
+| Align dataview | `#006B6B` | 2.21 |
+| Wizard copy | `#880E4F` | **1.48** |
+
+The ink floor is 3.90. The darkest of them is half the bare red §9.4 rejected as unreadable and
+one third of the floor — drawn as given, a group name would have been a smudge on a dark terminal
+and invisible on a light one.
+
+**The tension is real and worth naming.** §6 says colour is validated and never eyeballed, and
+every value in `palette.go` was measured by hand before it shipped. A group's colour cannot be:
+board sees it for the first time at runtime, and there is no opportunity to measure it in advance.
+
+**What shipped:** validate the **function** instead of the value. `groupColour` lifts lightness
+until the result clears the floor against both documented backgrounds, and
+`TestGroupColourClearsTheFloorForAnyInput` sweeps the entire hue wheel at maximum saturation and
+minimum lightness, plus the real cmux values, asserting every output passes. Every colour board
+draws is that function's output, so holding the function holds every group — which is a stronger
+guarantee than the hand-measured table, not a weaker one.
+
+Hue is preserved and only lightness moves, and that is not politeness about the user's choice: hue
+is the entire signal. The rail exists so two workspaces can be told apart at a glance, and a lift
+that slid magenta toward pink would put it on the storybook glyph's colour instead.
+
+A workspace with **no** colour — three of the eight on the fleet this was built against — gets no
+rail and an underlined white name. No rail because a mark that appears on every row marks nothing;
+underlined because the name still has to read as a group name, and the weight has to come from
+somewhere that is not a colour the user did not pick.
+
+### 9.49 ⌘-click cannot focus a tab, and the reason is upstream (2026-08-19)
+
+**Wanted:** ⌘-clicking a row's label jumps to that session's tab, the way ⌘-clicking its folder
+glyph opens the folder. It is the obvious completion of §18 — the row already points at four
+things, and the one it *is* should be the fifth.
+
+**Why it is not built:** OSC 8 hands the terminal a **URL**. Every existing link works because
+something resolves its scheme — `http`, `vscode://`, `https://github.com`. Focusing a cmux tab
+needs a URL cmux answers to, and there is not one.
+
+Checked, rather than assumed:
+
+- `/Applications/cmux.app/Contents/Info.plist` registers `cmux:` under `CFBundleURLName =
+  com.cmuxterm.app.auth` — an auth callback scheme, beside `http`, `https` and `ssh`.
+- `grep -a 'cmux://'` over the whole bundle returns nothing, with a control grep for known RPC
+  names confirming the method works on that binary.
+- `cmux docs api` and `cmux capabilities` describe the socket API and list no URL scheme.
+
+So the mechanism is absent upstream, not merely undocumented. board **can** focus a tab — it
+already does, on Enter, via `cmux rpc surface.focus` — but it cannot get a click to reach that
+call, and it may not invent a way: §8 forbids board opening anything itself, and shelling out from
+a click is exactly the opener that rule exists to prevent.
+
+*Trigger:* a cmux release that registers a focus deep link — `cmux://surface/<uuid>/focus` or
+similar. At that point this is a two-line change in `view/link.go`, because the row already knows
+its surface UUID. Recorded as `DESIGN.md` §10.14.

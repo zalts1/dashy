@@ -42,6 +42,7 @@ grep -n '^#\+ ' DESIGN.md        # § → line, then Read with offset/limit
 | 16 | the demo: a fixture fleet through the real join, recorded by hand | `internal/demo/`, `demo/`, the top of the README |
 | 17 | maki as the second agent: no roster command, so board installs one; two reads settle liveness | `maki/`, `hooks/maki.go`, `board/build.go` |
 | 18 | links: the three things a row points at besides its tab, joined on the worktree, opened by the terminal, and which editor answers | `preview/`, `editor/`, `host/worktree.go`, `view/link.go`, `board/build.go` |
+| 19 | the workspace as a **group** rather than a column: two mental models, a header by exception, a rail that costs no columns, and the user's colour lifted until it is legible | `board/board.go`, `view/group.go`, `cmux/sidebar.go`, `host/branch.go` |
 
 ---
 
@@ -615,11 +616,26 @@ recommendation, chosen for real typography and proportional bars. The ambient TU
 won instead: no listener, no daemon, no file-watching — the tab *is* the process,
 which keeps §2's hard constraints intact with nothing to flag.
 
-### 10.5 Workspace-grouped layout — rejected
+### 10.5 Workspace-grouped layout — rejected, then shipped as §19 (2026-08-19)
 
-Dense and pretty, but it answers "how is my fleet arranged", a question you never
-have. One workspace held 7 unrelated sessions; grouping would scatter the two things
-that need you across five boxes. Workspace stays a column.
+The original entry read:
+
+> Dense and pretty, but it answers "how is my fleet arranged", a question you never
+> have. One workspace held 7 unrelated sessions; grouping would scatter the two things
+> that need you across five boxes. Workspace stays a column.
+
+**Both halves turned out to be measuring the same mistake.** The workspace was later removed as a
+column too (§9.39), because on a one-session-per-workspace fleet it just repeated the label — so
+the thing this entry protected did not survive either.
+
+What was actually wrong was the *shape* proposed, not the grouping. "Scatter the two things that
+need you across five boxes" is a real cost and §19 does not pay it: the bands stay outermost, so
+NEEDS YOU is still one block at the top, and grouping happens **inside** a band. And "one workspace
+held 7 unrelated sessions" was a fleet observation, not a law — the fleet that revived this has
+workspaces holding one session and workspaces holding three, and §19 draws both with one rule.
+
+*What changed:* the recognition that the two arrangements are two **mental models**, not one
+correct answer — see §19.
 
 ### 10.6 `close` action — built as a flag, off by default
 
@@ -743,6 +759,21 @@ since a draft is a pull request nobody is being asked to look at yet — so it w
 `prMark` and one line in the legend.
 
 ---
+
+### 10.14 ⌘-click a label to focus its tab — blocked upstream (2026-08-19)
+
+The obvious completion of §18: a row points at four things, and the one it *is* should be
+reachable the same way. It is not built because **cmux registers no deep link**. OSC 8 hands the
+terminal a URL, and cmux's `cmux:` scheme is an auth callback — verified against the app bundle and
+its own docs, not assumed (`EVIDENCE.md` §9.49).
+
+board can already focus a tab, on Enter, through `cmux rpc surface.focus`. What is missing is a way
+for a *click* to reach that call, and board may not invent one: §8 forbids it opening anything
+itself, and running a command from a click is precisely the opener that rule exists to prevent.
+
+*Trigger:* a cmux build that answers something like `cmux://surface/<uuid>/focus`. The row already
+carries the surface UUID, so this becomes a two-line change in `view/link.go` and a fifth glyph —
+or, better, the label itself becomes the link, since the label already *is* the tab.
 
 ## 11. How this is verified
 
@@ -1480,3 +1511,114 @@ One consequence worth naming: a hyperlink is the first escape sequence in the fr
 is **not** SGR, and it is terminated differently. `printed` and `clampLine` now share one
 scanner, and a clamped line closes a link as well as a colour — an open one makes every
 cell after it part of the link (§9.34).
+
+
+## 19. The workspace is a group, not a column
+
+A cmux workspace means two different things to two different people, and board had been built as
+though it meant only one.
+
+**Model one: a workspace is a project.** Several agent sessions live in its tabs, on several
+branches, alongside whatever else that project needs. The workspace name is the umbrella, and
+which sessions share one is real information.
+
+**Model two: a workspace is a task.** One agent session, plus the dev servers and tools that
+session needs. The workspace name and the session label are the same string, because cmux titles a
+workspace after the task it was created for.
+
+board's history is the two models colliding. The workspace started as a column, for model one. It
+was removed as a column (§9.39) because on a model-two fleet it restated the row's own label on
+four of six rows — which is true, and was the right call, and quietly dropped the one thing model
+one wanted. It comes back here as a **grouping**, which is the form that serves both: model one
+gets its umbrella, and model two never sees it.
+
+### A group earns its header by exception
+
+One session in a workspace draws **no header**. Two or more draw one, named after the workspace.
+
+This is §9.13's rule — a band earns its lines by exception — applied to groups, and it is what
+makes the feature free for model two. Naming a solo workspace would restate the row's own label,
+which is precisely the duplication §9.39 removed; and on a fleet with one session per workspace it
+would spend a line on **every row**, roughly doubling the frame's height to say nothing. Two
+sessions is the first point at which the name tells you something the rows do not.
+
+The consequence worth stating: a workspace whose sessions are spread across bands is named in the
+bands where it has two, and railed but unnamed where it has one. That is the §10.5 trade taken
+deliberately — urgency outranks arrangement, so the bands stay outermost and a group never pulls a
+blocked row out of NEEDS YOU to sit with its siblings.
+
+### The rail costs no columns, because the lead was already blank
+
+Every row's lead was three columns: a blank, the selection caret's column, a blank. The rail takes
+the outermost one. Nothing moves, no column is bought from the label, and the frame's width
+arithmetic (§6) is untouched — which is the only reason this was affordable at all.
+
+    ▌  ◐   backfill refunds worker        0m  app -> pla-982-refund-backfill
+    ▌▸ ◐   stripe webhook retries         4m  app -> pla-983-webhook-retry
+       ○   bump the staging image        26m  infra
+
+The rail is `▌`, a filled block rather than a line-drawing character: it is a colour field, not a
+border, and it is what cmux itself draws down the side of its sidebar — so the two surfaces read
+alike. A workspace with no colour draws **no** rail, because a mark that is on every row marks
+nothing.
+
+The header sits at column 3, one inside the band header at column 2 and four outside the label.
+Aligning it to the label column was tried first and is wrong: the gutter is elastic (§9.41), so one
+blocked row anywhere on the fleet widens it to twelve and drags every group name out to meet the
+labels, stranding it nine columns from the rail that owns it.
+
+**Height needs no new arithmetic.** `Frame` measures the composed string rather than estimating
+chrome (§9.10), so header lines are budgeted by construction and the shedding ladder converges on
+them like anything else.
+
+### The colour is the user's, so the *function* is what gets validated
+
+§6 says colour is validated and never eyeballed, and every value in `palette.go` was measured by
+hand. A group's colour cannot be: it is whatever the user picked in cmux, and board sees it for the
+first time at runtime.
+
+So board validates the transform instead. `groupColour` lifts the lightness until the value clears
+the ink floor against both documented backgrounds, and a test sweeps the whole hue wheel plus the
+real cmux values asserting it. Every colour board draws is that function's output, so holding the
+function holds every group (§9.48).
+
+Lifting is necessary, not cosmetic — cmux's palette is built for a filled rail on the app's own
+background, so its values are dark. Hue is preserved and only lightness moves, because hue is the
+entire signal: a lift that slid magenta toward pink would land it on the storybook glyph's colour.
+
+A colourless group is white and **underlined**. The underline is doing the job the hue would have:
+it marks the name as a group name without inventing a colour the user did not choose.
+
+### It costs no subprocess
+
+The colour arrives on the `sidebar-state` call board already makes for the pull request (§18) —
+one dump, three facts. Grouping is affordable on a surface that refuses to poll anything (§2)
+precisely because it added no read.
+
+### The pull request had to be re-joined on the branch
+
+Grouping is what exposed this. cmux correlates one pull request per **workspace**, keyed off that
+workspace's own directory — and board took it unchecked. But Claude Code puts its worktrees
+*inside* the main checkout, so a session in a linked worktree sits in a workspace whose directory
+is on an entirely different branch.
+
+On the fleet this was built against, one row's location column said `app -> pla-1013-dataview-…`
+and its pull-request glyph pointed at #1709, which belongs to `pla-138-final-rollout-tweak`. The
+row was asserting two contradictory things at once.
+
+The fix is `host.Branch`, and the rule is the one the previews were already built on: a link that
+looks like this session's work and is not is worse than no link (§18, §9.34). The branches must be
+known and equal, or nothing is drawn.
+
+### What is deliberately not here
+
+**Groups are not cmux's groups.** cmux has a first-class workspace-group concept —
+`workspace.group.list`, `.set_color`, `.collapse` — and it is the natural home for this if people
+start using it. Nobody on the fleet this was built against had one defined, so the workspace is the
+grouping key today. Revisit when `workspace.group.list` comes back non-empty.
+
+**The one-shot table is ungrouped.** Header rows would break the one thing a table is for, which is
+being parsed by something downstream — the same argument that keeps links out of it (§18).
+
+**The header still counts workspaces.** It said so before grouping and it still does, and now the
+frame shows the same fact a second way. §18 left that to be revisited and this does not settle it.

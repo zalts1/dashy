@@ -175,9 +175,12 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band, airy bool) string 
 			}
 			mid = " " + barCell + " "
 		}
-		lead, text := "   ", body(pad(label, labelW))
+		// Three columns, as before: the rail, the caret, a space. The rail takes the outermost
+		// one — which was always blank — so grouping adds no width to a frame that has to fit
+		// (§6). The caret keeps its own column and the two never collide.
+		lead, text := rail(r.GroupColour)+"  ", body(pad(label, labelW))
 		if u.Sel != "" && r.Key == u.Sel {
-			lead, text = " "+fg(inkPrimary, "▸")+" ", fg(inkPrimary, pad(label, labelW))
+			lead, text = rail(r.GroupColour)+fg(inkPrimary, "▸")+" ", fg(inkPrimary, pad(label, labelW))
 		}
 		// The workspace name is padded only when something follows it, so a row with nothing
 		// to point at — and every todo, which has no process and so no directory (§12) —
@@ -194,30 +197,48 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band, airy bool) string 
 	row := func(state, label string, showBar bool, r board.Row) string {
 		return line(state, label, showBar, r, humanize(r.Idle), r.Where())
 	}
+	// emit draws a band's rows in their groups. Every band goes through it, so a header cannot
+	// appear in one band and not another — the same reason the join lives in board.Build (§3).
+	//
+	// The gap is reset after a header so the header and its first row read as one block, and
+	// spent between groups so two groups never run together.
+	emit := func(rows []board.Row, draw func(board.Row) string) {
+		first := true
+		for _, g := range board.Groups(rows) {
+			if g.Header() {
+				if !first {
+					b.WriteString(gap)
+				}
+				b.WriteString(groupHead(g, s.Cols))
+				first = true
+			}
+			for _, r := range g.Rows {
+				if !first {
+					b.WriteString(gap)
+				}
+				b.WriteString(draw(r))
+				first = false
+			}
+		}
+	}
 
 	if len(blocked) > 0 {
 		b.WriteString("\n  " + fg(statusCritical, "NEEDS YOU") + "\n")
-		for i, r := range blocked {
-			if i > 0 {
-				b.WriteString(gap)
-			}
-			// Blocked rows carry the bar too: the same quantity on the same absolute
-			// scale, so "waiting 3h" is comparable to anything in QUIET.
-			b.WriteString(row(mark(badge(inkPrimary, statusCritical, " BLOCKED "), 9, r.Stale), r.Label, true, r))
-		}
+		// Blocked rows carry the bar too: the same quantity on the same absolute
+		// scale, so "waiting 3h" is comparable to anything in QUIET.
+		emit(blocked, func(r board.Row) string {
+			return row(mark(badge(inkPrimary, statusCritical, " BLOCKED "), 9, r.Stale), r.Label, true, r)
+		})
 	} else {
 		b.WriteString("\n  " + dim("NEEDS YOU") + "   " + dim("nothing blocked") + "\n")
 	}
 
 	if len(working) > 0 {
 		b.WriteString("\n  " + fg(statusGood, "WORKING") + " " + dim(fmt.Sprintf("· %d", len(working))) + "\n")
-		for i, r := range working {
-			if i > 0 {
-				b.WriteString(gap)
-			}
-			// No bar: for a working agent elapsed time is progress, not rot.
-			b.WriteString(row(mark(fg(statusGood, workingGlyph), 1, false), r.Label, false, r))
-		}
+		// No bar: for a working agent elapsed time is progress, not rot.
+		emit(working, func(r board.Row) string {
+			return row(mark(fg(statusGood, workingGlyph), 1, false), r.Label, false, r)
+		})
 	}
 
 	if total := len(quiet.rows) + quiet.hidden; total > 0 {
@@ -229,12 +250,9 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band, airy bool) string 
 			b.WriteString(head + dim(" · collapsed") + "\n")
 		} else {
 			b.WriteString(head + "\n")
-			for i, r := range quiet.rows {
-				if i > 0 {
-					b.WriteString(gap)
-				}
-				b.WriteString(row(mark(dim(quietGlyph), 1, r.Stale), r.Label, true, r))
-			}
+			emit(quiet.rows, func(r board.Row) string {
+				return row(mark(dim(quietGlyph), 1, r.Stale), r.Label, true, r)
+			})
 		}
 		// The count stays visible so the backlog can never hide by being collapsed. It is
 		// still a count and not a control — the chevron that used to sit here promised a key

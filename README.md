@@ -111,6 +111,37 @@ belongs to.** The action is the same either way — `Enter` focuses the tab — 
 repeating the agent on every row would cost width and answer a question you do not have.
 `board doctor` counts the two rosters separately, which is where the difference matters.
 
+## Workspaces group the rows
+
+A cmux workspace means one of two things depending on how you work, and board draws both.
+
+If you keep **one agent session per workspace** — the other tabs being dev servers, Storybook and
+the like — nothing changes. Rows stand on their own, exactly as before.
+
+If you keep **several sessions in one workspace**, because the workspace is the project, they sit
+together under its name:
+
+    QUIET · 4
+    ▌ Checkout flow · 2
+    ▌ ○   wire the refund webhook      41m  checkout-flow -> refund-webhook
+    ▌ ○ ⧗ tidy the cart empty state  1h12m  checkout-flow -> cart-empty-state
+    ▌ ○   migrate auth handlers to v2   9m  auth
+      ○   bump the staging image       26m  infra
+
+**A workspace is only named when it holds more than one session in that band.** Naming a workspace
+with a single session in it would just repeat that row's own label, which is why the column was
+removed in the first place.
+
+The coloured bar down the left is the colour you gave that workspace in cmux, so the two surfaces
+match. board lightens it as far as it must to stay readable on your terminal and no further, so the
+hue you chose is the hue you see. A workspace you never coloured has no bar, and its name — when it
+earns one — is underlined instead.
+
+**The bands still come first.** Grouping happens inside `NEEDS YOU`, `WORKING` and `QUIET`, never
+across them, so a blocked session is never buried among its quieter siblings. Within a group the
+newest sits on top, and a group sorts by its newest session — the same order the band would have
+used anyway.
+
 ## Four links per row — `⧆`, `⧇`, `⧉` and `⧭`
 
 At the right-hand end of a row, `board watch` puts up to four clickable glyphs:
@@ -219,8 +250,12 @@ Shape carries *has it landed* and colour carries *did it land anywhere*, so miss
 leaves the other. A draft shows as open: GitHub keeps draft-ness in a separate field that cmux does
 not read (`DESIGN.md` §10.13).
 
-It is keyed by tab, not by directory, because that is the question cmux answers — so two sessions
-in one tab share its pull request, correctly, and a background agent with no tab has none.
+cmux answers per **workspace**, so board checks the branch before drawing it. A session working in
+a linked worktree sits in a workspace whose own directory is usually on another branch, and taking
+cmux's answer unchecked put one branch's pull request on another branch's row. If board cannot
+confirm the branches match, it draws nothing — a link that looks like this session's work and is
+not is worse than no link. Two sessions on the same branch share its pull request, correctly, and a
+background agent with no tab has none.
 
 ### `⧉` — the folder, in your editor
 

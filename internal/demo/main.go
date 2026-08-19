@@ -47,21 +47,29 @@ type session struct {
 	workspace string
 	status    string // interactive: idle | busy | waiting
 	idle      time.Duration
+	// colour is the accent the user gave this workspace in cmux, and "" is what most of them
+	// have. Two sessions sharing a workspace share both, which is what draws a group (§18).
+	colour string
 }
 
 // The fleet is small enough to read at a glance and varied enough to show every band:
 // one blocked, one working, and a quiet tail with the ⚠ waterline inside it.
+// Both mental models are in here on purpose. "Checkout flow" holds three sessions, which is a
+// workspace used as a project and the case grouping exists for; every other workspace holds one,
+// which is the case grouping has to stay out of the way of (§18).
 var sessions = []session{
-	{501, "s-app", "merge app#1497 before branching", "APP", "waiting", 3 * time.Hour},
-	{502, "s-api", "build the csv export endpoint", "API", "busy", 0},
-	{503, "s-auth", "migrate auth handlers to v2", "AUTH", "idle", 9 * time.Minute},
-	{504, "s-infra", "bump the staging image", "INFRA", "idle", 26 * time.Minute},
-	{505, "s-rev", "Review pipeline PR #541", "REVIEWS", "idle", 2*time.Hour + 48*time.Minute},
-	{506, "s-docs", "answer the ACME security questionnaire", "DOCS", "idle", 28 * time.Hour},
-	{508, "s-web", "ship the pricing page copy", "WEB", "idle", 55 * time.Minute},
-	{509, "s-cli", "fold the quiet band", "TOOLS", "idle", 4*time.Hour + 5*time.Minute},
-	{510, "s-data", "backfill the events table", "DATA", "idle", 7*time.Hour + 20*time.Minute},
-	{511, "s-ops", "rotate the staging credentials", "OPS", "idle", 3*24*time.Hour + 2*time.Hour},
+	{501, "s-app", "merge app#1497 before branching", "Checkout flow", "waiting", 3 * time.Hour, "#7D6608"},
+	{502, "s-api", "build the csv export endpoint", "Checkout flow", "busy", 0, "#7D6608"},
+	{512, "s-pay", "wire the refund webhook", "Checkout flow", "idle", 41 * time.Minute, "#7D6608"},
+	{513, "s-cart", "tidy the cart empty state", "Checkout flow", "idle", 1*time.Hour + 12*time.Minute, "#7D6608"},
+	{503, "s-auth", "migrate auth handlers to v2", "AUTH", "idle", 9 * time.Minute, "#006B6B"},
+	{504, "s-infra", "bump the staging image", "INFRA", "idle", 26 * time.Minute, ""},
+	{505, "s-rev", "Review pipeline PR #541", "REVIEWS", "idle", 2*time.Hour + 48*time.Minute, ""},
+	{506, "s-docs", "answer the ACME security questionnaire", "DOCS", "idle", 28 * time.Hour, "#880E4F"},
+	{508, "s-web", "ship the pricing page copy", "WEB", "idle", 55 * time.Minute, ""},
+	{509, "s-cli", "fold the quiet band", "TOOLS", "idle", 4*time.Hour + 5*time.Minute, ""},
+	{510, "s-data", "backfill the events table", "DATA", "idle", 7*time.Hour + 20*time.Minute, ""},
+	{511, "s-ops", "rotate the staging credentials", "OPS", "idle", 3*24*time.Hour + 2*time.Hour, ""},
 }
 
 // repoOf is the fixture's stand-in for host.Repository: a path under `.claude/worktrees` belongs
@@ -88,6 +96,10 @@ func snapshot(now time.Time, blocked, extra string) board.Snapshot {
 		// `repo -> worktree` form as well as the plain one.
 		Trees: map[string]string{},
 		Repos: map[string]string{},
+		// What cmux's sidebar says about each workspace. Supplied by the fixture like everything
+		// else here, so the recording does not depend on the machine's own cmux (§16).
+		Spaces:   map[string]cmux.State{},
+		Branches: map[string]string{},
 		Todos: []config.Todo{
 			{ID: "2483b5", Text: "reply to the ACME csv export request", Created: now.Add(-12 * 24 * time.Hour)},
 			{ID: "9f1c22", Text: "book the quarterly review", Created: now.Add(-26 * time.Hour)},
@@ -101,17 +113,30 @@ func snapshot(now time.Time, blocked, extra string) board.Snapshot {
 		if x.id == blocked {
 			status = "waiting"
 		}
-		cwd := "/Users/you/work/" + strings.ToLower(x.workspace)
+		cwd := "/Users/you/work/" + strings.ToLower(strings.ReplaceAll(x.workspace, " ", "-"))
+		if x.id == "s-api" {
+			// The second and third sessions of a grouped workspace work on their own branches,
+			// which is the whole reason a workspace can hold more than one.
+			cwd = "/Users/you/work/checkout-flow/.claude/worktrees/csv-export"
+		}
+		if x.id == "s-pay" {
+			cwd = "/Users/you/work/checkout-flow/.claude/worktrees/refund-webhook"
+		}
+		if x.id == "s-cart" {
+			cwd = "/Users/you/work/checkout-flow/.claude/worktrees/cart-empty-state"
+		}
 		if x.id == "s-docs" {
 			// One session in a linked worktree, so the recording shows both forms of the column.
 			cwd = "/Users/you/work/docs/.claude/worktrees/acme-questionnaire"
 		}
 		s.Agents = append(s.Agents, claude.Agent{SessionID: x.id, Pid: x.pid, Kind: "interactive",
 			Cwd: cwd, Status: status})
-		s.Titles[x.pid] = cmux.Titles{ID: "S-" + x.id, Surface: x.label, Workspace: x.workspace}
+		s.Titles[x.pid] = cmux.Titles{ID: "S-" + x.id, Surface: x.label,
+			Workspace: x.workspace, WorkspaceID: "W-" + x.workspace}
 		s.Clock[x.id] = now.Add(-x.idle)
 		s.Trees[cwd] = cwd
 		s.Repos[cwd] = repoOf(cwd)
+		s.Spaces["W-"+x.workspace] = cmux.State{Colour: x.colour}
 	}
 	// One background agent, because they are the rows people are surprised board has:
 	// no tab, so no title and no workspace, and its label is the question Claude Code

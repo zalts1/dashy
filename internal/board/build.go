@@ -33,10 +33,15 @@ type Snapshot struct {
 	// Separate from Trees because they are two questions: which worktree is this work in, and
 	// which repository is that worktree part of (§18).
 	Repos map[string]string
-	// PRs maps a cmux workspace UUID to the pull request cmux has already correlated for that
-	// tab. Keyed by workspace and not by worktree, because that is the question cmux answers:
-	// one badge per tab (§18).
-	PRs map[string]cmux.PR
+	// Spaces maps a cmux workspace UUID to what cmux's sidebar says about it: the pull request
+	// it has correlated, the colour the user gave it, and the branch its own directory is on.
+	// One dump, three facts, one call board was already making (§18).
+	Spaces map[string]cmux.State
+	// Branches maps a worktree to the branch it has checked out, resolved impurely in Collect
+	// beside Trees and Repos. It exists to settle which pull request is the row's: cmux answers
+	// per workspace, and a session in a linked worktree is on a different branch to the
+	// workspace it was launched from (§18).
+	Branches map[string]string
 	// Previews are the local dev servers up on this machine, each with the directory it
 	// is serving. Enrichment, never a row: a preview with no session is nobody's work.
 	Previews []preview.Route
@@ -111,14 +116,13 @@ func Build(s Snapshot, now time.Time) Fleet {
 			Surface:   t.ID,
 			Repo:      repo,
 			Tree:      tree,
-			PR:        s.PRs[t.WorkspaceID].URL,
-			PRState:   s.PRs[t.WorkspaceID].State,
 			Folder:    s.Trees[a.Cwd],
 			Preview:   nearest(s.Previews, s.Trees, s.Trees[a.Cwd], a.Cwd),
 			Storybook: nearest(s.Storybooks, s.Trees, s.Trees[a.Cwd], a.Cwd),
 			Idle:      idle,
 			Rank:      RankQuiet,
 		}
+		group(&r, s.Spaces[t.WorkspaceID], s.Branches[s.Trees[a.Cwd]])
 		switch {
 		case a.Blocked():
 			r.State, r.Rank = "blocked →", RankBlocked
@@ -168,14 +172,13 @@ func Build(s Snapshot, now time.Time) Fleet {
 				Surface:   t.ID,
 				Repo:      makiRepo,
 				Tree:      makiTree,
-				PR:        s.PRs[t.WorkspaceID].URL,
-				PRState:   s.PRs[t.WorkspaceID].State,
 				Folder:    s.Trees[rep.Cwd],
 				Preview:   nearest(s.Previews, s.Trees, s.Trees[rep.Cwd], rep.Cwd),
 				Storybook: nearest(s.Storybooks, s.Trees, s.Trees[rep.Cwd], rep.Cwd),
 				Idle:      idle,
 				Rank:      RankQuiet,
 			}
+			group(&r, s.Spaces[t.WorkspaceID], s.Branches[s.Trees[rep.Cwd]])
 			switch {
 			case sess.Blocked():
 				r.State, r.Rank = "blocked →", RankBlocked
@@ -220,6 +223,14 @@ func Build(s Snapshot, now time.Time) Fleet {
 	// top. A todo's age is a **lifetime** that only grows, so its oldest is a reproach and putting a
 	// note written seconds ago above one from a fortnight ago would bury exactly what the list is
 	// for. Same field, two quantities, two orders.
+	//
+	// **Amended: a workspace's rows travel together** (§9.47). Grouping is a sort key between the
+	// band and the clock, not a regroup afterwards — so `Groups` can be a walk that cannot reorder
+	// anything, and the band's newest-first reading survives inside each group *and* between them.
+	// A group leads its band exactly when it holds the row the band would have led with anyway,
+	// which is what keeps the ordering honest: grouping never buries a newer session under an
+	// older workspace.
+	lead := groupLead(rows)
 	sort.SliceStable(rows, func(i, j int) bool {
 		if rows[i].Rank != rows[j].Rank {
 			return rows[i].Rank < rows[j].Rank
@@ -227,12 +238,68 @@ func Build(s Snapshot, now time.Time) Fleet {
 		if rows[i].Rank == RankTodo {
 			return rows[i].Idle > rows[j].Idle
 		}
+		ki, kj := clusterKey(rows[i]), clusterKey(rows[j])
+		if ki != kj {
+			if lead[ki] != lead[kj] {
+				return lead[ki] < lead[kj]
+			}
+			// Two workspaces whose newest sessions tie. Broken on the key so the frame does not
+			// reshuffle between ticks over a tie that will never resolve itself.
+			return ki < kj
+		}
 		return rows[i].Idle < rows[j].Idle
 	})
 	f.Rows = rows
 	f.Workspaces = len(spans)
 	f.Trouble = trouble(s, unreported)
 	return f
+}
+
+// group settles the three things a row takes from its cmux workspace: which group it joins, what
+// colour that group wears, and whether the workspace's pull request is actually this row's.
+//
+// **The pull request is the interesting one.** cmux correlates one per workspace, keyed off the
+// workspace's own directory — but Claude Code puts its worktrees *inside* the main checkout, so a
+// session in a linked worktree sits in a workspace whose directory is on another branch entirely.
+// Taking cmux's answer unchecked put a merged pull request for `pla-138` on a row whose own column
+// said `pla-1013`, which is the row asserting two contradictory things at once. Comparing the
+// branches is what stops it, and an unverifiable branch draws nothing: a link that looks like this
+// session's work and is not is worse than no link, which is the rule the previews were already
+// built on (§18, EVIDENCE.md §9.34).
+//
+// A row with no tab takes none of it. It has no workspace, so it joins no group, wears no bar and
+// can have no pull request.
+func group(r *Row, st cmux.State, branch string) {
+	if r.Workspace == "" || r.Workspace == noWorkspace {
+		return
+	}
+	r.Group, r.GroupColour = r.Workspace, st.Colour
+	if branch == "" || st.Branch == "" || branch != st.Branch {
+		return
+	}
+	r.PR, r.PRState = st.PR.URL, st.PR.State
+}
+
+// clusterKey is what a row sorts beside. Rows in a workspace share one; a row without a
+// workspace gets its own, so background agents and anything else tab-less sort purely by their
+// clock rather than piling into one nameless cluster.
+func clusterKey(r Row) string {
+	if r.Group == "" {
+		return "row:" + r.Key
+	}
+	return "ws:" + r.Group
+}
+
+// groupLead is each cluster's newest row — the clock the whole cluster sorts on.
+func groupLead(rows []Row) map[string]time.Duration {
+	lead := map[string]time.Duration{}
+	for _, r := range rows {
+		k := clusterKey(r)
+		if cur, seen := lead[k]; !seen || r.Idle < cur {
+			lead[k] = r.Idle
+		}
+	}
+	return lead
 }
 
 // idleFor is the one idle rule both agents get. A missing clock reads as no idle time

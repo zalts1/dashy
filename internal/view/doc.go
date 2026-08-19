@@ -13,8 +13,11 @@
 //     inferred from rendered output.
 //   - order.go — navigation, which follows the screen rather than the data
 //   - palette.go, scale.go, format.go — colour, the idle scale, and cell padding
-//   - link.go — the two things a row points at besides its tab, as hyperlinks the
+//   - link.go — the things a row points at besides its tab, as hyperlinks the
 //     terminal opens rather than anything board runs (DESIGN.md §18)
+//   - group.go — the workspace a row belongs to: the rail, the header a group earns only
+//     by exception, and the lift that makes a colour board did not choose legible
+//     (DESIGN.md §19)
 //
 // The frame fits the terminal in both directions. A line wider than the screen
 // wraps, a wrapped line makes the frame taller than height() counted, and the

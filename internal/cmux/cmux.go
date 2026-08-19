@@ -1,7 +1,7 @@
-// Package cmux reads the terminal multiplexer board reports on. It supplies tab
-// titles, workspace names, the idle clock and the one write action board has
-// (focus a tab) — but never the session roster: cmux's hook file misses live
-// sessions, so it is enrichment only. See EVIDENCE.md §9.3.
+// Package cmux reads the terminal multiplexer board reports on. It supplies tab titles, the idle
+// clock, what the sidebar knows about each workspace — its pull request, its colour and its branch
+// (§18, §19) — and the one write action board has, focusing a tab. It never supplies the session
+// roster: cmux's hook file misses live sessions, so it is enrichment only. See EVIDENCE.md §9.3.
 package cmux
 
 import (

@@ -73,9 +73,19 @@ type Row struct {
 	// no tab at all, which is a background agent (§18).
 	PR      string
 	PRState string
-	Idle    time.Duration
-	Stale   bool // quiet past the threshold
-	Rank    int
+	// Group is the workspace this session shares with its neighbours, and GroupColour is the
+	// accent the user gave that workspace in cmux — "" when they gave it none, which is most of
+	// them. Both are empty for a row with no tab (§18).
+	//
+	// The workspace came back as a grouping after being removed as a column (§9.39), because the
+	// two readings are different questions: as a column it restated the row's own label, and as a
+	// group it answers "which of these sessions are the same piece of work" — which is a question
+	// only a fleet with several sessions in one workspace can even ask.
+	Group       string
+	GroupColour string
+	Idle        time.Duration
+	Stale       bool // quiet past the threshold
+	Rank        int
 }
 
 // Where is the location column in plain text: the repository, and the worktree inside it when
@@ -167,4 +177,42 @@ func (f Fleet) Bands() (blocked, working, todo, quiet []Row) {
 		}
 	}
 	return
+}
+
+// Group is a run of rows sharing one cmux workspace, in the order the band already sorted them.
+//
+// Rows, not keys: the frame draws a group as a header plus its members, and handing it the rows
+// is what stops the two renderers disagreeing about which row belongs under which header (§3).
+type Group struct {
+	Name   string // the workspace's title, and "" for rows that belong to no workspace
+	Colour string // "#RRGGBB", or "" for a workspace with no accent
+	Rows   []Row
+}
+
+// Header reports whether this group is worth a line of its own.
+//
+// **A group earns its header by exception**, the same way a band earns its lines (§9.13). One
+// session in a workspace is not a group — naming it would restate the row's own label, which is
+// exactly the duplication that took the workspace *out* of the frame (§9.39), and on a fleet with
+// one session per workspace it would spend a line on every row. Two sessions is the first point at
+// which the name says something the rows do not.
+func (g Group) Header() bool { return g.Name != "" && len(g.Rows) > 1 }
+
+// Two workspaces cmux has given the *same title* cluster as one group. Accepted rather than
+// keyed on the workspace UUID: the reader cannot tell them apart either, the location column
+// still separates the rows, and it merges a display, never a link — which is the line §18 draws.
+//
+// Groups splits a band's rows into the runs the frame draws. The sort in Build has already put
+// each workspace's rows together, so this is a walk and not a regroup: it cannot reorder anything,
+// which is what keeps the band's newest-first reading intact (§9.46).
+func Groups(rows []Row) []Group {
+	var out []Group
+	for _, r := range rows {
+		if n := len(out); n > 0 && out[n-1].Name == r.Group {
+			out[n-1].Rows = append(out[n-1].Rows, r)
+			continue
+		}
+		out = append(out, Group{Name: r.Group, Colour: r.GroupColour, Rows: []Row{r}})
+	}
+	return out
 }
