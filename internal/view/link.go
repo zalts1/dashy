@@ -166,8 +166,9 @@ func actionCell(r board.Row, scheme string) string {
 		pr = link(r.PR, prMark(r.PRState))
 	}
 	// Right-trimmed because nothing follows it on the line: a row whose only link is the
-	// Storybook would otherwise end in six columns of padding.
-	return strings.TrimRight(storybook+" "+preview+" "+folder+" "+pr, " ")
+	// Storybook would otherwise end in nine columns of padding.
+	gap := strings.Repeat(" ", actionsSpace)
+	return strings.TrimRight(storybook+gap+preview+gap+folder+gap+pr, " ")
 }
 
 // prMark paints the pull-request glyph for the state cmux found it in. Three readings, and the

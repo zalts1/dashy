@@ -60,6 +60,7 @@ sed -n '<start>,<end>p' EVIDENCE.md     # or Read with offset/limit
 | 9.41 | The gutter was sized for a badge most fleets do not have, and `⚠` claimed a waiting session was broken | `view/layout.go`, `view/frame.go`, `DESIGN.md` §6 |
 | 9.42 | The flag is `--workspace`, not `--tab` — a mistyped flag became an architecture. cmux's PR badge was always readable | `cmux/pr.go`, `view/link.go`, `DESIGN.md` §18, §10.12 |
 | 9.43 | Colours that are alternatives need not match colours that are neighbours | `view/palette.go`, `DESIGN.md` §6 |
+| 9.44 | Four boxes one space apart read as one run of ink; and the frame can afford air it should give back when short | `view/link.go`, `view/frame.go`, `view/layout.go`, `DESIGN.md` §6 |
 
 ---
 
@@ -1587,3 +1588,38 @@ filled badge (§9.4).
 The test now says which rule it is enforcing, which it did not before: the four slots are held to
 0.25 of each other, and the state colours are held to the floor.
 
+### 9.44 Ink needs room, and air is the first thing to give back (2026-08-19)
+
+**Believed:** one column between the link glyphs is enough. Every other cell in the frame separates
+its contents by one space, and the arithmetic was written that way.
+
+**Found:** at a terminal's cell width the four of them read as a single run of ink. The reason is
+§9.36's own rule working against itself — they come from one Unicode block so that they share a
+drawn size, and three of them are boxes, so `⧆ ⧇ ⧉ ⧬` at one space apart is a hedge rather than
+four marks. The KPI strip already knew this and uses five columns between cells; this cell was the
+one place that did not.
+
+**Shipped:** `actionsSpace = 2`, and `actionsW` derived from it — `4 + 3*actionsSpace` — so the
+number and the layout cannot disagree. The test assertions are derived the same way, through a
+`slotEnd(n)` helper, because three of them had hard-coded widths that had to be found and edited
+by hand when the gap changed, which is how a width assertion comes to assert the wrong width.
+
+**And the same reading, one scale up: the frame was cramped, not just the cell.** Asked for more
+line height, which is Ghostty's `adjust-cell-height` and not board's to set — but a blank line
+between rows is board's, and it is the same effect for the thing board draws.
+
+The interesting part is what it must not cost. Spacing doubles what a row occupies, so on a short
+tab it would push the fit loop into shedding rows — trading information for air, which is the wrong
+way round. So it is **a luxury the frame takes only when everything fits**: the airy form is
+composed first, whole, and used only if it fits the tab; otherwise the compact form runs with the
+existing shedding ladder. A tab one line too short for the airy frame shows every row compact
+rather than most rows spaced.
+
+Two invariants are pinned rather than argued. `TestAiryOnlyWhenItFits` renders at exactly one line
+below the airy height and asserts the fallback keeps every row. `TestAiryNeverCostsARow` sweeps 12
+to 60 lines and asserts that whenever a compact frame with the whole fleet would have fitted, the
+frame board actually drew shows the whole fleet — whichever form it chose.
+
+A first attempt at that second test compared row counts between a tall tab and a short one and
+"failed" correctly: an 18-line tab shows fewer rows than a 120-line one, which is the fit loop
+working. The invariant only means anything **at one height**, which is what it asserts now.

@@ -66,6 +66,11 @@ func byKey(t *testing.T, key string) board.Row {
 	return board.Row{}
 }
 
+// slotEnd is the printed width of a cell whose last occupied slot is the nth of four: the glyphs
+// up to it, plus the gaps between them. Derived rather than written out, so these assertions follow
+// actionsSpace instead of having to be found and edited when it changes (§9.44).
+func slotEnd(n int) int { return n + (n-1)*actionsSpace }
+
 func TestActionCell(t *testing.T) {
 	both := actionCell(byKey(t, "K-1"), "cursor")
 	if !strings.Contains(both, linkOpen+"https://api.localhost"+st) {
@@ -77,8 +82,9 @@ func TestActionCell(t *testing.T) {
 	// Five, not actionsW: the slots are fixed, so an absent *leading* glyph holds its column and an
 	// absent *trailing* one is trimmed. This row has the middle two, so it keeps the Storybook's
 	// blank on the left and loses the PR's on the right.
-	if printed(both) != 5 {
-		t.Errorf("cell with preview+folder printed %d columns, want 5: %q", printed(both), both)
+	if printed(both) != slotEnd(3) {
+		t.Errorf("cell with preview+folder printed %d columns, want %d: %q",
+			printed(both), slotEnd(3), both)
 	}
 
 	folderOnly := actionCell(byKey(t, "K-2"), "cursor")
@@ -89,8 +95,9 @@ func TestActionCell(t *testing.T) {
 	if !strings.HasPrefix(folderOnly, "  ") {
 		t.Errorf("folder glyph did not keep the preview's column: %q", folderOnly)
 	}
-	if printed(folderOnly) != 5 {
-		t.Errorf("folder-only cell printed %d columns, want 5: %q", printed(folderOnly), folderOnly)
+	if printed(folderOnly) != slotEnd(3) {
+		t.Errorf("folder-only cell printed %d columns, want %d: %q",
+			printed(folderOnly), slotEnd(3), folderOnly)
 	}
 
 	// Nothing to point at is no cell at all, not an empty one — that is what keeps a row
@@ -127,7 +134,7 @@ func TestActionCell(t *testing.T) {
 	if printed(prOnly) != actionsW {
 		t.Errorf("PR-only cell printed %d columns, want %d: %q", printed(prOnly), actionsW, prOnly)
 	}
-	if !strings.HasPrefix(prOnly, "      ") {
+	if !strings.HasPrefix(prOnly, strings.Repeat(" ", slotEnd(3)+actionsSpace)) {
 		t.Errorf("PR-only cell did not keep the three columns before it: %q", prOnly)
 	}
 	// The cell is the last thing on the line, so absent *trailing* glyphs are trimmed rather
@@ -137,10 +144,11 @@ func TestActionCell(t *testing.T) {
 	//
 	// The order is rarest first — Storybook, preview, folder — so a preview-only row keeps one
 	// leading blank and trims the two trailing ones.
-	if printed(previewOnly) != 3 {
-		t.Errorf("preview-only cell printed %d columns, want 3: %q", printed(previewOnly), previewOnly)
+	if printed(previewOnly) != slotEnd(2) {
+		t.Errorf("preview-only cell printed %d columns, want %d: %q",
+			printed(previewOnly), slotEnd(2), previewOnly)
 	}
-	if !strings.HasPrefix(previewOnly, "  ") {
+	if !strings.HasPrefix(previewOnly, strings.Repeat(" ", 1+actionsSpace)) {
 		t.Errorf("preview-only cell did not keep the Storybook's column: %q", previewOnly)
 	}
 	if strings.HasSuffix(previewOnly, " ") {
@@ -148,7 +156,7 @@ func TestActionCell(t *testing.T) {
 	}
 	// The leftmost slot alone is the smallest the cell gets: everything after it trims away.
 	storybookOnly := actionCell(board.Row{Storybook: "http://localhost:6006"}, "cursor")
-	if printed(storybookOnly) != 1 {
+	if printed(storybookOnly) != slotEnd(1) {
 		t.Errorf("storybook-only cell printed %d columns, want 1: %q",
 			printed(storybookOnly), storybookOnly)
 	}
@@ -324,5 +332,56 @@ func TestPRMarkByState(t *testing.T) {
 	}
 	if prMark("open") == prMark("merged") || prMark("open") == prMark("closed") {
 		t.Error("open is indistinguishable from a landed pull request")
+	}
+}
+
+// The spacing is a fit decision, not a style: the frame takes it when everything fits and drops it
+// when it does not, because the rows are the information and the gaps are not (§9.44).
+func TestAiryOnlyWhenItFits(t *testing.T) {
+	f := linkFleet()
+	frame := func(lines int) string {
+		return Frame(f, Screen{Now: time.Date(2026, 8, 19, 14, 30, 0, 0, time.UTC),
+			Interval: 10 * time.Second, Threshold: 45 * time.Minute, Rows: lines, Cols: 118,
+			EditorScheme: "cursor"}, UI{})
+	}
+	// A tall tab: a blank line between rows, so two row lines never sit adjacent.
+	tall := frame(120)
+	if !strings.Contains(tall, "\n\n   "+dim(quietGlyph)) {
+		t.Errorf("a tall tab did not space the quiet rows out:\n%s", tall)
+	}
+	// A tab exactly one line too short for the airy form falls back to compact rather than
+	// shedding a row to stay airy.
+	airyHeight := strings.Count(tall, "\n") + 2
+	tight := frame(airyHeight - 1)
+	if strings.Contains(tight, "\n\n   "+dim(quietGlyph)) {
+		t.Errorf("a tab too short for the airy form still spaced rows out:\n%s", tight)
+	}
+	if got, want := strings.Count(tight, quietGlyph), strings.Count(tall, quietGlyph); got != want {
+		t.Errorf("falling back to compact lost rows: %d vs %d", got, want)
+	}
+}
+
+// Spacing may never be the reason a row is missing. At every height where the compact frame would
+// show the whole fleet, the frame board actually renders shows the whole fleet too — whichever form
+// it chose.
+func TestAiryNeverCostsARow(t *testing.T) {
+	f := linkFleet()
+	_, _, todo, quiet := f.Bands()
+	for lines := 12; lines <= 60; lines++ {
+		s := Screen{Now: time.Date(2026, 8, 19, 14, 30, 0, 0, time.UTC),
+			Interval: 10 * time.Second, Threshold: 45 * time.Minute, Rows: lines, Cols: 118,
+			EditorScheme: "cursor"}
+		got := Frame(f, s, UI{})
+		if h := strings.Count(got, "\n") + 2; h > lines {
+			t.Fatalf("at %d lines the frame is %d", lines, h)
+		}
+		// Would a compact frame with every row have fitted? Then nothing may be missing.
+		compactAll := compose(f, s, UI{}, pick(quiet, len(quiet), ""), pick(todo, len(todo), ""), false)
+		if height(compactAll) > lines {
+			continue
+		}
+		if got, want := strings.Count(got, quietGlyph), len(quiet); got != want {
+			t.Errorf("at %d lines the frame shows %d quiet rows, want all %d", lines, got, want)
+		}
 	}
 }

@@ -47,12 +47,17 @@ const (
 	// The quiet tail never shrinks below this: a QUIET band of one row reads as a
 	// quiet fleet, which is the opposite of the truth.
 	minQuietRows = 3
-	// actionsW is the trailing link cell: four glyphs on stable columns with a space between each,
-	// so a row carrying only one of them leaves the others' columns empty rather than sliding into
-	// them. Four because a row points at four things — the Storybook listening in its worktree,
-	// the dev server serving it, the worktree itself, and the pull request its branch has open
-	// (§18).
-	actionsW = 7
+	// actionsW is the trailing link cell: four glyphs on stable columns, with actionsSpace between
+	// each, so a row carrying only one of them leaves the others' columns empty rather than sliding
+	// into them. Four because a row points at four things — the Storybook listening in its
+	// worktree, the dev server serving it, the worktree itself, and the pull request its branch has
+	// open (§18).
+	//
+	// Two columns between glyphs rather than one. They are all drawn from one Unicode block and
+	// most of them are boxes, so at a terminal's cell width a single space left them reading as one
+	// run of ink rather than four marks — the same reason the KPI strip uses five (§9.44).
+	actionsSpace = 2
+	actionsW     = 4 + 3*actionsSpace
 	// actionsGap separates the cell from the workspace name, which is left-aligned and
 	// truncating: one space would read as part of the name it follows.
 	actionsGap = 2

@@ -69,6 +69,15 @@ func Frame(f board.Fleet, s Screen, u UI) string {
 	if u.QuietCollapsed {
 		keepQuiet = 0
 	}
+	// The airy form first, whole: a blank line between rows, which on a laptop with room to spare
+	// is the difference between a dashboard and a wall of text. Tried before anything is shed
+	// because it is a luxury and shedding is not — if the spaced frame does not fit, every row
+	// compact beats some rows airy, since the rows are the information and the spacing is not
+	// (§9.44).
+	if airy := compose(f, s, u, pick(quiet, keepQuiet, u.Sel), pick(todo, keepTodo, u.Sel), true); height(airy) <= s.Rows {
+		return airy
+	}
+
 	out := ""
 	// Absorbers in order of expendability, each cutting by the exact overflow so a stage
 	// converges in one pass: the quiet tail to its floor, then the list to its own, then
@@ -86,7 +95,7 @@ func Frame(f board.Fleet, s Screen, u UI) string {
 		{&keepQuiet, minQuietRows}, {&keepTodo, minTodoRows}, {&keepQuiet, 0}, {&keepTodo, 0},
 	}
 	for range 10 {
-		out = compose(f, s, u, pick(quiet, keepQuiet, u.Sel), pick(todo, keepTodo, u.Sel))
+		out = compose(f, s, u, pick(quiet, keepQuiet, u.Sel), pick(todo, keepTodo, u.Sel), false)
 		over := height(out) - s.Rows
 		if over <= 0 {
 			return out
@@ -108,7 +117,13 @@ func Frame(f board.Fleet, s Screen, u UI) string {
 	return clip(out, s.Rows)
 }
 
-func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
+func compose(f board.Fleet, s Screen, u UI, quiet, todo band, airy bool) string {
+	// One blank line between rows when the frame can afford it. Between and not after: a band's
+	// header already opens with one, so a trailing gap would double it.
+	gap := ""
+	if airy {
+		gap = "\n"
+	}
 	var b bytes.Buffer
 	folders := s.EditorScheme != ""
 	gutterW := gutterFor(f)
@@ -182,7 +197,10 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
 
 	if len(blocked) > 0 {
 		b.WriteString("\n  " + fg(statusCritical, "NEEDS YOU") + "\n")
-		for _, r := range blocked {
+		for i, r := range blocked {
+			if i > 0 {
+				b.WriteString(gap)
+			}
 			// Blocked rows carry the bar too: the same quantity on the same absolute
 			// scale, so "waiting 3h" is comparable to anything in QUIET.
 			b.WriteString(row(mark(badge(inkPrimary, statusCritical, " BLOCKED "), 9, r.Stale), r.Label, true, r))
@@ -193,7 +211,10 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
 
 	if len(working) > 0 {
 		b.WriteString("\n  " + fg(statusGood, "WORKING") + " " + dim(fmt.Sprintf("· %d", len(working))) + "\n")
-		for _, r := range working {
+		for i, r := range working {
+			if i > 0 {
+				b.WriteString(gap)
+			}
 			// No bar: for a working agent elapsed time is progress, not rot.
 			b.WriteString(row(mark(fg(statusGood, workingGlyph), 1, false), r.Label, false, r))
 		}
@@ -208,7 +229,10 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
 			b.WriteString(head + dim(" · collapsed") + "\n")
 		} else {
 			b.WriteString(head + "\n")
-			for _, r := range quiet.rows {
+			for i, r := range quiet.rows {
+				if i > 0 {
+					b.WriteString(gap)
+				}
 				b.WriteString(row(mark(dim(quietGlyph), 1, r.Stale), r.Label, true, r))
 			}
 		}
@@ -242,7 +266,10 @@ func compose(f board.Fleet, s Screen, u UI, quiet, todo band) string {
 		}
 		b.WriteString("\n  " + fg(inkSecondary, "TODO") + " " +
 			dim(fmt.Sprintf("· %d%s", total, cap)) + "\n")
-		for _, r := range todo.rows {
+		for i, r := range todo.rows {
+			if i > 0 {
+				b.WriteString(gap)
+			}
 			// No bar, and no workspace: a bar means rot on the idle scale, and a todo's age
 			// is a lifetime that only grows rather than a gap that resets. The mark is an
 			// empty box — nothing is running, and nothing has been done.

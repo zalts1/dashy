@@ -289,6 +289,11 @@ Two findings are load-bearing and are pinned by tests (§9.4).
   would flatten everything under a day into one cell.
 - The bar appears on blocked and quiet rows — both are "time you have owed this
   session attention" — and **not** on working rows.
+- **Rows are spaced out when the frame can afford it** (2026-08-19, §9.44). One blank line between
+  rows, composed first and whole; if it does not fit the tab, the compact form runs with the
+  shedding ladder instead. Air is a luxury and rows are information, so a tab one line too short
+  for the airy frame shows every row compact rather than most rows spaced. Terminal line height is
+  the other half of this and is not board's — that is Ghostty's `adjust-cell-height`.
 - **The state gutter is elastic and its mark is left-aligned** (amended 2026-08-19, §9.41). It
   was a fixed 10 columns, sized for the BLOCKED badge, with the mark right-aligned to hug the
   label — so a quiet row wore eleven blank columns in front of its `○` and every fleet paid for

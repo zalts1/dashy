@@ -138,6 +138,11 @@ The frame says so too. The bottom line carries `⌘-click opens` whenever any ro
 
     ▇ 1h  ▇ 3h  ▇ 12h  ▇ 2d  ▇ 7d   ⧗ quiet a while   ⧆ storybook  ⧇ preview  ⧉ folder  ⧬ pr  ⧭ merged   ⌘-click   esc
 
+Rows are spaced out with a blank line between them whenever the frame fits the tab that way, and
+drawn compact when it does not — air is worth having, but never at the price of a row you wanted to
+see. If you want the *terminal's* line height taller as well, that is Ghostty's setting rather than
+board's: `adjust-cell-height = 30%` in `~/.config/ghostty/config`.
+
 `?` again or `Esc` puts the keys back. It is the same line either way, so the frame never changes
 height, and the refresh keeps running while you read it. On a narrow tab it sheds in order — the
 scale's rungs first, then the ⌘-click reminder — rather than clipping, because the glyph meanings

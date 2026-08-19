@@ -62,6 +62,11 @@ func TestGoldenFrames(t *testing.T) {
 		// that stopped being closed (§18, §9.34).
 		{"frame-links.txt", goldenLinkFleet(),
 			Screen{now, 10 * time.Second, 45 * time.Minute, 44, 118, goldenScheme}, UI{}},
+		// A tall tab, so the frame takes the airy form: a blank line between rows. Pinned because
+		// the spacing is a fit decision, and a fit decision that is not pinned is one that drifts
+		// (§9.44). frame-wide.txt is the same fleet on a tab too short for it, i.e. compact.
+		{"frame-airy.txt", goldenLinkFleet(),
+			Screen{now, 10 * time.Second, 45 * time.Minute, 120, 118, goldenScheme}, UI{}},
 		// The legend under `?`: the scale's rungs and all three glyphs by name, on the line the
 		// keys were on. Pinned because it is the one line whose whole job is to be read (§9.38).
 		{"frame-help.txt", goldenLinkFleet(),
